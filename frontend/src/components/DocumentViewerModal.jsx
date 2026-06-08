@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../api.js';
+import api, { getDocumentUrl } from '../api.js';
 
 function DocumentViewerModal({ userId, filename, onClose }) {
   const [loading, setLoading] = useState(true);
@@ -9,35 +9,21 @@ function DocumentViewerModal({ userId, filename, onClose }) {
 
   useEffect(() => {
     fetchDocument();
-    return () => {
-      if (fileUrl) {
-        URL.revokeObjectURL(fileUrl);
-      }
-    };
+    return () => {}; // R2 URLs don't need cleanup
   }, []);
 
   const fetchDocument = async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await api.get(`/api/users/${userId}/documents/${filename}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        responseType: 'blob'
-      });
 
-      const ext = filename.split('.').pop().toLowerCase();
-      let mimeType = response.data.type;
-      
-      // Ensure correct MIME type based on extension
-      if (ext === 'pdf') mimeType = 'application/pdf';
-      else if (['jpg', 'jpeg'].includes(ext)) mimeType = 'image/jpeg';
-      else if (ext === 'png') mimeType = 'image/png';
-      else if (ext === 'gif') mimeType = 'image/gif';
-      else if (ext === 'doc') mimeType = 'application/msword';
-      else if (ext === 'docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      // Resolve URL — handles both R2 URLs and legacy filenames
+      const url = getDocumentUrl(filename, userId, token);
 
-      const blob = new Blob([response.data], { type: mimeType });
-      const url = URL.createObjectURL(blob);
+      const ext = (filename.startsWith('http')
+        ? filename.split('?')[0].split('.').pop()
+        : filename.split('.').pop()
+      ).toLowerCase();
       
       setFileUrl(url);
       setFileType(ext);

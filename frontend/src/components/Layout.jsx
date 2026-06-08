@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getDocumentUrl } from '../api.js';
 
 function Layout({ user, onLogout, children, fullWidth = false }) {
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -14,11 +15,9 @@ function Layout({ user, onLogout, children, fullWidth = false }) {
 
       const token = localStorage.getItem('token');
       const ts = event.detail.timestamp || Date.now();
-      const newUrl = `/api/users/${user.id}/documents/${event.detail.profilePhoto}?token=${token}&t=${ts}`;
-
+      const newUrl = getDocumentUrl(event.detail.profilePhoto, user.id, token);
       setProfilePhotoUrl(newUrl);
-      // Force another update after small delay (race condition fix)
-      setTimeout(() => setProfilePhotoUrl(newUrl + '&force=' + Date.now()), 300);
+      setTimeout(() => setProfilePhotoUrl(newUrl), 300);
     };
 
     window.addEventListener('profilePhotoUpdated', handleProfilePhotoUpdate);
@@ -34,7 +33,7 @@ function Layout({ user, onLogout, children, fullWidth = false }) {
       const token = localStorage.getItem('token');
       const timestamp = Date.now();
       const randomStr = Math.random().toString(36).substring(2, 12);
-      setProfilePhotoUrl(`/api/users/${userId}/documents/${user.personalInfo.profilePhoto}?token=${token}&t=${timestamp}&v=${randomStr}`);
+      setProfilePhotoUrl(getDocumentUrl(user.personalInfo.profilePhoto, userId, token));
     }
   };
 

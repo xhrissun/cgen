@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../api.js';
+import api, { getDocumentUrl, openDocument } from '../api.js';
 import DocumentViewerModal from './DocumentViewerModal';
 
 function DocumentViewer({ userRole }) {
@@ -47,25 +47,9 @@ function DocumentViewer({ userRole }) {
     setViewingDocument({ userId, filename });
   };
 
-  const handleDownloadDocument = async (userId, filename) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await api.get(`/api/users/${userId}/documents/${filename}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        responseType: 'blob'
-      });
-
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      alert('Error downloading document: ' + (error.response?.data?.message || error.message));
-    }
+  const handleDownloadDocument = (userId, filename) => {
+    const token = localStorage.getItem('token');
+    openDocument(filename, userId, token);
   };
 
   const getFileIcon = (filename, docType) => {

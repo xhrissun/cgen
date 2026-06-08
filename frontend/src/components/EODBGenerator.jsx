@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import api from '../api.js';
+import api, { getDocumentUrl } from '../api.js';
 import JsBarcode from 'jsbarcode';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -43,7 +43,7 @@ function EODBGenerator({ userId, onDocumentUploaded }) {
       if (response.data.photoExists && response.data.photoFilename) {
         const timestamp = Date.now();
         const randomStr = Math.random().toString(36).substring(2, 12);
-        const photoUrl = `/api/users/${userId}/documents/${response.data.photoFilename}?token=${token}&t=${timestamp}&v=${randomStr}`;
+        const photoUrl = getDocumentUrl(response.data.photoFilename, userId, token);
         console.log('Setting profile photo URL:', photoUrl);
         setProfilePhotoUrl(photoUrl);
       }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../api.js';
+import api, { openDocument } from '../api.js';
 import ContractGenerator from './ContractGenerator';
 import DocumentViewerModal from './DocumentViewerModal';
 import EnhancedImageCropper from './EnhancedImageCropper';
@@ -433,26 +433,10 @@ function ContractualDashboard({ user }) {
     }
   };
 
-  const handleDownloadDocument = async (filename) => {
-    try {
-      const userId = user.id || user._id;
-      const token = localStorage.getItem('token');
-      const response = await api.get(`/api/users/${userId}/documents/${filename}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        responseType: 'blob'
-      });
-
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      alert('Error downloading document: ' + (error.response?.data?.message || error.message));
-    }
+  const handleDownloadDocument = (filename) => {
+    const userId = user.id || user._id;
+    const token = localStorage.getItem('token');
+    openDocument(filename, userId, token);
   };
 
   const handleViewDocument = (filename) => {
@@ -465,7 +449,11 @@ function ContractualDashboard({ user }) {
     try {
       const userId = user.id || user._id;
       const token = localStorage.getItem('token');
-      await api.delete(`/api/users/${userId}/documents/${filename}`, {
+      // Use just the filename part for the API key (strip R2 URL if needed)
+      const docKey = filename.startsWith('http')
+        ? filename.split('/').pop().split('?')[0]
+        : filename;
+      await api.delete(`/api/users/${userId}/documents/${docKey}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert('Document deleted successfully!');

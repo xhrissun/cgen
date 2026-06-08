@@ -336,7 +336,13 @@ router.delete('/:id/documents/:filename', verifyToken, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const docIndex = user.documents.findIndex(doc => doc.filename === req.params.filename);
+    const docKey = req.params.filename;
+    const docIndex = user.documents.findIndex(
+      doc => doc.filename === docKey ||
+             doc.key === docKey ||
+             doc.filename?.endsWith(docKey) ||
+             doc.key?.endsWith(docKey)
+    );
     if (docIndex === -1) {
       return res.status(404).json({ message: 'Document not found' });
     }
