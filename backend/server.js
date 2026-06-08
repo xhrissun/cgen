@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import connectDB from './database.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
@@ -22,6 +23,11 @@ const HOST = '0.0.0.0';
 const LOCAL_IP = getLocalIP();
 
 // Middleware
+app.use(compression()); // gzip all responses
+app.use((req, res, next) => {
+  res.setHeader('Connection', 'keep-alive');
+  next();
+});
 app.use(cors({
   origin: [
     process.env.FRONTEND_URL,           // e.g. https://cgen.pages.dev or your GH Pages URL

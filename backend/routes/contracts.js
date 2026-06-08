@@ -768,8 +768,9 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
         // Debug logging
         console.log(`✓ Generated filename: "${downloadFileName}"`);
 
-        // Set header with sanitized filename
-        const finalFilename = `${downloadFileName}.pdf`;
+        // Set header: CONTRACT_NUMBER_FULLNAME.pdf
+        const contractNum = (contract.contractNumber || 'CONTRACT').toString().replace(/[^a-zA-Z0-9\-_]/g, '_');
+        const finalFilename = `${contractNum}_${downloadFileName}.pdf`;
         res.setHeader(
           'Content-Disposition',
           `attachment; filename="${finalFilename}"`

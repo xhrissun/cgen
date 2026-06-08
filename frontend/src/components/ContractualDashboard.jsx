@@ -5,6 +5,18 @@ import DocumentViewerModal from './DocumentViewerModal';
 import EnhancedImageCropper from './EnhancedImageCropper';
 import EODBGenerator from './EODBGenerator';
 
+
+// Helper: profilePhoto may be a full R2 URL or legacy filename
+const getProfilePhotoUrl = (photoValue, userId, token) => {
+  if (!photoValue) return null;
+  if (photoValue.startsWith('http')) return photoValue; // Already R2 URL
+  // Legacy: build API proxy URL
+  const t = Date.now();
+  const v = Math.random().toString(36).substring(2, 12);
+  return `/api/users/${userId}/documents/${photoValue}?token=${token}&t=${t}&v=${v}`;
+};
+
+
 const formatPhilHealth = (value) => {
   const numbers = value.replace(/\D/g, '');
   if (numbers.length === 0) return '';
@@ -190,7 +202,7 @@ function ContractualDashboard({ user }) {
         const token = localStorage.getItem('token');
         const timestamp = Date.now();
         const randomStr = Math.random().toString(36).substring(2, 12);
-        setProfilePhotoUrl(`/api/users/${userId}/documents/${updatedUser.personalInfo.profilePhoto}?token=${token}&t=${timestamp}&v=${randomStr}`);
+        setProfilePhotoUrl(getProfilePhotoUrl(updatedUser.personalInfo.profilePhoto, userId, token));
         setPersonalInfo(updatedUser.personalInfo);
         setOriginalPersonalInfo(updatedUser.personalInfo);
       }
@@ -220,9 +232,7 @@ function ContractualDashboard({ user }) {
     if (!token) return;
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(2, 12);
-    setProfilePhotoUrl(
-      `/api/users/${userId}/documents/${user.personalInfo.profilePhoto}?token=${token}&t=${timestamp}&v=${randomStr}`
-    );
+    setProfilePhotoUrl(getProfilePhotoUrl(user.personalInfo.profilePhoto, userId, token));
   };
 
   const handleDocumentUploaded = () => {
@@ -247,9 +257,7 @@ function ContractualDashboard({ user }) {
       if (response.data.personalInfo?.profilePhoto) {
         const timestamp = Date.now();
         const randomStr = Math.random().toString(36).substring(2, 12);
-        setProfilePhotoUrl(
-          `/api/users/${userId}/documents/${response.data.personalInfo.profilePhoto}?token=${token}&t=${timestamp}&v=${randomStr}`
-        );
+        setProfilePhotoUrl(getProfilePhotoUrl(response.data.personalInfo.profilePhoto, userId, token));
       }
     } catch (error) {
       console.error("Error fetching documents:", error);
@@ -382,7 +390,7 @@ function ContractualDashboard({ user }) {
 
           const ts = Date.now();
           const randomStr = Math.random().toString(36).substring(2, 12);
-          const freshUrl = `/api/users/${userId}/documents/${freshUser.personalInfo.profilePhoto}?token=${token}&t=${ts}&v=${randomStr}`;
+          const freshUrl = getProfilePhotoUrl(freshUser.personalInfo.profilePhoto, userId, token);
           setProfilePhotoUrl(freshUrl);
 
           window.dispatchEvent(new CustomEvent('profilePhotoUpdated', {
