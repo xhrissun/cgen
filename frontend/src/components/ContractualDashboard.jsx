@@ -1,20 +1,13 @@
 import { useState, useEffect } from 'react';
-import api, { openDocument } from '../api.js';
+import api, { openDocument, getDocumentUrl, API_BASE } from '../api.js';
 import ContractGenerator from './ContractGenerator';
 import DocumentViewerModal from './DocumentViewerModal';
 import EnhancedImageCropper from './EnhancedImageCropper';
 import EODBGenerator from './EODBGenerator';
 
 
-// Helper: profilePhoto may be a full R2 URL or legacy filename
-const getProfilePhotoUrl = (photoValue, userId, token) => {
-  if (!photoValue) return null;
-  if (photoValue.startsWith('http')) return photoValue; // Already R2 URL
-  // Legacy: build API proxy URL
-  const t = Date.now();
-  const v = Math.random().toString(36).substring(2, 12);
-  return `/api/users/${userId}/documents/${photoValue}?token=${token}&t=${t}&v=${v}`;
-};
+// Use the centralized getDocumentUrl from api.js (always uses correct backend BASE_URL)
+const getProfilePhotoUrl = (photoValue, userId, token) => getDocumentUrl(photoValue, userId, token);
 
 
 const formatPhilHealth = (value) => {
