@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Environment files — NEVER commit these
+.env
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# Build output
+frontend/dist/
+frontend/build/
+
+# Local uploads and generated files — will live in R2
+backend/uploads/
+backend/temp/
+
+# LaTeX compilation artifacts
+*.aux
+*.log
+*.out
+*.synctex.gz
+
+# OS
+.DS_Store
+Thumbs.db

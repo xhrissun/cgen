@@ -1,0 +1,1146 @@
+import express from 'express';
+import Contract from '../models/Contract.js';
+import User from '../models/User.js';
+import Position from '../models/Position.js';
+import SalaryGrade from '../models/SalaryGrade.js';
+import { verifyToken } from './auth.js';
+import { Parser } from 'json2csv';
+import csv from 'csv-parser';
+import fs from 'fs';
+import multer from 'multer';
+import { exec } from 'child_process';
+import path from 'path';
+import { promisify } from 'util';
+import { fileURLToPath } from 'url';
+import Holiday from '../models/Holiday.js';
+import { calculatePremiumBreakdown } from '../utils/salaryCalculator.js';
+import { logActivity } from '../utils/activityLogger.js';
+import Notification from '../models/Notification.js';
+
+// Add this AFTER your imports, BEFORE router.get('/:id/generate')
+const sanitizeFilename = (str = '') => {
+  return String(str)
+    .trim()
+    .replace(/[_]+/g, '')                    // Remove underscores
+    .replace(/[^a-zA-Z0-9\s,.-]/g, '')      // Remove special chars
+    .replace(/\s+/g, ' ')                    // Normalize spaces
+    .replace(/[.\s]+$/g, '')                 // 🚨 CRITICAL: Remove trailing dots/spaces
+    .trim();
+};
+
+// Enhanced filename builder
+const buildSafeFilename = (lastName, firstName, middleInitial, suffix) => {
+  const clean = (str) => sanitizeFilename(str).toUpperCase();
+
+  const parts = [clean(lastName), clean(firstName)];
+
+  if (middleInitial) {
+    let mi = clean(middleInitial).replace(/^\.+|\.+$/g, '');
+    if (mi) parts.push(mi);
+  }
+
+  if (suffix) {
+    const s = clean(suffix);
+    if (s) parts.push(s);
+  }
+
+  let filename = parts.join(' ').trim();
+  
+  // Final safety checks
+  filename = filename
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/\s*\.\s*/g, '.')
+    .replace(/[.\s]+$/g, '');  // 🔥 CRITICAL FIX
+
+  return filename || 'contract'; // Fallback if empty
+};
+
+
+const convertBulletsToLatex = (text) => {
+  if (!text) return '';
+  
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  let result = '';
+  let inList = false;
+  let listItems = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // Check if line starts with bullet point (•, -, *, or number.)
+    const isBullet = /^[•\-\*]\s+/.test(line) || /^\d+\.\s+/.test(line);
+    
+    if (isBullet) {
+      if (!inList) {
+        // Start a new list
+        inList = true;
+        listItems = [];
+      }
+      
+      // Extract content after bullet
+      const content = line.replace(/^[•\-\*]\s+/, '').replace(/^\d+\.\s+/, '').trim();
+      listItems.push(content);
+    } else {
+      // Not a bullet point
+      if (inList) {
+        // Close the previous list with tighter spacing
+        result += '\n\\begin{itemize}[leftmargin=0.5in,itemsep=2pt,parsep=0pt,topsep=4pt]\n';
+        listItems.forEach(item => {
+          result += `\\item ${item}\n`;
+        });
+        result += '\\end{itemize}\n\n';
+        inList = false;
+        listItems = [];
+      }
+      
+      // Add the regular line
+      result += line + '\n';
+    }
+  }
+  
+  // Close any remaining open list
+  if (inList && listItems.length > 0) {
+    result += '\n\\begin{itemize}[leftmargin=0.5in,itemsep=2pt,parsep=0pt,topsep=4pt]\n';
+    listItems.forEach(item => {
+      result += `\\item ${item}\n`;
+    });
+    result += '\\end{itemize}\n';
+  }
+  
+  return result.trim();
+};
+
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const router = express.Router();
+const upload = multer({ dest: 'uploads/' });
+const execPromise = promisify(exec);
+
+// Number to words conversion
+const numberToWords = (num) => {
+  const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'];
+  const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+  const teens = ['TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+  
+  if (num === 0) return 'ZERO';
+  
+  const convert = (n) => {
+    if (n < 10) return ones[n];
+    if (n < 20) return teens[n - 10];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+    if (n < 1000) return ones[Math.floor(n / 100)] + ' HUNDRED' + (n % 100 ? ' ' + convert(n % 100) : '');
+    if (n < 1000000) return convert(Math.floor(n / 1000)) + ' THOUSAND' + (n % 1000 ? ' ' + convert(n % 1000) : '');
+    return convert(Math.floor(n / 1000000)) + ' MILLION' + (n % 1000000 ? ' ' + convert(n % 1000000) : '');
+  };
+  
+  const [intPart, decPart] = num.toFixed(2).split('.');
+  let result = convert(parseInt(intPart)) + ' PESOS';
+  if (parseInt(decPart) > 0) {
+    result += ' AND ' + convert(parseInt(decPart)) + ' CENTAVOS';
+  }
+  return result;
+};
+
+// Escape LaTeX special characters
+const escapeLatex = (text) => {
+  if (!text) return '';
+  return String(text)
+    .replace(/\\/g, '\\textbackslash{}')
+    .replace(/[&%$#_{}]/g, '\\$&')
+    .replace(/~/g, '\\textasciitilde{}')
+    .replace(/\^/g, '\\textasciicircum{}');
+};
+
+// Add multer configuration for file uploads at the top
+const signedContractUpload = multer({ 
+  dest: 'uploads/signed-contracts/',
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'));
+    }
+  }
+});
+
+// Get all contracts
+// Get all contracts
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    let query = {};
+    
+    if (req.user.role === 'CONTRACTUAL') {
+      query.userId = req.user.userId;
+    } else if (req.user.role === 'FOCAL_PERSON') {
+      // Get current user's place of assignment
+      const currentUser = await User.findById(req.user.userId);
+      
+      // Find all users (both CONTRACTUAL and FOCAL_PERSON) with same place of assignment
+      const users = await User.find({ 
+        placeOfAssignment: currentUser.placeOfAssignment,
+        role: { $in: ['CONTRACTUAL', 'FOCAL_PERSON'] }  // Add this line
+      });
+      query.userId = { $in: users.map(u => u._id) };
+    }
+    
+    const contracts = await Contract.find(query)
+      .populate('userId', 'username personalInfo placeOfAssignment')
+      .populate('clauses.clauseId')
+      .sort({ createdAt: -1 });
+    
+    res.json(contracts);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get contract by ID
+router.get('/:id', verifyToken, async (req, res) => {
+  try {
+    const contract = await Contract.findById(req.params.id)
+      .populate('userId')
+      .populate('clauses.clauseId');
+    
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+    
+    res.json(contract);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// backend/routes/contracts.js - CREATE CONTRACT (simplified)
+
+router.post('/', verifyToken, async (req, res) => {
+  try {
+    const {
+      userId,
+      mode,
+      year,
+      semester,
+      startDate,
+      endDate,
+      position,
+      positionCode,
+      placeOfAssignment,
+      dutiesAndResponsibilities,
+      salaryGrade,
+      charging,
+      approverBranch,
+      signatories
+    } = req.body;
+    
+    // VALIDATE USER PROFILE COMPLETENESS (BACKEND VALIDATION)
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const pi = user.personalInfo || {};
+    
+    // Check if profile is complete
+    const missingFields = [];
+    
+    // Account Information
+    if (!user.username) missingFields.push('Username');
+    if (!user.placeOfAssignment) missingFields.push('Place of Assignment');
+    
+    // Personal Information
+    if (!pi.lastName) missingFields.push('Last Name');
+    if (!pi.firstName) missingFields.push('First Name');
+    if (!pi.middleName) missingFields.push('Middle Name');
+    if (!pi.sex) missingFields.push('Sex');
+    if (!pi.placeOfBirth) missingFields.push('Place of Birth');
+    if (!pi.birthday) missingFields.push('Birthday');
+    if (!pi.phoneNumber) missingFields.push('Phone Number');
+    if (!pi.email) missingFields.push('Email');
+    if (!pi.address) missingFields.push('Address');
+    if (!pi.highestEducation) missingFields.push('Highest Education');
+    if (!pi.bachelorsDegree) missingFields.push("Bachelor's Degree");
+    
+    // Government IDs
+    if (!pi.philhealth) missingFields.push('PhilHealth');
+    if (!pi.pagibig) missingFields.push('Pag-IBIG');
+    if (!pi.tin) missingFields.push('TIN');
+    
+    if (missingFields.length > 0) {
+      return res.status(400).json({ 
+        message: `User profile is incomplete. Missing required fields: ${missingFields.join(', ')}` 
+      });
+    }
+    
+    console.log(`📋 Creating contract for SG: ${salaryGrade}, Period: ${startDate} to ${endDate}`);
+    
+    // 1. GET SALARY GRADE DATA (all manually entered by admin)
+    let salaryGradeData = await SalaryGrade.findOne({ grade: salaryGrade });
+
+    // If not found and the param is a valid number, try as number
+    if (!salaryGradeData && !isNaN(salaryGrade)) {
+      salaryGradeData = await SalaryGrade.findOne({ grade: parseFloat(salaryGrade) });
+    }
+
+    if (!salaryGradeData) {
+      return res.status(404).json({ message: `Salary grade ${salaryGrade} not found` });
+    }
+    
+    console.log(`✓ Salary Grade ${salaryGrade} found`);
+    
+    // 2. GET HOLIDAYS for entire months in contract period
+    const contractStart = new Date(startDate);
+    const contractEnd = new Date(endDate);
+
+    // Get first day of start month and last day of end month
+    const firstDayOfStartMonth = new Date(contractStart.getFullYear(), contractStart.getMonth(), 1);
+    const lastDayOfEndMonth = new Date(contractEnd.getFullYear(), contractEnd.getMonth() + 1, 0);
+
+    const holidays = await Holiday.find({
+      date: {
+        $gte: firstDayOfStartMonth,
+        $lte: lastDayOfEndMonth
+      }
+    });
+
+    console.log(`✓ Found ${holidays.length} holidays in full months (${firstDayOfStartMonth.toISOString().split('T')[0]} to ${lastDayOfEndMonth.toISOString().split('T')[0]})`);
+    
+    // 3. CALCULATE PREMIUM based on working days (ONLY calculation done by system)
+    const premiumCalc = calculatePremiumBreakdown({
+      monthlyPremium: salaryGradeData.monthlyPremium,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      holidays,
+      semester: parseInt(semester)
+    });
+    
+    console.log(`✓ Final Premium Calculated: ₱${premiumCalc.finalPremium.toFixed(2)}`);
+    console.log(`  - Total Working Days: ${premiumCalc.totalWorkingDays}`);
+    console.log(`  - Full Months: ${premiumCalc.fullMonths}, Partial: ${premiumCalc.partialMonths}`);
+    
+    // 4. GET POSITION CLAUSES
+    const positionData = await Position.findOne({ positionCode })
+      .populate('assignedClauses');
+
+    let clauses = [];
+    if (positionData && positionData.assignedClauses) {
+      clauses = positionData.assignedClauses.map(c => ({ 
+        clauseId: c._id,
+        customContent: c.content
+      }));
+      console.log(`✓ Loaded ${clauses.length} clauses`);
+    }
+    
+    // 5. CONVERT AMOUNTS TO WORDS
+    const basicSalaryInWords = numberToWords(salaryGradeData.basicSalary);
+    const monthlySalaryInWords = numberToWords(salaryGradeData.monthlySalaryAsPerContract);
+    const dailySalaryInWords = numberToWords(salaryGradeData.dailySalaryAsPerContract);
+    const monthlyPremiumInWords = numberToWords(salaryGradeData.monthlyPremium);
+    const finalPremiumInWords = numberToWords(premiumCalc.finalPremium);
+    
+    // Calculate total deductions
+    const totalDeductions = 
+      salaryGradeData.deductions.sss + 
+      salaryGradeData.deductions.pagibig + 
+      salaryGradeData.deductions.philhealth;
+    
+    // 6. CREATE CONTRACT
+    const newContract = new Contract({
+      userId,
+      mode,
+      year,
+      semester: parseInt(semester),
+      startDate,
+      endDate,
+      position,
+      positionCode,
+      placeOfAssignment,
+      dutiesAndResponsibilities,
+      salaryGrade,
+      isSpecialSalaryGrade: salaryGradeData.isSpecialSalaryGrade,
+      
+      // Copy all data from salary grade (no calculation)
+      basicSalary: salaryGradeData.basicSalary,
+      basicSalaryInWords,
+      grossPremium: salaryGradeData.grossPremium,
+      deductions: {
+        sss: salaryGradeData.deductions.sss,
+        pagibig: salaryGradeData.deductions.pagibig,
+        philhealth: salaryGradeData.deductions.philhealth,
+        total: totalDeductions
+      },
+      monthlySalaryAsPerContract: salaryGradeData.monthlySalaryAsPerContract,
+      monthlySalaryAsPerContractInWords: monthlySalaryInWords,
+      dailySalaryAsPerContract: salaryGradeData.dailySalaryAsPerContract,
+      dailySalaryAsPerContractInWords: dailySalaryInWords,
+      monthlyPremium: salaryGradeData.monthlyPremium,
+      monthlyPremiumInWords,
+      
+      // Calculated premium (ONLY calculation)
+      finalPremium: premiumCalc.finalPremium,
+      finalPremiumInWords,
+      bonusType: premiumCalc.bonusType,
+      
+      // Working days breakdown for audit
+      workingDaysBreakdown: premiumCalc.premiumBreakdown,
+      
+      // Premium summary
+      premiumSummary: {
+        totalMonths: premiumCalc.totalMonths,
+        fullMonths: premiumCalc.fullMonths,
+        partialMonths: premiumCalc.partialMonths,
+        totalWorkingDays: premiumCalc.totalWorkingDays
+      },
+      
+      charging,
+      approverBranch,
+      signatories,
+      clauses,
+      generatedBy: req.user.userId,
+      generatedDate: new Date()
+    });
+    
+    await newContract.save();
+
+    // Get the user info for notifications
+    // const user = await User.findById(userId);
+
+    // Log the activity
+    await logActivity({
+      actionType: 'CREATE',
+      entityType: 'Contract',
+      entityId: newContract._id,
+      entityName: `${newContract.contractNumber} - ${user.personalInfo?.firstName || user.username} - ${newContract.position}`,
+      performedBy: req.user.userId,
+      changesAfter: {
+        contractNumber: newContract.contractNumber,
+        userId: newContract.userId,
+        position: newContract.position,
+        startDate: newContract.startDate,
+        endDate: newContract.endDate,
+        status: newContract.status
+      },
+      req
+    });
+
+    // Update user contract history
+    await User.findByIdAndUpdate(userId, {
+      $push: {
+        contractHistory: {
+          contractId: newContract._id,
+          mode,
+          startDate,
+          endDate,
+          position,
+          status: 'ACTIVE'
+        }
+      }
+    });
+    
+    res.status(201).json(newContract);
+  } catch (error) {
+    console.error('❌ Contract creation error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Update contract
+router.put('/:id', verifyToken, async (req, res) => {
+  try {
+    const contract = await Contract.findByIdAndUpdate(
+      req.params.id,
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    ).populate('userId').populate('clauses.clauseId');
+    
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+    
+    res.json(contract);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Delete contract
+router.delete('/:id', verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'ADMINISTRATOR') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    
+    const contract = await Contract.findByIdAndDelete(req.params.id);
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+    
+    res.json({ message: 'Contract deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Fixed PDF Generation Route - Replace the GET /:id/generate route
+
+router.get('/:id/generate', verifyToken, async (req, res) => {
+  try {
+    const contract = await Contract.findById(req.params.id)
+      .populate('userId')
+      .populate('clauses.clauseId');
+   
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+   
+    console.log(`📄 Generating PDF for contract ${contract.contractNumber}`);
+    console.log(` Clauses to include: ${contract.clauses?.length || 0}`);
+   
+    const user = contract.userId;
+    const pi = user.personalInfo;
+   
+    // LaTeX escape function
+    const escapeLatex = (text) => {
+      if (!text) return '';
+      return String(text)
+        .replace(/\\/g, '\\textbackslash{}')
+        .replace(/[&%$#_{}]/g, '\\$&')
+        .replace(/~/g, '\\textasciitilde{}')
+        .replace(/\^/g, '\\textasciicircum{}');
+    };
+   
+    // Format functions
+    const formatDate = (date) => {
+      return new Date(date).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: '2-digit'
+      }).toUpperCase();
+    };
+    
+    const formatAmount = (amount) => {
+      const formatted = Number(amount).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+      return `PHP ${formatted}`;
+    };
+    
+    // Text wrapping
+    const wrapLongText = (text, maxLength = 90) => {
+      if (!text || text.length <= maxLength) return text;
+      const words = text.split(' ');
+      const lines = [];
+      let currentLine = '';
+      words.forEach(word => {
+        if ((currentLine + ' ' + word).length <= maxLength) {
+          currentLine += (currentLine ? ' ' : '') + word;
+        } else {
+          if (currentLine) lines.push(currentLine);
+          currentLine = word;
+        }
+      });
+      if (currentLine) lines.push(currentLine);
+      return lines.join('\n');
+    };
+    
+    // Build full name
+    const getMiddleInitial = (personalInfo) => {
+      if (personalInfo.middleInitial) {
+        return personalInfo.middleInitial.toUpperCase();
+      }
+      if (personalInfo.middleName) {
+        return personalInfo.middleName.charAt(0).toUpperCase();
+      }
+      return '';
+    };
+
+    const middleInitial = getMiddleInitial(pi);
+    const fullName = `${pi.firstName.toUpperCase()} ${middleInitial ? middleInitial + '. ' : ''}${pi.lastName.toUpperCase()}${pi.suffix ? ', ' + pi.suffix.toUpperCase() : ''}`;
+    const address = pi.address.toUpperCase();
+   
+    // Get signatories with defaults
+    const firstParty = contract.signatories.firstParty || {
+      name: 'NILO B. TAMORIA',
+      position: 'REGIONAL EXECUTIVE DIRECTOR',
+      title: 'CESO III'
+    };
+    const approver = contract.signatories.approver || {
+      name: 'ATTY. LIEZL E. DE MESA',
+      position: 'OIC, Assistant Regional Director for Management Services'
+    };
+    const accountant = contract.signatories.accountant || {
+      name: 'JEANELYN L. GURO-ARIASO',
+      position: 'Chief, Accounting Section'
+    };
+    const finance = contract.signatories.financeChief || {
+      name: 'MABEL C. GRASPARIL',
+      position: 'Chief, Finance Division'
+    };
+    
+    // Get current timestamp
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric'
+    });
+    const timeStr = now.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    }).toUpperCase();
+    
+    // Sort clauses
+    const sortedClauses = contract.clauses
+      .filter(clause => clause.clauseId)
+      .sort((a, b) => a.clauseId.clauseNumber - b.clauseId.clauseNumber);
+
+    console.log(` Sorted clauses: ${sortedClauses.length}`);
+
+    let clausesContent = '';
+    sortedClauses.forEach((clause) => {
+    // Always use live clause content from database
+    let rawContent = clause.clauseId.content || '';
+    
+    if (!rawContent.trim()) {
+      console.warn(` ⚠️ Empty content for clause ${clause.clauseId.clauseNumber}`);
+      return;
+    }
+
+    // Handle duties placeholder FIRST
+    if (rawContent.includes('{dutiesAndResponsibilities}')) {
+      let dutiesText = '';
+      if (contract.dutiesAndResponsibilities && contract.dutiesAndResponsibilities.length > 0) {
+        dutiesText = '\n\\begin{enumerate}[label=\\alph*),leftmargin=0.5in,itemsep=0pt,parsep=0pt,topsep=0pt]\n';
+        contract.dutiesAndResponsibilities.forEach((duty, idx) => {
+          if (duty.trim()) {
+            const wrappedDuty = wrapLongText(duty.trim(), 85);
+            let suffix = ';';
+            if (idx === contract.dutiesAndResponsibilities.length - 2) suffix = '; and';
+            else if (idx === contract.dutiesAndResponsibilities.length - 1) suffix = '.';
+            dutiesText += `\\item ${escapeLatex(wrappedDuty)}${suffix}\n`;
+          }
+        });
+        dutiesText += '\\end{enumerate}';
+      }
+      rawContent = rawContent.replace(/\{dutiesAndResponsibilities\}/gi, dutiesText);
+    }
+    
+    // STEP 1: Apply FIRST PARTY/SECOND PARTY markers BEFORE any other processing
+    rawContent = rawContent
+      .replace(/FIRST PARTY/g, 'XXXXFIRSTPARTYXXXX')
+      .replace(/SECOND PARTY/g, 'XXXXSECONDPARTYXXXX')
+      .replace(/END OF CONTRACT/g, 'XXXXENDOFCONTRACTXXXX');
+    
+    // STEP 2: Convert bullet points to LaTeX itemize (markers are preserved)
+    rawContent = convertBulletsToLatex(rawContent);
+
+    const paragraphs = rawContent.split('\n\n').filter(p => p.trim());
+
+    let clauseText = '';
+
+    paragraphs.forEach((paragraph, pIndex) => {
+      // LaTeX enumerate blocks pass through as-is
+      if (paragraph.includes('\\begin{enumerate}') || paragraph.includes('\\begin{itemize}')) {
+        if (pIndex > 0 || clauseText) clauseText += '\n\n';
+        clauseText += paragraph;
+        return;
+      }
+    
+      const lines = paragraph.split('\n').map(l => l.trim()).filter(l => l);
+      const hasSubItems = lines.some(line => /^[a-z]\)\s/.test(line));
+    
+      if (hasSubItems) {
+        const mainText = [];
+        const subItems = [];
+        let inSub = false;
+      
+        lines.forEach(line => {
+          if (/^[a-z]\)\s/.test(line)) {
+            inSub = true;
+            const match = line.match(/^[a-z]\)\s*(.+)/);
+            if (match) subItems.push(wrapLongText(match[1], 85));
+          } else if (!inSub) {
+            mainText.push(line);
+          }
+        });
+      
+        if (mainText.length > 0) {
+          let text = wrapLongText(mainText.join(' '), 85);
+          text = escapeLatex(text);
+          clauseText += text;
+        }
+      
+        if (subItems.length > 0) {
+          clauseText += '\n\\begin{enumerate}[label=\\alph*),leftmargin=0.5in,itemsep=0pt,parsep=0pt,topsep=0pt]\n';
+          subItems.forEach(item => {
+            let itemText = escapeLatex(item);
+            clauseText += `\\item ${itemText}\n`;
+          });
+          clauseText += '\\end{enumerate}';
+        }
+      } else {
+        if (pIndex > 0 || clauseText) clauseText += '\n\n';
+        let text = wrapLongText(lines.join(' '), 85);
+        text = escapeLatex(text);
+        clauseText += text;
+      }
+    });
+    
+    // STEP 3: Replace placeholders AFTER escaping
+    clauseText = clauseText
+      .replace(/\\\{position\\\}/gi, `\\textbf{${escapeLatex(contract.position.toUpperCase())}}`)
+      .replace(/\\\{placeOfAssignment\\\}/gi, `\\textbf{${escapeLatex(contract.placeOfAssignment.toUpperCase())}}`)
+      .replace(/\\\{startDate\\\}/gi, `\\textbf{${escapeLatex(formatDate(contract.startDate))}}`)
+      .replace(/\\\{endDate\\\}/gi, `\\textbf{${escapeLatex(formatDate(contract.endDate))}}`)
+      .replace(/\\\{basicSalary\\\}/gi, `\\textbf{${escapeLatex(formatAmount(contract.basicSalary))}}`)
+      .replace(/\\\{basicSalaryInWords\\\}/gi, `\\textbf{${escapeLatex((contract.basicSalaryInWords || '').toUpperCase())}}`)
+      .replace(/\\\{monthlySalaryAsPerContract\\\}/gi, `\\textbf{${escapeLatex(formatAmount(contract.monthlySalaryAsPerContract))}}`)
+      .replace(/\\\{monthlySalaryAsPerContractInWords\\\}/gi, `\\textbf{${escapeLatex((contract.monthlySalaryAsPerContractInWords || '').toUpperCase())}}`)
+      .replace(/\\\{dailySalaryAsPerContract\\\}/gi, `\\textbf{${escapeLatex(formatAmount(contract.dailySalaryAsPerContract))}}`)
+      .replace(/\\\{dailySalaryAsPerContractInWords\\\}/gi, `\\textbf{${escapeLatex((contract.dailySalaryAsPerContractInWords || '').toUpperCase())}}`)
+      .replace(/\\\{monthlyPremium\\\}/gi, `\\textbf{${escapeLatex(formatAmount(contract.monthlyPremium))}}`)
+      .replace(/\\\{monthlyPremiumInWords\\\}/gi, `\\textbf{${escapeLatex((contract.monthlyPremiumInWords || '').toUpperCase())}}`)
+      .replace(/\\\{finalPremium\\\}/gi, `\\textbf{${escapeLatex(formatAmount(contract.finalPremium))}}`)
+      .replace(/\\\{finalPremiumInWords\\\}/gi, `\\textbf{${escapeLatex((contract.finalPremiumInWords || '').toUpperCase())}}`)
+      .replace(/\\\{bonusType\\\}/gi, `\\textbf{${escapeLatex((contract.bonusType || 'Mid-Year').toUpperCase())}}`)
+      .replace(/\\\{dutiesAndResponsibilities\\\}/gi, '');
+
+    // STEP 4: Replace FIRST PARTY/SECOND PARTY markers with bold LaTeX AT THE VERY END
+    clauseText = clauseText
+      .replace(/XXXXFIRSTPARTYXXXX/g, '\\textbf{FIRST PARTY}')
+      .replace(/XXXXSECONDPARTYXXXX/g, '\\textbf{SECOND PARTY}')
+      .replace(/XXXXENDOFCONTRACTXXXX/g, '\\textbf{END OF CONTRACT}');
+
+    // Use index + 1 for sequential numbering instead of database clauseNumber
+    const displayNumber = sortedClauses.indexOf(clause) + 1;
+    clausesContent += `\\needspace{5\\baselineskip}\n\\noindent\\textbf{${displayNumber}.} ${clauseText}\n\n`;
+    console.log(` ✓ Clause ${displayNumber} (DB #${clause.clauseId.clauseNumber}): ${clause.clauseId.title || 'Untitled'}`);
+  });
+    
+    if (!clausesContent.trim()) {
+      throw new Error('No valid clause content found for contract');
+    }
+    
+    // Read template
+    const templatePath = path.join(__dirname, '..', 'templates', 'contract-template.tex');
+    let latexTemplate = fs.readFileSync(templatePath, 'utf8');
+    
+    // Replace template placeholders
+    latexTemplate = latexTemplate
+      .replace(/__GENERATED_DATE__/g, `${dateStr} ${timeStr}`)
+      .replace(/__FIRST_PARTY_NAME__/g, escapeLatex(firstParty.name))
+      .replace(/__FIRST_PARTY_TITLE__/g, escapeLatex(firstParty.title || ''))
+      .replace(/__FIRST_PARTY_POSITION__/g, escapeLatex(firstParty.position))
+      .replace(/__SECOND_PARTY_NAME__/g, escapeLatex(fullName))
+      .replace(/__SECOND_PARTY_ADDRESS__/g, escapeLatex(address))
+      .replace(/__CONTRACT_POSITION__/g, escapeLatex(contract.position))
+      .replace(/__APPROVER_NAME__/g, escapeLatex(approver.name))
+      .replace(/__APPROVER_POSITION__/g, escapeLatex(approver.position))
+      .replace(/__ACCOUNTANT_NAME__/g, escapeLatex(accountant.name))
+      .replace(/__ACCOUNTANT_POSITION__/g, escapeLatex(accountant.position))
+      .replace(/__FINANCE_CHIEF_NAME__/g, escapeLatex(finance.name))
+      .replace(/__FINANCE_CHIEF_POSITION__/g, escapeLatex(finance.position))
+      .replace(/__CONTRACT_CLAUSES__/g, clausesContent);
+    
+    // Setup temp directory
+    const tempDir = path.join(process.cwd(), 'temp');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+   
+    const timestamp = Date.now();
+    const filename = `contract_${contract.contractNumber}_${timestamp}`;
+    const texFilePath = path.join(tempDir, `${filename}.tex`);
+    const pdfFilePath = path.join(tempDir, `${filename}.pdf`);
+   
+    fs.writeFileSync(texFilePath, latexTemplate, 'utf8');
+    console.log(` 📝 LaTeX file written: ${texFilePath}`);
+   
+    // Compile PDF
+    try {
+      await execPromise(`pdflatex -interaction=nonstopmode -output-directory="${tempDir}" "${texFilePath}"`, {
+        cwd: tempDir,
+        timeout: 30000
+      });
+     
+      console.log(` ✓ PDF compiled successfully`);
+     
+      if (fs.existsSync(pdfFilePath)) {
+        // Build safe filename
+        const downloadFileName = buildSafeFilename(
+          pi.lastName,
+          pi.firstName,
+          pi.middleInitial || (pi.middleName ? pi.middleName.charAt(0) : ''),
+          pi.suffix
+        );
+
+        // Debug logging
+        console.log(`✓ Generated filename: "${downloadFileName}"`);
+
+        // Set header with sanitized filename
+        const finalFilename = `${downloadFileName}.pdf`;
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="${finalFilename}"`
+        );
+
+        // 🔥 CRITICAL: SEND THE FILE
+        res.sendFile(pdfFilePath, (err) => {
+          // Cleanup temp files after sending
+          try {
+            fs.unlinkSync(texFilePath);
+            fs.unlinkSync(pdfFilePath);
+
+            const auxFile = path.join(tempDir, `${filename}.aux`);
+            const logFile = path.join(tempDir, `${filename}.log`);
+            const outFile = path.join(tempDir, `${filename}.out`);
+
+            if (fs.existsSync(auxFile)) fs.unlinkSync(auxFile);
+            if (fs.existsSync(logFile)) fs.unlinkSync(logFile);
+            if (fs.existsSync(outFile)) fs.unlinkSync(outFile);
+          } catch (cleanupErr) {
+            console.error('Error cleaning up files:', cleanupErr);
+          }
+
+          if (err) {
+            console.error('Error sending file:', err);
+          }
+        });
+      } else {
+        throw new Error('PDF generation failed - file not created');
+      }
+    } catch (pdfError) {
+      if (fs.existsSync(texFilePath)) fs.unlinkSync(texFilePath);
+      if (fs.existsSync(pdfFilePath)) fs.unlinkSync(pdfFilePath);
+     
+      const logFile = path.join(tempDir, `${filename}.log`);
+      let errorDetails = pdfError.message;
+      if (fs.existsSync(logFile)) {
+        const logContent = fs.readFileSync(logFile, 'utf8');
+        const errorMatch = logContent.match(/! .+/g);
+        if (errorMatch) errorDetails = errorMatch.join('\n');
+      }
+      throw new Error(`PDF compilation failed: ${errorDetails}`);
+    }
+   
+  } catch (error) {
+    console.error('❌ PDF Generation Error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Update the export CSV route to include more fields
+router.get('/export/csv', verifyToken, async (req, res) => {
+  try {
+    const { includeArchived } = req.query;
+    
+    let query = {};
+    if (!includeArchived || includeArchived === 'false') {
+      query.isArchived = false;
+    }
+
+    const contracts = await Contract.find(query)
+      .populate('userId')
+      .sort({ createdAt: -1 });
+    
+    // Group contracts by userId, position, year, and semester to get only the latest
+    const latestContractsMap = new Map();
+    
+    contracts.forEach(contract => {
+      const userId = contract.userId?._id?.toString();
+      if (!userId) return; // Skip if no userId
+      
+      const key = `${userId}-${contract.position}-${contract.year}-${contract.semester}`;
+      
+      // Only keep the first occurrence (latest due to sort by createdAt: -1)
+      if (!latestContractsMap.has(key)) {
+        latestContractsMap.set(key, contract);
+      }
+    });
+    
+    // Convert map values back to array
+    const latestContracts = Array.from(latestContractsMap.values());
+    
+    const data = latestContracts.map(c => ({
+      contractNumber: c.contractNumber,
+      fullName: c.userId ? `${c.userId.personalInfo.lastName}, ${c.userId.personalInfo.firstName} ${c.userId.personalInfo.middleName || ''}`.trim() : 'N/A',
+      position: c.position?.toUpperCase() || 'N/A',
+      placeOfAssignment: c.placeOfAssignment,
+      mode: c.mode,
+      year: c.year,
+      semester: c.semester === 1 ? 'First' : 'Second',
+      startDate: c.startDate.toISOString().split('T')[0],
+      endDate: c.endDate.toISOString().split('T')[0],
+      salaryGrade: c.salaryGrade,
+      isSpecialSalaryGrade: c.isSpecialSalaryGrade ? 'Yes' : 'No',
+      basicSalary: c.basicSalary,
+      monthlySalaryAsPerContract: c.monthlySalaryAsPerContract,
+      dailySalaryAsPerContract: c.dailySalaryAsPerContract,
+      monthlyPremium: c.monthlyPremium,
+      finalPremium: c.finalPremium || 0,
+      bonusType: c.bonusType || 'N/A',
+      workingDays: c.premiumSummary?.totalWorkingDays || 0,
+      philhealth: c.userId?.personalInfo?.philhealth || 'N/A',
+      pagibig: c.userId?.personalInfo?.pagibig || 'N/A',
+      tin: c.userId?.personalInfo?.tin || 'N/A',
+      status: c.status,
+      hasSignedContract: c.signedContractFile ? 'Yes' : 'No',
+      isArchived: c.isArchived ? 'Yes' : 'No',
+      createdAt: c.createdAt.toISOString().split('T')[0]
+    }));
+    
+    const parser = new Parser();
+    const csv = parser.parse(data);
+    
+    const timestamp = new Date().toISOString().split('T')[0];
+    res.header('Content-Type', 'text/csv');
+    res.attachment(`contracts_export_${timestamp}.csv`);
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+
+// Update contract status
+// Update contract status
+router.patch('/:id/status', verifyToken, async (req, res) => {
+  try {
+    const { status } = req.body;
+    
+      if (!['DRAFT', 'PENDING', 'APPROVED', 'ACTIVE', 'EXPIRED', 'TERMINATED', 'CANCELLED'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' });
+    }
+
+    // Only admins and focal persons can change status
+    if (!['ADMINISTRATOR', 'FOCAL_PERSON'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const contract = await Contract.findById(req.params.id).populate('userId');
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    // Store old status before updating
+    const oldStatus = contract.status;
+    const newStatus = status;
+
+    // Update status
+    contract.status = newStatus;
+    contract.updatedAt = new Date();
+    await contract.save();
+
+    // Log the activity
+    await logActivity({
+      actionType: 'UPDATE',
+      entityType: 'Contract',
+      entityId: contract._id,
+      entityName: `${contract.contractNumber} - Status Changed`,
+      performedBy: req.user.userId,
+      changesBefore: { status: oldStatus },
+      changesAfter: { status: newStatus },
+      req
+    });
+
+    console.log(`✓ Contract ${contract.contractNumber} status changed to ${status}`);
+    res.json(contract);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Upload signed contract
+router.post('/:id/upload-signed', verifyToken, signedContractUpload.single('signedContract'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    const contract = await Contract.findById(req.params.id);
+    if (!contract) {
+      // Delete uploaded file if contract not found
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    // Delete old signed contract file if exists
+    if (contract.signedContractFile?.path) {
+      try {
+        fs.unlinkSync(contract.signedContractFile.path);
+      } catch (err) {
+        console.warn('Failed to delete old signed contract:', err.message);
+      }
+    }
+
+    contract.signedContractFile = {
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      path: req.file.path,
+      uploadedAt: new Date(),
+      uploadedBy: req.user.userId
+    };
+
+    // Automatically set status to ACTIVE if uploading signed contract
+    if (contract.status === 'APPROVED') {
+      contract.status = 'ACTIVE';
+    }
+
+    await contract.save();
+
+    console.log(`✓ Signed contract uploaded for ${contract.contractNumber}`);
+    res.json({ 
+      message: 'Signed contract uploaded successfully',
+      contract 
+    });
+  } catch (error) {
+    // Clean up uploaded file on error
+    if (req.file) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (err) {
+        console.warn('Failed to delete uploaded file:', err.message);
+      }
+    }
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Download signed contract
+router.get('/:id/signed-contract', verifyToken, async (req, res) => {
+  try {
+    const contract = await Contract.findById(req.params.id);
+    
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    if (!contract.signedContractFile?.path) {
+      return res.status(404).json({ message: 'No signed contract file found' });
+    }
+
+    if (!fs.existsSync(contract.signedContractFile.path)) {
+      return res.status(404).json({ message: 'Signed contract file not found on server' });
+    }
+
+    res.download(contract.signedContractFile.path, contract.signedContractFile.originalName);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Archive contract
+router.patch('/:id/archive', verifyToken, async (req, res) => {
+  try {
+    if (!['ADMINISTRATOR', 'FOCAL_PERSON'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const contract = await Contract.findById(req.params.id);
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    // Only allow archiving expired, terminated, or cancelled contracts
+    if (!['EXPIRED', 'TERMINATED', 'CANCELLED'].includes(contract.status)) {
+      return res.status(400).json({ 
+        message: 'Only expired, terminated, or cancelled contracts can be archived' 
+      });
+    }
+
+    contract.isArchived = true;
+    contract.archivedAt = new Date();
+    contract.archivedBy = req.user.userId;
+    await contract.save();
+
+    console.log(`✓ Contract ${contract.contractNumber} archived`);
+    res.json({ message: 'Contract archived successfully', contract });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Unarchive contract
+router.patch('/:id/unarchive', verifyToken, async (req, res) => {
+  try {
+    if (!['ADMINISTRATOR', 'FOCAL_PERSON'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const contract = await Contract.findByIdAndUpdate(
+      req.params.id,
+      { 
+        isArchived: false,
+        archivedAt: null,
+        archivedBy: null
+      },
+      { new: true }
+    );
+
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    console.log(`✓ Contract ${contract.contractNumber} unarchived`);
+    res.json({ message: 'Contract unarchived successfully', contract });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Delete contract (admin only)
+// Delete contract (admin only)
+router.delete('/:id', verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'ADMINISTRATOR') {
+      return res.status(403).json({ message: 'Access denied. Administrator only.' });
+    }
+    
+    const contract = await Contract.findById(req.params.id);
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    // Store contract info before deletion
+    const contractInfo = {
+      contractNumber: contract.contractNumber,
+      position: contract.position,
+      userId: contract.userId
+    };
+
+    // Log the activity BEFORE deletion
+    await logActivity({
+      actionType: 'DELETE',
+      entityType: 'Contract',
+      entityId: contract._id,
+      entityName: `${contractInfo.contractNumber}`,
+      performedBy: req.user.userId,
+      changesBefore: contractInfo,
+      req
+    });
+
+    // Delete signed contract file if exists
+    if (contract.signedContractFile?.path) {
+      try {
+        fs.unlinkSync(contract.signedContractFile.path);
+      } catch (err) {
+        console.warn('Failed to delete signed contract file:', err.message);
+      }
+    }
+
+    // Delete the contract
+    await Contract.findByIdAndDelete(req.params.id);
+    
+    console.log(`✓ Contract ${contract.contractNumber} deleted`);
+    res.json({ message: 'Contract deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+
+export default router;
