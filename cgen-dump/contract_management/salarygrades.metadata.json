@@ -1,1 +1,0 @@
-{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"grade":{"$numberInt":"1"}},"name":"grade_1","background":true,"unique":true}],"uuid":"9daefc86f3fa4dc8965f23aa58507745","collectionName":"salarygrades","type":"collection"}
