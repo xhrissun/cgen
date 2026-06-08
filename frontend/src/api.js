@@ -16,16 +16,19 @@ export const API_BASE = BASE_URL;
 /**
  * Get a usable URL for a document stored in the DB.
  * document.filename may be:
- *   (a) a full R2 URL  → https://pub-xxx.r2.dev/profile-photos/file.jpg
- *   (b) a legacy path  → profile-695a150e.jpg  (still in DB from old data)
+ *   (a) a full R2 URL  → https://pub-xxx.r2.dev/profile-photos/file.jpg  ← new uploads
+ *   (b) a R2 key       → profile-photos/file.jpg                          ← stored as key
+ *   (c) a legacy path  → profile-695a150e.jpg                             ← old local data
  *
- * For (a): return the R2 URL directly (no auth needed, public bucket)
- * For (b): return the API proxy URL  /api/users/:id/documents/:filename
+ * For (a): return the R2 URL directly — no auth needed
+ * For (b)/(c): proxy through backend API
  */
 export const getDocumentUrl = (filenameOrUrl, userId, token) => {
   if (!filenameOrUrl) return null;
-  if (filenameOrUrl.startsWith('http')) return filenameOrUrl; // Already R2 URL
-  // Legacy filename — proxy through backend
+  // Already a full R2/http URL — use directly
+  if (filenameOrUrl.startsWith('http')) return filenameOrUrl;
+  // Legacy filename — proxy through backend, MUST use BASE_URL not relative path
+  // so it always hits the backend, not the frontend static server
   const t = Date.now();
   const v = Math.random().toString(36).substring(2, 12);
   return `${BASE_URL}/api/users/${userId}/documents/${filenameOrUrl}?token=${token}&t=${t}&v=${v}`;

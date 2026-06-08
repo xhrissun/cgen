@@ -190,7 +190,7 @@ function DocumentViewer({ userRole }) {
                         <div className="flex items-center flex-1">
                           <span className="text-2xl mr-3">{getFileIcon(doc.filename, doc.type)}</span>
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{doc.filename}</p>
+                            <p className="font-medium truncate">{doc.filename?.startsWith('http') ? doc.filename.split('/').pop().split('?')[0] : doc.filename}</p>
                             <p className="text-xs text-gray-600">
                               {doc.description || 'No description'}
                             </p>
@@ -207,13 +207,13 @@ function DocumentViewer({ userRole }) {
                         </span>
                         <div className="flex space-x-2">
                           <button
-                            onClick={() => handleViewDocument(selectedUser._id, doc.filename)}
+                            onClick={() => handleViewDocument(selectedUser._id, doc.key || doc.filename)}
                             className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
                           >
                             👁️ View
                           </button>
                           <button
-                            onClick={() => handleDownloadDocument(selectedUser._id, doc.filename)}
+                            onClick={() => handleDownloadDocument(selectedUser._id, doc.key || doc.filename)}
                             className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
                           >
                             ⬇️ Download

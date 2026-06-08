@@ -845,7 +845,7 @@ function ContractualDashboard({ user }) {
                         <td>
                           <div className="flex items-center text-sm">
                             <span className="mr-2">{getFileIcon(doc.filename)}</span>
-                            {doc.filename}
+                            {doc.filename?.startsWith('http') ? doc.filename.split('/').pop().split('?')[0] : doc.filename}
                           </div>
                         </td>
                         <td className="text-sm text-gray-600">{doc.description || '-'}</td>
@@ -853,19 +853,19 @@ function ContractualDashboard({ user }) {
                         <td>
                           <div className="flex space-x-3 text-sm">
                             <button
-                              onClick={() => handleViewDocument(doc.filename)}
+                              onClick={() => handleViewDocument(doc.key || doc.filename)}
                               className="text-blue-600 hover:text-blue-800 font-medium"
                             >
                               View
                             </button>
                             <button
-                              onClick={() => handleDownloadDocument(doc.filename)}
+                              onClick={() => handleDownloadDocument(doc.key || doc.filename)}
                               className="text-green-600 hover:text-green-800 font-medium"
                             >
                               Download
                             </button>
                             <button
-                              onClick={() => handleDeleteDocument(doc.filename)}
+                              onClick={() => handleDeleteDocument(doc.key || doc.filename)}
                               className="text-red-600 hover:text-red-800 font-medium"
                             >
                               Delete
