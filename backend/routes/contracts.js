@@ -6,8 +6,8 @@ import SalaryGrade from '../models/SalaryGrade.js';
 import { verifyToken } from './auth.js';
 import { Parser } from 'json2csv';
 import csv from 'csv-parser';
-import fs from 'fs';
-import multer from 'multer';
+import { signedContractUpload } from '../utils/r2Upload.js';
+import { deleteFromR2 } from '../utils/r2Delete.js';
 import { exec } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';
@@ -964,23 +964,24 @@ router.post('/:id/upload-signed', verifyToken, signedContractUpload.single('sign
     const contract = await Contract.findById(req.params.id);
     if (!contract) {
       // Delete uploaded file if contract not found
-      if (req.file) fs.unlinkSync(req.file.path);
+      if (req.file) fs.unlinkSync(req.file.location);
       return res.status(404).json({ message: 'Contract not found' });
     }
 
     // Delete old signed contract file if exists
     if (contract.signedContractFile?.path) {
       try {
-        fs.unlinkSync(contract.signedContractFile.path);
+        await deleteFromR2(contract.signedContractFile.key);
       } catch (err) {
         console.warn('Failed to delete old signed contract:', err.message);
       }
     }
 
     contract.signedContractFile = {
-      filename: req.file.filename,
+      filename: req.file.key,
       originalName: req.file.originalname,
-      path: req.file.path,
+      key: req.file.key,
+      url: req.file.location,
       uploadedAt: new Date(),
       uploadedBy: req.user.userId
     };
@@ -1001,7 +1002,7 @@ router.post('/:id/upload-signed', verifyToken, signedContractUpload.single('sign
     // Clean up uploaded file on error
     if (req.file) {
       try {
-        fs.unlinkSync(req.file.path);
+        fs.unlinkSync(req.file.location);
       } catch (err) {
         console.warn('Failed to delete uploaded file:', err.message);
       }
@@ -1027,7 +1028,7 @@ router.get('/:id/signed-contract', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'Signed contract file not found on server' });
     }
 
-    res.download(contract.signedContractFile.path, contract.signedContractFile.originalName);
+    res.redirect(contract.signedContractFile.url, contract.signedContractFile.originalName);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -1126,7 +1127,7 @@ router.delete('/:id', verifyToken, async (req, res) => {
     // Delete signed contract file if exists
     if (contract.signedContractFile?.path) {
       try {
-        fs.unlinkSync(contract.signedContractFile.path);
+        await deleteFromR2(contract.signedContractFile.key);
       } catch (err) {
         console.warn('Failed to delete signed contract file:', err.message);
       }

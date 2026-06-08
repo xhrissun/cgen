@@ -23,10 +23,10 @@ const LOCAL_IP = getLocalIP();
 // Middleware
 app.use(cors({
   origin: [
-    'http://localhost:3001',
-    `http://${LOCAL_IP}:3001`
+    process.env.FRONTEND_URL,           // e.g. https://cgen.pages.dev or your GH Pages URL
+    'http://localhost:3001',            // local dev
   ],
-  credentials: true
+  credentials: true,
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -92,15 +92,7 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(PORT, HOST, () => {
-  console.log('\n================================================');
-  console.log('   CONTRACT MANAGEMENT SYSTEM - SERVER STARTED  ');
-  console.log('================================================');
-  console.log(`  Local access:   http://localhost:${PORT}`);
-  console.log(`  LAN access:     http://${LOCAL_IP}:${PORT}`);
-  console.log('------------------------------------------------');
-  console.log(`  Share this URL with users:`);
-  console.log(`  >>> http://${LOCAL_IP}:3001 <<<`);
-  console.log('================================================\n');
+  console.log(`Backend running on port ${PORT}`);
   initializeAdmin();
 });
 

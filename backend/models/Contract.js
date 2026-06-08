@@ -123,9 +123,8 @@ const contractSchema = new mongoose.Schema({
   signedContractFile: {
     filename: String,
     originalName: String,
-    path: String,
-    uploadedAt: Date,
-    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    key: String,   // R2 object key for deletion
+    url: String,   // Public URL for download
   },
 
 archivedAt: Date,

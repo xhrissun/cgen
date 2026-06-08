@@ -1,10 +1,11 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
+import { documentUpload, profilePhotoUpload } from '../utils/r2Upload.js';
+import { deleteFromR2 } from '../utils/r2Delete.js';
+import { R2_PUBLIC_URL } from '../config/r2.js';
 import User from '../models/User.js';
 import { verifyToken } from './auth.js';
-import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import Notification from '../models/Notification.js';
 import { logActivity } from '../utils/activityLogger.js';
 
@@ -282,13 +283,13 @@ async function handleDocumentUpload(req, res) {
     console.log('isProfilePhoto:', isProfilePhoto);
     console.log('contractNumber:', contractNumber);
     console.log('Uploaded file:', req.file.filename);
-    console.log('File path:', req.file.path);
+    console.log('File path:', req.file.location);
     
     const user = await User.findById(userId);
     if (!user) {
       // Delete the uploaded file since user doesn't exist
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
+      if (req.file && fs.existsSync(req.file.location)) {
+        fs.unlinkSync(req.file.location);
       }
       return res.status(404).json({ message: 'User not found' });
     }
@@ -302,7 +303,7 @@ async function handleDocumentUpload(req, res) {
     
     // If this is a profile photo, rename the file to include userId
     if (isProfilePhoto === 'true') {
-      const oldPath = req.file.path;
+      const oldPath = req.file.location;
       const ext = path.extname(req.file.filename);
       const newFilename = `profile-${userId}-${Date.now()}${ext}`;
       const newPath = path.join(path.dirname(oldPath), newFilename);
@@ -378,8 +379,8 @@ async function handleDocumentUpload(req, res) {
     console.error('Upload error:', error);
     
     // Clean up uploaded file on error
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    if (req.file && fs.existsSync(req.file.location)) {
+      fs.unlinkSync(req.file.location);
     }
     
     res.status(500).json({ message: 'Server error', error: error.message });
