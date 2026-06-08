@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 
 function DocumentViewerModal({ userId, filename, onClose }) {
   const [loading, setLoading] = useState(true);
@@ -20,7 +20,7 @@ function DocumentViewerModal({ userId, filename, onClose }) {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await axios.get(`/api/users/${userId}/documents/${filename}`, {
+      const response = await api.get(`/api/users/${userId}/documents/${filename}`, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });

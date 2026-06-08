@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 
 function ClauseGroupManagement() {
   const [groups, setGroups] = useState([]);
@@ -20,7 +20,7 @@ function ClauseGroupManagement() {
   const fetchGroups = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/api/positions/clause-groups', {
+      const response = await api.get('/api/positions/clause-groups', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setGroups(response.data);
@@ -32,7 +32,7 @@ function ClauseGroupManagement() {
   const fetchClauses = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/positions/clauses/all', {
+      const response = await api.get('/api/positions/clauses/all', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setClauses(response.data);
@@ -52,12 +52,12 @@ function ClauseGroupManagement() {
       };
 
       if (editingGroup) {
-        await axios.put(`/api/positions/clause-groups/${editingGroup._id}`, payload, {
+        await api.put(`/api/positions/clause-groups/${editingGroup._id}`, payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Clause group updated successfully!');
       } else {
-        await axios.post('/api/positions/clause-groups', payload, {
+        await api.post('/api/positions/clause-groups', payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Clause group created successfully!');
@@ -91,7 +91,7 @@ function ClauseGroupManagement() {
     
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`/api/positions/clause-groups/${id}`, {
+      await api.delete(`/api/positions/clause-groups/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchGroups();

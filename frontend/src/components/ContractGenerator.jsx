@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 import ContractDetailsModal from './ContractDetailsModal';
 import Select from 'react-select';
 
@@ -188,7 +188,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
       if (payload.role === 'FOCAL_PERSON') {
         const fetchCurrentUser = async () => {
           try {
-            const response = await axios.get(`/api/users/${payload.userId}`, {
+            const response = await api.get(`/api/users/${payload.userId}`, {
               headers: { Authorization: `Bearer ${token}` }
             });
             setCurrentUserPlaceOfAssignment(response.data.placeOfAssignment);
@@ -216,7 +216,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   const fetchContracts = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/contracts', {
+      const response = await api.get('/api/contracts', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setContracts(response.data);
@@ -230,7 +230,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
       const token = localStorage.getItem('token');
       
       // Fetch all users first
-      const response = await axios.get('/api/users', {
+      const response = await api.get('/api/users', {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -242,7 +242,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
       // If current user is FOCAL_PERSON, filter by place of assignment
       if (userRole === 'FOCAL_PERSON') {
         const currentUserPayload = JSON.parse(atob(token.split('.')[1]));
-        const currentUserResponse = await axios.get(`/api/users/${currentUserPayload.userId}`, {
+        const currentUserResponse = await api.get(`/api/users/${currentUserPayload.userId}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const currentPlace = currentUserResponse.data.placeOfAssignment;
@@ -259,7 +259,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   const fetchPositions = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/positions', {
+      const response = await api.get('/api/positions', {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -280,7 +280,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   const fetchHolidays = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/holidays', {
+      const response = await api.get('/api/holidays', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setHolidays(response.data);
@@ -292,7 +292,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   const fetchDefaultSignatories = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/signatories/defaults/all', {
+      const response = await api.get('/api/signatories/defaults/all', {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -376,7 +376,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   const handleViewContract = async (contract) => {
      try {
        const token = localStorage.getItem('token');
-       const response = await axios.get(`/api/contracts/${contract._id}`, {
+       const response = await api.get(`/api/contracts/${contract._id}`, {
          headers: { Authorization: `Bearer ${token}` }
        });
        setSelectedContract(response.data);
@@ -396,7 +396,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
       const token = localStorage.getItem('token');
       
       // Get salary grade data
-      const sgResponse = await axios.get(`/api/positions/salary-grades/${formData.salaryGrade}`, {
+      const sgResponse = await api.get(`/api/positions/salary-grades/${formData.salaryGrade}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -474,7 +474,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
 
   try {
     const token = localStorage.getItem('token');
-    const response = await axios.post('/api/contracts', {
+    const response = await api.post('/api/contracts', {
       ...formData,
       // Ensure these are included even if something went wrong
       positionCode: formData.positionCode,
@@ -517,7 +517,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
     try {
       const token = localStorage.getItem('token');
       
-      const response = await axios.get(`/api/contracts/${contractId}/generate`, {
+      const response = await api.get(`/api/contracts/${contractId}/generate`, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });
@@ -570,7 +570,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   const updateContractStatus = async (contractId, status) => {
   try {
     const token = localStorage.getItem('token');
-    await axios.patch(`/api/contracts/${contractId}/status`, 
+    await api.patch(`/api/contracts/${contractId}/status`, 
       { status },
       { headers: { Authorization: `Bearer ${token}` } }
     );
@@ -589,7 +589,7 @@ const uploadSignedContract = async (contractId, file) => {
     const formData = new FormData();
     formData.append('signedContract', file);
     
-    await axios.post(`/api/contracts/${contractId}/upload-signed`, formData, {
+    await api.post(`/api/contracts/${contractId}/upload-signed`, formData, {
       headers: { 
         Authorization: `Bearer ${token}`,
         'Content-Type': 'multipart/form-data'
@@ -608,7 +608,7 @@ const uploadSignedContract = async (contractId, file) => {
 const downloadSignedContract = async (contractId) => {
   try {
     const token = localStorage.getItem('token');
-    const response = await axios.get(`/api/contracts/${contractId}/signed-contract`, {
+    const response = await api.get(`/api/contracts/${contractId}/signed-contract`, {
       headers: { Authorization: `Bearer ${token}` },
       responseType: 'blob'
     });
@@ -631,7 +631,7 @@ const archiveContract = async (contractId) => {
   
   try {
     const token = localStorage.getItem('token');
-    await axios.patch(`/api/contracts/${contractId}/archive`, {}, {
+    await api.patch(`/api/contracts/${contractId}/archive`, {}, {
       headers: { Authorization: `Bearer ${token}` }
     });
     alert('Contract archived successfully!');
@@ -644,7 +644,7 @@ const archiveContract = async (contractId) => {
 const unarchiveContract = async (contractId) => {
   try {
     const token = localStorage.getItem('token');
-    await axios.patch(`/api/contracts/${contractId}/unarchive`, {}, {
+    await api.patch(`/api/contracts/${contractId}/unarchive`, {}, {
       headers: { Authorization: `Bearer ${token}` }
     });
     alert('Contract unarchived successfully!');
@@ -659,7 +659,7 @@ const deleteContract = async (contractId) => {
   
   try {
     const token = localStorage.getItem('token');
-    await axios.delete(`/api/contracts/${contractId}`, {
+    await api.delete(`/api/contracts/${contractId}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     alert('Contract deleted successfully!');
@@ -672,7 +672,7 @@ const deleteContract = async (contractId) => {
 const exportToCSV = async () => {
   try {
     const token = localStorage.getItem('token');
-    const response = await axios.get(`/api/contracts/export/csv?includeArchived=${showArchived}`, {
+    const response = await api.get(`/api/contracts/export/csv?includeArchived=${showArchived}`, {
       headers: { Authorization: `Bearer ${token}` },
       responseType: 'blob'
     });

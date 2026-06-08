@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 import UserDetailsModal from './UserDetailsModal';
 
 // Place of Assignment options
@@ -198,7 +198,7 @@ function UserManagement() {
         // Fetch current user details
         const fetchCurrentUser = async () => {
           try {
-            const response = await axios.get(`/api/users/${payload.userId}`, {
+            const response = await api.get(`/api/users/${payload.userId}`, {
               headers: { Authorization: `Bearer ${token}` }
             });
             setFormData(prev => ({
@@ -217,7 +217,7 @@ function UserManagement() {
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/users', {
+      const response = await api.get('/api/users', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setUsers(response.data);
@@ -240,12 +240,12 @@ function UserManagement() {
       const token = localStorage.getItem('token');
       
       if (editingUser) {
-        await axios.put(`/api/users/${editingUser._id}`, formData, {
+        await api.put(`/api/users/${editingUser._id}`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('User updated successfully!');
       } else {
-        await axios.post('/api/users', formData, {
+        await api.post('/api/users', formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('User created successfully!');
@@ -265,7 +265,7 @@ function UserManagement() {
     
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`/api/users/${id}`, {
+      await api.delete(`/api/users/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert('User deleted successfully!');
@@ -292,7 +292,7 @@ function UserManagement() {
   const handleViewDetails = async (user) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`/api/users/${user._id}`, {
+      const response = await api.get(`/api/users/${user._id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSelectedUser(response.data);

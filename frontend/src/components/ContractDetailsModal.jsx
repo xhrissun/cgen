@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 
 function ContractDetailsModal({ contract, onClose }) {
   const [previewingPDF, setPreviewingPDF] = useState(false);
@@ -14,7 +14,7 @@ function ContractDetailsModal({ contract, onClose }) {
     
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`/api/contracts/${contract._id}/generate`, {
+      const response = await api.get(`/api/contracts/${contract._id}/generate`, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });

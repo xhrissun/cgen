@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 
 function HolidayManagement() {
   const [holidays, setHolidays] = useState([]);
@@ -20,7 +20,7 @@ function HolidayManagement() {
   const fetchHolidays = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/holidays', {
+      const response = await api.get('/api/holidays', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setHolidays(response.data);
@@ -34,12 +34,12 @@ function HolidayManagement() {
     try {
       const token = localStorage.getItem('token');
       if (editingHoliday) {
-        await axios.put(`/api/holidays/${editingHoliday._id}`, formData, {
+        await api.put(`/api/holidays/${editingHoliday._id}`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Holiday updated successfully!');
       } else {
-        await axios.post('/api/holidays', formData, {
+        await api.post('/api/holidays', formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Holiday created successfully!');
@@ -76,7 +76,7 @@ function HolidayManagement() {
     
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`/api/holidays/${id}`, {
+      await api.delete(`/api/holidays/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchHolidays();

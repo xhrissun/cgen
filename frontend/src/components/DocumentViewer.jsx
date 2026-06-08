@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 import DocumentViewerModal from './DocumentViewerModal';
 
 function DocumentViewer({ userRole }) {
@@ -18,7 +18,7 @@ function DocumentViewer({ userRole }) {
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/users?role=CONTRACTUAL', {
+      const response = await api.get('/api/users?role=CONTRACTUAL', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setUsers(response.data);
@@ -31,7 +31,7 @@ function DocumentViewer({ userRole }) {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`/api/users/${userId}`, {
+      const response = await api.get(`/api/users/${userId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSelectedUser(response.data);
@@ -50,7 +50,7 @@ function DocumentViewer({ userRole }) {
   const handleDownloadDocument = async (userId, filename) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`/api/users/${userId}/documents/${filename}`, {
+      const response = await api.get(`/api/users/${userId}/documents/${filename}`, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });

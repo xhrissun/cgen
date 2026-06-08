@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 
 function FinanceOfficerDashboard({ user }) {
   const [activeTab, setActiveTab] = useState('salaryGrades');
@@ -35,7 +35,7 @@ function FinanceOfficerDashboard({ user }) {
   const fetchSalaryGrades = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/positions/salary-grades/all', {
+      const response = await api.get('/api/positions/salary-grades/all', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSalaryGrades(response.data);
@@ -47,7 +47,7 @@ function FinanceOfficerDashboard({ user }) {
   const fetchPositions = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/positions', {
+      const response = await api.get('/api/positions', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setPositions(response.data);
@@ -145,12 +145,12 @@ function FinanceOfficerDashboard({ user }) {
       };
       
       if (editingSalaryGrade) {
-        await axios.put(`/api/positions/salary-grades/${editingSalaryGrade._id}`, payload, {
+        await api.put(`/api/positions/salary-grades/${editingSalaryGrade._id}`, payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Salary grade updated successfully!');
       } else {
-        await axios.post('/api/positions/salary-grades', payload, {
+        await api.post('/api/positions/salary-grades', payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Salary grade created successfully!');
@@ -200,7 +200,7 @@ function FinanceOfficerDashboard({ user }) {
   const handleUpdatePositionCharging = async (positionId, charging) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`/api/positions/${positionId}`, 
+      await api.put(`/api/positions/${positionId}`, 
         { charging }, 
         { headers: { Authorization: `Bearer ${token}` } }
       );

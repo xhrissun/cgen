@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 import ContractGenerator from './ContractGenerator';
 import DocumentViewerModal from './DocumentViewerModal';
 import EnhancedImageCropper from './EnhancedImageCropper';
@@ -238,7 +238,7 @@ function ContractualDashboard({ user }) {
       const token = localStorage.getItem('token');
       if (!token) throw new Error("No token available");
 
-      const response = await axios.get(`/api/users/${userId}`, {
+      const response = await api.get(`/api/users/${userId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -278,7 +278,7 @@ function ContractualDashboard({ user }) {
       const userId = user.id || user._id;
       const token = localStorage.getItem('token');
       
-      await axios.put(`/api/users/${userId}`, 
+      await api.put(`/api/users/${userId}`, 
         { personalInfo },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -357,7 +357,7 @@ function ContractualDashboard({ user }) {
         formData.append('isProfilePhoto', uploadForm.type === 'PHOTO' ? 'true' : 'false');
       }
 
-      const response = await axios.post(`/api/users/${userId}/documents`, formData, {
+      const response = await api.post(`/api/users/${userId}/documents`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'
@@ -371,7 +371,7 @@ function ContractualDashboard({ user }) {
           setCurrentCropType('passport');
           setUploadForm({ type: 'SIGNED_CONTRACT', description: '', file: null });
 
-          const freshResponse = await axios.get(`/api/users/${userId}`, {
+          const freshResponse = await api.get(`/api/users/${userId}`, {
             headers: { Authorization: `Bearer ${token}` }
           });
 
@@ -429,7 +429,7 @@ function ContractualDashboard({ user }) {
     try {
       const userId = user.id || user._id;
       const token = localStorage.getItem('token');
-      const response = await axios.get(`/api/users/${userId}/documents/${filename}`, {
+      const response = await api.get(`/api/users/${userId}/documents/${filename}`, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });
@@ -457,7 +457,7 @@ function ContractualDashboard({ user }) {
     try {
       const userId = user.id || user._id;
       const token = localStorage.getItem('token');
-      await axios.delete(`/api/users/${userId}/documents/${filename}`, {
+      await api.delete(`/api/users/${userId}/documents/${filename}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert('Document deleted successfully!');
@@ -477,7 +477,7 @@ function ContractualDashboard({ user }) {
 
     try {
       const token = localStorage.getItem('token');
-      await axios.post('/api/auth/change-password', {
+      await api.post('/api/auth/change-password', {
         currentPassword: passwordForm.currentPassword,
         newPassword: passwordForm.newPassword
       }, {

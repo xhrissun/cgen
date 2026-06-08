@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 
 function SignatoryManagement() {
   const [signatories, setSignatories] = useState([]);
@@ -30,7 +30,7 @@ function SignatoryManagement() {
   const fetchSignatories = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/signatories', {
+      const response = await api.get('/api/signatories', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSignatories(response.data);
@@ -44,12 +44,12 @@ function SignatoryManagement() {
     try {
       const token = localStorage.getItem('token');
       if (editingSignatory) {
-        await axios.put(`/api/signatories/${editingSignatory._id}`, formData, {
+        await api.put(`/api/signatories/${editingSignatory._id}`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Signatory updated successfully!');
       } else {
-        await axios.post('/api/signatories', formData, {
+        await api.post('/api/signatories', formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Signatory created successfully!');
@@ -88,7 +88,7 @@ function SignatoryManagement() {
     
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`/api/signatories/${id}`, {
+      await api.delete(`/api/signatories/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchSignatories();

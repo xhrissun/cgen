@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 
 function ActivityLog() {
   const [logs, setLogs] = useState([]);
@@ -20,7 +20,7 @@ function ActivityLog() {
       if (filter.userId) params.append('userId', filter.userId);
       params.append('limit', '50');
       
-      const response = await axios.get(`/api/change-logs?${params}`, {
+      const response = await api.get(`/api/change-logs?${params}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       

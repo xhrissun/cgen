@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 import PositionDetailsModal from './PositionDetailsModal';
 
 // Place of Assignment options
@@ -70,7 +70,7 @@ function PositionManagement() {
       if (payload.role === 'FOCAL_PERSON') {
         const fetchCurrentUser = async () => {
           try {
-            const response = await axios.get(`/api/users/${payload.userId}`, {
+            const response = await api.get(`/api/users/${payload.userId}`, {
               headers: { Authorization: `Bearer ${token}` }
             });
             const userAssignment = response.data.placeOfAssignment;
@@ -119,7 +119,7 @@ function PositionManagement() {
   const fetchPositions = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/positions', {
+      const response = await api.get('/api/positions', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setPositions(response.data);
@@ -132,7 +132,7 @@ function PositionManagement() {
   const fetchSalaryGrades = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/positions/salary-grades/all', {
+      const response = await api.get('/api/positions/salary-grades/all', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSalaryGrades(response.data);
@@ -144,7 +144,7 @@ function PositionManagement() {
   const fetchClauses = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/positions/clauses/all', {
+      const response = await api.get('/api/positions/clauses/all', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setClauses(response.data);
@@ -156,7 +156,7 @@ function PositionManagement() {
   const fetchClauseGroups = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/positions/clause-groups', {
+      const response = await api.get('/api/positions/clause-groups', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setClauseGroups(response.data);
@@ -171,12 +171,12 @@ function PositionManagement() {
       const token = localStorage.getItem('token');
       
       if (editingPosition) {
-        await axios.put(`/api/positions/${editingPosition._id}`, formData, {
+        await api.put(`/api/positions/${editingPosition._id}`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Position updated successfully!');
       } else {
-        await axios.post('/api/positions', formData, {
+        await api.post('/api/positions', formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Position created successfully!');
@@ -196,7 +196,7 @@ function PositionManagement() {
     
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`/api/positions/${id}`, {
+      await api.delete(`/api/positions/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert('Position deleted successfully!');
@@ -317,7 +317,7 @@ function PositionManagement() {
   const handleViewDetails = async (position) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`/api/positions/${position._id}`, {
+      const response = await api.get(`/api/positions/${position._id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSelectedPosition(response.data);

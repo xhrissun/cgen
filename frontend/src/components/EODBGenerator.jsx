@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 import JsBarcode from 'jsbarcode';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -26,14 +26,14 @@ function EODBGenerator({ userId, onDocumentUploaded }) {
   const fetchEODBData = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/eodb/user-data', {
+      const response = await api.get('/api/eodb/user-data', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       console.log('EODB Data received:', response.data);
       setEodbData(response.data);
 
-      const checkResponse = await axios.get('/api/eodb/check-existing', {
+      const checkResponse = await api.get('/api/eodb/check-existing', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -203,7 +203,7 @@ function EODBGenerator({ userId, onDocumentUploaded }) {
 
       const token = localStorage.getItem('token');
       const user = JSON.parse(localStorage.getItem('user'));
-      await axios.post('/api/eodb/log-print', {
+      await api.post('/api/eodb/log-print', {
         tin: eodbData.tin,
         employeeName: `${eodbData.firstName} ${eodbData.lastName}`,
         serialNumber: serialNumber,
@@ -242,7 +242,7 @@ function EODBGenerator({ userId, onDocumentUploaded }) {
       formData.append('contractNumber', eodbData.contractNumber);
 
       try {
-        await axios.post(`/api/users/${userId}/documents`, formData, {
+        await api.post(`/api/users/${userId}/documents`, formData, {
           headers: { 
             Authorization: `Bearer ${token}`,
             'Content-Type': 'multipart/form-data'

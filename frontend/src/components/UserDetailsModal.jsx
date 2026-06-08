@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 
 function UserDetailsModal({ user, onClose, onUpdate, isAdmin }) {
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -25,7 +25,7 @@ function UserDetailsModal({ user, onClose, onUpdate, isAdmin }) {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`/api/users/${user._id}/reset-password`, 
+      await api.post(`/api/users/${user._id}/reset-password`, 
         { newPassword },
         { headers: { Authorization: `Bearer ${token}` } }
       );

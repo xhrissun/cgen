@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import api from '../api.js';
 import { 
   LayoutDashboard, Users, Briefcase, FileText, FolderOpen,
   DollarSign, FileCheck, Layers, Calendar, PenTool, ScrollText
@@ -232,7 +232,7 @@ function AdminDashboard({ user }) {
   const fetchNotifications = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/notifications', {
+      const response = await api.get('/api/notifications', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setNotifications(response.data);
@@ -245,7 +245,7 @@ function AdminDashboard({ user }) {
   const markAsRead = async (id) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.patch(`/api/notifications/${id}/read`, {}, {
+      await api.patch(`/api/notifications/${id}/read`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchNotifications();
@@ -257,7 +257,7 @@ function AdminDashboard({ user }) {
   const markAllAsRead = async () => {
     try {
       const token = localStorage.getItem('token');
-      await axios.patch('/api/notifications/read-all', {}, {
+      await api.patch('/api/notifications/read-all', {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchNotifications();
@@ -270,8 +270,8 @@ function AdminDashboard({ user }) {
     try {
       const token = localStorage.getItem('token');
       const [usersRes, contractsRes] = await Promise.all([
-        axios.get('/api/users', { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get('/api/contracts', { headers: { Authorization: `Bearer ${token}` } })
+        api.get('/api/users', { headers: { Authorization: `Bearer ${token}` } }),
+        api.get('/api/contracts', { headers: { Authorization: `Bearer ${token}` } })
       ]);
       
       setStats({
@@ -288,7 +288,7 @@ function AdminDashboard({ user }) {
   const fetchSalaryGrades = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/positions/salary-grades/all', {
+      const response = await api.get('/api/positions/salary-grades/all', {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -308,7 +308,7 @@ function AdminDashboard({ user }) {
   const fetchClauses = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/positions/clauses/all', {
+      const response = await api.get('/api/positions/clauses/all', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setClauses(response.data);
@@ -320,7 +320,7 @@ function AdminDashboard({ user }) {
   const fetchClauseGroups = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/api/positions/clause-groups', {
+      const response = await api.get('/api/positions/clause-groups', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setAvailableGroups(response.data);
@@ -434,12 +434,12 @@ function AdminDashboard({ user }) {
       };
       
       if (editingSalaryGrade) {
-        await axios.put(`/api/positions/salary-grades/${editingSalaryGrade._id}`, payload, {
+        await api.put(`/api/positions/salary-grades/${editingSalaryGrade._id}`, payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Salary grade updated successfully!');
       } else {
-        await axios.post('/api/positions/salary-grades', payload, {
+        await api.post('/api/positions/salary-grades', payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Salary grade created successfully!');
@@ -502,7 +502,7 @@ function AdminDashboard({ user }) {
     
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`/api/positions/salary-grades/${id}`, {
+      await api.delete(`/api/positions/salary-grades/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert('Salary grade deleted successfully!');
@@ -526,13 +526,13 @@ function AdminDashboard({ user }) {
       
       if (editingClause) {
         // Update existing clause
-        await axios.put(`/api/positions/clauses/${editingClause._id}`, newClause, {
+        await api.put(`/api/positions/clauses/${editingClause._id}`, newClause, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Clause updated successfully!');
       } else {
         // Create new clause
-        await axios.post('/api/positions/clauses', newClause, {
+        await api.post('/api/positions/clauses', newClause, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Clause created successfully!');
@@ -580,7 +580,7 @@ function AdminDashboard({ user }) {
     
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`/api/positions/clauses/${id}`, {
+      await api.delete(`/api/positions/clauses/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchClauses();
