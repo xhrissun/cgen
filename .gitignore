@@ -17,6 +17,9 @@ frontend/build/
 backend/uploads/
 backend/temp/
 
+# MongoDB dump — keep locally, don't push to GitHub
+cgen-dump/
+
 # LaTeX compilation artifacts
 *.aux
 *.log

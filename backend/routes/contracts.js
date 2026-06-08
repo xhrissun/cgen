@@ -10,6 +10,7 @@ import { signedContractUpload } from '../utils/r2Upload.js';
 import { deleteFromR2 } from '../utils/r2Delete.js';
 import { exec } from 'child_process';
 import path from 'path';
+import fs from 'fs';
 import { promisify } from 'util';
 import { fileURLToPath } from 'url';
 import Holiday from '../models/Holiday.js';
@@ -116,7 +117,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const router = express.Router();
-const upload = multer({ dest: 'uploads/' });
 const execPromise = promisify(exec);
 
 // Number to words conversion
@@ -153,19 +153,6 @@ const escapeLatex = (text) => {
     .replace(/~/g, '\\textasciitilde{}')
     .replace(/\^/g, '\\textasciicircum{}');
 };
-
-// Add multer configuration for file uploads at the top
-const signedContractUpload = multer({ 
-  dest: 'uploads/signed-contracts/',
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') {
-      cb(null, true);
-    } else {
-      cb(new Error('Only PDF files are allowed'));
-    }
-  }
-});
 
 // Get all contracts
 // Get all contracts
@@ -963,13 +950,13 @@ router.post('/:id/upload-signed', verifyToken, signedContractUpload.single('sign
 
     const contract = await Contract.findById(req.params.id);
     if (!contract) {
-      // Delete uploaded file if contract not found
-      if (req.file) fs.unlinkSync(req.file.location);
+      // Delete uploaded R2 file if contract not found
+      await deleteFromR2(req.file.key);
       return res.status(404).json({ message: 'Contract not found' });
     }
 
-    // Delete old signed contract file if exists
-    if (contract.signedContractFile?.path) {
+    // Delete old signed contract file from R2 if exists
+    if (contract.signedContractFile?.key) {
       try {
         await deleteFromR2(contract.signedContractFile.key);
       } catch (err) {
@@ -999,12 +986,12 @@ router.post('/:id/upload-signed', verifyToken, signedContractUpload.single('sign
       contract 
     });
   } catch (error) {
-    // Clean up uploaded file on error
-    if (req.file) {
+    // Clean up uploaded R2 file on error
+    if (req.file?.key) {
       try {
-        fs.unlinkSync(req.file.location);
+        await deleteFromR2(req.file.key);
       } catch (err) {
-        console.warn('Failed to delete uploaded file:', err.message);
+        console.warn('Failed to delete uploaded file from R2:', err.message);
       }
     }
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -1020,15 +1007,11 @@ router.get('/:id/signed-contract', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'Contract not found' });
     }
 
-    if (!contract.signedContractFile?.path) {
+    if (!contract.signedContractFile?.url) {
       return res.status(404).json({ message: 'No signed contract file found' });
     }
 
-    if (!fs.existsSync(contract.signedContractFile.path)) {
-      return res.status(404).json({ message: 'Signed contract file not found on server' });
-    }
-
-    res.redirect(contract.signedContractFile.url, contract.signedContractFile.originalName);
+    res.redirect(contract.signedContractFile.url);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -1125,7 +1108,7 @@ router.delete('/:id', verifyToken, async (req, res) => {
     });
 
     // Delete signed contract file if exists
-    if (contract.signedContractFile?.path) {
+    if (contract.signedContractFile?.key) {
       try {
         await deleteFromR2(contract.signedContractFile.key);
       } catch (err) {

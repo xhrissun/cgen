@@ -11,42 +11,6 @@ import { logActivity } from '../utils/activityLogger.js';
 
 const router = express.Router();
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = './uploads/';
-    // Make sure directory exists
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    // Check if this is a profile photo
-    const isProfilePhoto = req.body.isProfilePhoto === 'true';
-    
-    if (isProfilePhoto) {
-      // For profile photos, create a consistent naming pattern
-      const userId = req.params.id;
-      const timestamp = Date.now();
-      const ext = path.extname(file.originalname) || '.jpg';
-      const filename = `profile-${userId}-${timestamp}${ext}`;
-      console.log('Saving profile photo as:', filename);
-      cb(null, filename);
-    } else {
-      // For regular documents, use timestamp + original name
-      const filename = `${Date.now()}-${file.originalname}`;
-      console.log('Saving document as:', filename);
-      cb(null, filename);
-    }
-  }
-});
-
-const upload = multer({ 
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
-});
-
 // Get all users (Admin/Focal Person)
 router.get('/', verifyToken, async (req, res) => {
   try {
@@ -254,203 +218,102 @@ router.delete('/:id', verifyToken, async (req, res) => {
   }
 });
 
-// Add this BEFORE the router.post upload route
-const uploadMiddleware = upload.single('file');
-
-// Replace the entire upload route with this:
-router.post('/:id/documents', verifyToken, (req, res, next) => {
-  // Custom middleware to ensure req.body is available for multer
-  uploadMiddleware(req, res, (err) => {
-    if (err) {
-      console.error('Multer error:', err);
-      return res.status(400).json({ message: 'File upload error', error: err.message });
-    }
-    
-    // Continue to the main handler
-    handleDocumentUpload(req, res);
-  });
-});
-
-// Separate function to handle the upload logic
-async function handleDocumentUpload(req, res) {
+// Upload document / profile photo → R2
+router.post('/:id/documents', verifyToken, documentUpload.single('file'), async (req, res) => {
   try {
     const { type, description, isProfilePhoto, contractNumber } = req.body;
     const userId = req.params.id;
-    
-    console.log('=== Document Upload Handler ===');
-    console.log('User ID:', userId);
-    console.log('Type:', type);
-    console.log('isProfilePhoto:', isProfilePhoto);
-    console.log('contractNumber:', contractNumber);
-    console.log('Uploaded file:', req.file.filename);
-    console.log('File path:', req.file.location);
-    
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
     const user = await User.findById(userId);
     if (!user) {
-      // Delete the uploaded file since user doesn't exist
-      if (req.file && fs.existsSync(req.file.location)) {
-        fs.unlinkSync(req.file.location);
-      }
+      await deleteFromR2(req.file.key);
       return res.status(404).json({ message: 'User not found' });
     }
-    
-    // Initialize personalInfo if it doesn't exist
-    if (!user.personalInfo) {
-      user.personalInfo = {};
-    }
-    
-    let finalFilename = req.file.filename;
-    
-    // If this is a profile photo, rename the file to include userId
+
+    if (!user.personalInfo) user.personalInfo = {};
+
+    const fileUrl = req.file.location;  // Full R2 public URL
+    const fileKey = req.file.key;       // R2 object key for deletion
+
+    // Handle profile photo
     if (isProfilePhoto === 'true') {
-      const oldPath = req.file.location;
-      const ext = path.extname(req.file.filename);
-      const newFilename = `profile-${userId}-${Date.now()}${ext}`;
-      const newPath = path.join(path.dirname(oldPath), newFilename);
-      
-      console.log('Renaming profile photo:');
-      console.log('  From:', oldPath);
-      console.log('  To:', newPath);
-      
-      // Rename the file
-      fs.renameSync(oldPath, newPath);
-      finalFilename = newFilename;
-      
-      // Remove old profile photo
-      const oldProfilePhoto = user.personalInfo.profilePhoto;
-      if (oldProfilePhoto && oldProfilePhoto !== newFilename) {
-        // Remove from documents array
-        user.documents = user.documents.filter(doc => doc.filename !== oldProfilePhoto);
-        
-        // Delete old file from filesystem
-        const oldFilePath = path.join(process.cwd(), 'uploads', oldProfilePhoto);
-        if (fs.existsSync(oldFilePath)) {
-          fs.unlinkSync(oldFilePath);
-          console.log('Deleted old profile photo:', oldProfilePhoto);
-        }
-      }
-      
-      // Set new profile photo
-      user.personalInfo.profilePhoto = finalFilename;
-      console.log('Set profilePhoto to:', finalFilename);
+      // Delete old profile photo from R2 if exists
+      const oldDoc = user.documents.find(doc => doc.filename === user.personalInfo.profilePhoto);
+      if (oldDoc?.key) await deleteFromR2(oldDoc.key);
+      user.documents = user.documents.filter(doc => doc.filename !== user.personalInfo.profilePhoto);
+      user.personalInfo.profilePhoto = fileUrl;
     }
-    
-    // ✅ ADD THIS: Handle PASSPORT_PHOTO overwrite
+
+    // Handle passport photo overwrite
     if (type === 'PASSPORT_PHOTO') {
-      // Find and remove old passport photo
-      const oldPassportPhoto = user.documents.find(doc => doc.type === 'PASSPORT_PHOTO');
-      if (oldPassportPhoto) {
-        // Remove from documents array
-        user.documents = user.documents.filter(doc => doc.type !== 'PASSPORT_PHOTO');
-        
-        // Delete old file from filesystem
-        const oldFilePath = path.join(process.cwd(), 'uploads', oldPassportPhoto.filename);
-        if (fs.existsSync(oldFilePath)) {
-          fs.unlinkSync(oldFilePath);
-          console.log('Deleted old passport photo:', oldPassportPhoto.filename);
-        }
-      }
+      const oldPassport = user.documents.find(doc => doc.type === 'PASSPORT_PHOTO');
+      if (oldPassport?.key) await deleteFromR2(oldPassport.key);
+      user.documents = user.documents.filter(doc => doc.type !== 'PASSPORT_PHOTO');
     }
-    
-    // Always add to documents array (including profile photos)
+
     user.documents.push({
       type: type || 'PHOTO',
-      filename: finalFilename,
+      filename: fileUrl,
+      key: fileKey,
       description: description || (isProfilePhoto === 'true' ? 'Profile Photo' : ''),
       contractNumber: contractNumber || undefined
     });
-    
-    // Mark personalInfo as modified to ensure it saves
+
     user.markModified('personalInfo');
     user.updatedAt = new Date();
     await user.save();
-    
-    console.log('=== Upload Complete ===');
-    console.log('Final filename:', finalFilename);
-    console.log('Profile photo in DB:', user.personalInfo?.profilePhoto);
-    console.log('Documents count:', user.documents.length);
-    
-    res.json({ 
-      message: 'Document uploaded successfully', 
+
+    res.json({
+      message: 'Document uploaded successfully',
       documents: user.documents,
       personalInfo: user.personalInfo
     });
   } catch (error) {
     console.error('Upload error:', error);
-    
-    // Clean up uploaded file on error
-    if (req.file && fs.existsSync(req.file.location)) {
-      fs.unlinkSync(req.file.location);
-    }
-    
+    if (req.file?.key) await deleteFromR2(req.file.key).catch(() => {});
     res.status(500).json({ message: 'Server error', error: error.message });
   }
-}
+});
 
-// Get/Download document
-// Get/Download document
+// Get/Download document — redirect to R2 public URL
+// Get/Download document — redirect to R2 public URL
 router.get('/:id/documents/:filename', verifyToken, async (req, res) => {
   try {
-    console.log('Document request:', {
-      userId: req.params.id,
-      filename: req.params.filename,
-      user: req.user
-    });
-
     const user = await User.findById(req.params.id);
     if (!user) {
-      console.log('User not found:', req.params.id);
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Check if user has permission to view documents
-    const canView = 
-      req.user.userId === req.params.id || // Own documents
-      req.user.role === 'ADMINISTRATOR' || // Admin can view all
-      (req.user.role === 'FOCAL_PERSON' && user.placeOfAssignment === req.user.placeOfAssignment); // Focal can view their assignment
+    const canView =
+      req.user.userId === req.params.id ||
+      req.user.role === 'ADMINISTRATOR' ||
+      (req.user.role === 'FOCAL_PERSON' && user.placeOfAssignment === req.user.placeOfAssignment);
 
     if (!canView) {
-      console.log('Access denied for user:', req.user.userId);
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const document = user.documents.find(doc => doc.filename === req.params.filename);
+    // filename param may be the R2 key or the full URL stored in document.filename
+    const document = user.documents.find(
+      doc => doc.filename === req.params.filename ||
+             doc.key === req.params.filename ||
+             doc.filename?.endsWith(req.params.filename)
+    );
+
     if (!document) {
-      console.log('Document not found in user.documents:', req.params.filename);
-      console.log('Available documents:', user.documents.map(d => d.filename));
-      return res.status(404).json({ message: 'Document not found in database' });
+      return res.status(404).json({ message: 'Document not found' });
     }
 
-    const filePath = path.join(process.cwd(), 'uploads', req.params.filename);
-    
-    console.log('Looking for file at:', filePath);
-    console.log('File exists:', fs.existsSync(filePath));
+    // If filename is already a full URL, redirect directly
+    const fileUrl = document.filename?.startsWith('http')
+      ? document.filename
+      : `${R2_PUBLIC_URL}/${document.key || document.filename}`;
 
-    if (!fs.existsSync(filePath)) {
-      console.log('File not found on filesystem:', filePath);
-      // List files in uploads directory for debugging
-      const uploadFiles = fs.readdirSync(path.join(process.cwd(), 'uploads'));
-      console.log('Files in uploads directory:', uploadFiles);
-      return res.status(404).json({ message: 'File not found on server' });
-    }
-
-    // Get file extension and set proper content type
-    const ext = req.params.filename.split('.').pop().toLowerCase();
-    let contentType = 'application/octet-stream';
-    
-    if (ext === 'pdf') contentType = 'application/pdf';
-    else if (['jpg', 'jpeg'].includes(ext)) contentType = 'image/jpeg';
-    else if (ext === 'png') contentType = 'image/png';
-    else if (ext === 'gif') contentType = 'image/gif';
-    else if (ext === 'doc') contentType = 'application/msword';
-    else if (ext === 'docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `inline; filename="${req.params.filename}"`);
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    
-    console.log('Sending file:', filePath);
-    res.sendFile(filePath);
+    res.redirect(fileUrl);
   } catch (error) {
     console.error('Error serving document:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -465,10 +328,9 @@ router.delete('/:id/documents/:filename', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Check if user has permission to delete documents
-    const canDelete = 
-      req.user.userId === req.params.id || // Own documents
-      req.user.role === 'ADMINISTRATOR'; // Admin can delete
+    const canDelete =
+      req.user.userId === req.params.id ||
+      req.user.role === 'ADMINISTRATOR';
 
     if (!canDelete) {
       return res.status(403).json({ message: 'Access denied' });
@@ -479,14 +341,13 @@ router.delete('/:id/documents/:filename', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'Document not found' });
     }
 
-    const filename = user.documents[docIndex].filename;
+    const doc = user.documents[docIndex];
     user.documents.splice(docIndex, 1);
     await user.save();
 
-    // Delete file from filesystem
-    const filePath = path.join(process.cwd(), 'uploads', filename);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    // Delete from R2
+    if (doc.key) {
+      await deleteFromR2(doc.key).catch(err => console.warn('R2 delete warning:', err.message));
     }
 
     res.json({ message: 'Document deleted successfully' });
