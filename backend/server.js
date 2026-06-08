@@ -30,10 +30,11 @@ app.use((req, res, next) => {
 });
 app.use(cors({
   origin: [
-    process.env.FRONTEND_URL,           // e.g. https://cgen.pages.dev or your GH Pages URL
-    'http://localhost:3001',            // local dev
+    process.env.FRONTEND_URL,
+    'http://localhost:3001',
   ],
   credentials: true,
+  exposedHeaders: ['Content-Disposition', 'Content-Type', 'Content-Length'],
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
