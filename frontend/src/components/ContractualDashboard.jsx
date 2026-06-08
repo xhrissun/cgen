@@ -846,13 +846,13 @@ function ContractualDashboard({ user }) {
                         <td>
                           <div className="flex space-x-3 text-sm">
                             <button
-                              onClick={() => handleViewDocument(doc.key || doc.filename)}
+                              onClick={() => handleViewDocument(doc.url || doc.filename || doc.key)}
                               className="text-blue-600 hover:text-blue-800 font-medium"
                             >
                               View
                             </button>
                             <button
-                              onClick={() => handleDownloadDocument(doc.key || doc.filename)}
+                              onClick={() => handleDownloadDocument(doc.url || doc.filename || doc.key)}
                               className="text-green-600 hover:text-green-800 font-medium"
                             >
                               Download

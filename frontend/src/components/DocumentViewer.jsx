@@ -207,13 +207,13 @@ function DocumentViewer({ userRole }) {
                         </span>
                         <div className="flex space-x-2">
                           <button
-                            onClick={() => handleViewDocument(selectedUser._id, doc.key || doc.filename)}
+                            onClick={() => handleViewDocument(selectedUser._id, doc.url || doc.filename || doc.key)}
                             className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
                           >
                             👁️ View
                           </button>
                           <button
-                            onClick={() => handleDownloadDocument(selectedUser._id, doc.key || doc.filename)}
+                            onClick={() => handleDownloadDocument(selectedUser._id, doc.url || doc.filename || doc.key)}
                             className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
                           >
                             ⬇️ Download
