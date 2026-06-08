@@ -281,7 +281,8 @@ router.post('/:id/documents', verifyToken, documentUpload.single('file'), async 
 
 // Get/Download document — redirect to R2 public URL
 // Get/Download document — redirect to R2 public URL
-router.get('/:id/documents/:filename', verifyToken, async (req, res) => {
+// Use wildcard to capture filenames that contain slashes (R2 keys with subfolders)
+router.get('/:id/documents/*', verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) {
@@ -297,23 +298,47 @@ router.get('/:id/documents/:filename', verifyToken, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // filename param may be the R2 key or the full URL stored in document.filename
-    const document = user.documents.find(
-      doc => doc.filename === req.params.filename ||
-             doc.key === req.params.filename ||
-             doc.filename?.endsWith(req.params.filename)
-    );
+    // Capture the full path after /documents/ — may include subfolder
+    const rawParam = req.params[0]; // e.g. "profile-photos/profile-xxx.jpg" or just "profile-xxx.jpg"
 
+    // Strategy 1: find by exact key match
+    let document = user.documents.find(doc => doc.key === rawParam);
+
+    // Strategy 2: find by filename ending match
     if (!document) {
-      return res.status(404).json({ message: 'Document not found' });
+      document = user.documents.find(doc =>
+        doc.filename === rawParam ||
+        doc.filename?.endsWith(rawParam) ||
+        doc.key?.endsWith(rawParam)
+      );
     }
 
-    // If filename is already a full URL, redirect directly
-    const fileUrl = document.filename?.startsWith('http')
-      ? document.filename
-      : `${R2_PUBLIC_URL}/${document.key || document.filename}`;
+    // Strategy 3: find by base filename only (last path segment)
+    const baseFilename = rawParam.split('/').pop();
+    if (!document) {
+      document = user.documents.find(doc =>
+        doc.filename?.endsWith(baseFilename) ||
+        doc.key?.endsWith(baseFilename)
+      );
+    }
 
-    res.redirect(fileUrl);
+    if (document) {
+      // We found the document record — redirect to its R2 URL
+      const fileUrl = document.url ||
+        (document.filename?.startsWith('http') ? document.filename : null) ||
+        (document.key ? `${R2_PUBLIC_URL}/${document.key}` : null) ||
+        `${R2_PUBLIC_URL}/${rawParam}`;
+      return res.redirect(fileUrl);
+    }
+
+    // No document record found — try constructing R2 URL directly from the param
+    // This handles legacy data where documents array wasn't updated
+    const directUrl = rawParam.startsWith('http')
+      ? rawParam
+      : `${R2_PUBLIC_URL}/${rawParam}`;
+
+    return res.redirect(directUrl);
+
   } catch (error) {
     console.error('Error serving document:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -321,7 +346,7 @@ router.get('/:id/documents/:filename', verifyToken, async (req, res) => {
 });
 
 // Delete document
-router.delete('/:id/documents/:filename', verifyToken, async (req, res) => {
+router.delete('/:id/documents/*', verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) {
@@ -336,13 +361,16 @@ router.delete('/:id/documents/:filename', verifyToken, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const docKey = req.params.filename;
+    const rawParam = req.params[0];
+    const baseFilename = rawParam.split('/').pop();
+
     const docIndex = user.documents.findIndex(
-      doc => doc.filename === docKey ||
-             doc.key === docKey ||
-             doc.filename?.endsWith(docKey) ||
-             doc.key?.endsWith(docKey)
+      doc => doc.key === rawParam ||
+             doc.filename === rawParam ||
+             doc.filename?.endsWith(baseFilename) ||
+             doc.key?.endsWith(baseFilename)
     );
+
     if (docIndex === -1) {
       return res.status(404).json({ message: 'Document not found' });
     }
@@ -351,7 +379,6 @@ router.delete('/:id/documents/:filename', verifyToken, async (req, res) => {
     user.documents.splice(docIndex, 1);
     await user.save();
 
-    // Delete from R2
     if (doc.key) {
       await deleteFromR2(doc.key).catch(err => console.warn('R2 delete warning:', err.message));
     }

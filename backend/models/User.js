@@ -46,7 +46,9 @@ const userSchema = new mongoose.Schema({
   // Uploaded Documents
   documents: [{
     type: { type: String, enum: ['SIGNED_CONTRACT', 'PHOTO', 'PASSPORT_PHOTO', 'EODB_ID', 'OTHERS'] },
-    filename: String,
+    filename: String,   // Full R2 URL (new) or legacy short filename (old data)
+    key: String,        // R2 object key e.g. "profile-photos/profile-xxx.jpg"
+    url: String,        // Full public R2 URL (explicit copy of filename for new uploads)
     uploadDate: { type: Date, default: Date.now },
     description: String,
     contractNumber: String
