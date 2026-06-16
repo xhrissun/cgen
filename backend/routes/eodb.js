@@ -36,16 +36,16 @@ const generateHash = (data) => {
 router.get('/check-existing', verifyToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const user = await User.findById(userId).select('documents');
+
+    // Parallel queries — neither depends on the other
+    const [user, latestContract] = await Promise.all([
+      User.findById(userId).select('documents').lean(),
+      Contract.findOne({ userId }).sort({ contractNumber: -1 }).select('contractNumber').lean()
+    ]);
     
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-
-    // Get latest contract
-    const latestContract = await Contract.findOne({
-      userId: userId
-    }).sort({ contractNumber: -1 });
 
     if (!latestContract) {
       return res.json({ exists: false, contractNumber: null });
@@ -71,16 +71,17 @@ router.get('/check-existing', verifyToken, async (req, res) => {
 router.get('/user-data', verifyToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const user = await User.findById(userId).select('-password');
+
+    // Parallel queries — neither depends on the other
+    const [user, latestContract] = await Promise.all([
+      User.findById(userId).select('-password').lean(),
+      Contract.findOne({ userId }).sort({ contractNumber: -1 }).lean()
+    ]);
     
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Get LATEST contract (highest contract number) for position
-    const latestContract = await Contract.findOne({
-      userId: userId
-    }).sort({ contractNumber: -1 }); // Sort by contract number descending to get latest
 
     // Find PASSPORT photo from documents array (not profile photo)
     const passportPhoto = user.documents.find(

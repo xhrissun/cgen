@@ -63,4 +63,7 @@ const notificationSchema = new mongoose.Schema({
   }
 });
 
+// Performance indexes
+notificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 }); // covers every notification fetch
+
 export default mongoose.model('Notification', notificationSchema);

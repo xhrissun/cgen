@@ -198,4 +198,10 @@ contractSchema.pre('save', async function(next) {
   next();
 });
 
+// Performance indexes
+contractSchema.index({ userId: 1, contractNumber: -1 }); // covers /check-existing sort
+contractSchema.index({ userId: 1, status: 1 });           // covers active contract lookups
+contractSchema.index({ placeOfAssignment: 1, status: 1 });// covers FOCAL_PERSON queries
+contractSchema.index({ createdAt: -1 });                  // covers dashboard sorts
+
 export default mongoose.model('Contract', contractSchema);
