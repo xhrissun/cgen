@@ -87,11 +87,8 @@ router.get('/user-data', verifyToken, async (req, res) => {
       doc => doc.type === 'PASSPORT_PHOTO' && !doc.deleted
     );
 
-    const photoPath = passportPhoto?.filename
-      ? path.join(process.cwd(), 'uploads', passportPhoto.filename)
-      : null;
-
-    const photoExists = photoPath && fs.existsSync(photoPath);
+    // Photos are stored on R2 (remote), not local disk — just check the document record exists
+    const photoExists = !!(passportPhoto?.filename || passportPhoto?.url || passportPhoto?.key);
 
     // Format TIN: Remove all non-digits and take first 9 digits
     const rawTin = user.personalInfo?.tin || '';
