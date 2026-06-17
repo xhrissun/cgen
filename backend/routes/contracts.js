@@ -478,8 +478,9 @@ router.delete('/:id', verifyToken, async (req, res) => {
 router.get('/:id/generate', verifyToken, async (req, res) => {
   try {
     const contract = await Contract.findById(req.params.id)
-      .populate('userId')
-      .populate('clauses.clauseId');
+      .populate('userId', 'personalInfo placeOfAssignment username')
+      .populate('clauses.clauseId')
+      .lean();
    
     if (!contract) {
       return res.status(404).json({ message: 'Contract not found' });
@@ -925,8 +926,8 @@ router.patch('/:id/status', verifyToken, async (req, res) => {
     contract.updatedAt = new Date();
     await contract.save();
 
-    // Log the activity
-    await logActivity({
+    // Fire-and-forget — don't block the response for logging
+    logActivity({
       actionType: 'UPDATE',
       entityType: 'Contract',
       entityId: contract._id,
@@ -935,7 +936,7 @@ router.patch('/:id/status', verifyToken, async (req, res) => {
       changesBefore: { status: oldStatus },
       changesAfter: { status: newStatus },
       req
-    });
+    }).catch(err => console.error('Activity log failed (status change):', err));
 
     console.log(`✓ Contract ${contract.contractNumber} status changed to ${status}`);
     res.json(contract);

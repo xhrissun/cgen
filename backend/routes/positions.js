@@ -370,8 +370,8 @@ router.post('/', verifyToken, async (req, res) => {
     
     await newPosition.save();
 
-    // Log the activity
-    await logActivity({
+    // Fire-and-forget — don't block the response for logging
+    logActivity({
       actionType: 'CREATE',
       entityType: 'Position',
       entityId: newPosition._id,
@@ -384,7 +384,7 @@ router.post('/', verifyToken, async (req, res) => {
         placeOfAssignment: finalPlaceOfAssignment
       },
       req
-    });
+    }).catch(err => console.error('Activity log failed (CREATE position):', err));
     
     // Notify admins if position needs clause assignment
     if (req.user.role === 'FOCAL_PERSON' && finalClauses.length === 0) {
