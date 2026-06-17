@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { SkeletonTable, SectionLoader } from './ui.jsx';
 import api from '../api.js';
 import UserDetailsModal from './UserDetailsModal';
 
@@ -150,6 +151,7 @@ const validateFormats = (personalInfo) => {
 
 function UserManagement() {
   const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -215,6 +217,7 @@ function UserManagement() {
   }, []);
 
   const fetchUsers = async () => {
+    setLoadingUsers(true);
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/users', {
@@ -223,6 +226,8 @@ function UserManagement() {
       setUsers(response.data);
     } catch (error) {
       console.error('Error fetching users:', error);
+    } finally {
+      setLoadingUsers(false);
     }
   };
 
@@ -722,7 +727,9 @@ function UserManagement() {
             </tr>
           </thead>
           <tbody>
-            {filteredUsers.length === 0 ? (
+            {loadingUsers ? (
+              <SkeletonTable rows={8} cols={6} />
+            ) : filteredUsers.length === 0 ? (
               <tr>
                 <td colSpan="6" className="text-center py-8 text-gray-500">
                   No users found matching your filters

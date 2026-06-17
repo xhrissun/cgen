@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { SectionLoader, EmptyState } from './ui.jsx';
 import api from '../api.js';
 
 function ActivityLog() {
@@ -93,14 +94,9 @@ function ActivityLog() {
 
       <div className="card">
         {loading ? (
-          <div className="text-center py-8">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-            <p className="mt-2 text-gray-600">Loading activity logs...</p>
-          </div>
+          <SectionLoader message="Loading activity logs…" />
         ) : logs.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            No activity logs found. Start by creating users, positions, or contracts.
-          </div>
+          <EmptyState icon="📋" title="No activity logs yet" description="Start by creating users, positions, or contracts." />
         ) : (
           <div className="space-y-3 max-h-[600px] overflow-y-auto">
             {logs.map(log => (

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { SkeletonStatCard, SkeletonTable, SectionLoader, PageLoader, ToastProvider, useToast } from './ui.jsx';
 import api from '../api.js';
 import { 
   LayoutDashboard, Users, Briefcase, FileText, FolderOpen,
@@ -17,6 +18,9 @@ import ActivityLog from './ActivityLog';
 function AdminDashboard({ user }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedGroup, setExpandedGroup] = useState('main');
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [loadingSalaryGrades, setLoadingSalaryGrades] = useState(true);
+  const [loadingClauses, setLoadingClauses] = useState(true);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalContracts: 0,
@@ -267,6 +271,7 @@ function AdminDashboard({ user }) {
   };
 
   const fetchStats = async () => {
+    setLoadingStats(true);
     try {
       const token = localStorage.getItem('token');
       const [usersRes, contractsRes] = await Promise.all([
@@ -282,10 +287,13 @@ function AdminDashboard({ user }) {
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
+    } finally {
+      setLoadingStats(false);
     }
   };
 
   const fetchSalaryGrades = async () => {
+    setLoadingSalaryGrades(true);
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/positions/salary-grades/all', {
@@ -302,10 +310,13 @@ function AdminDashboard({ user }) {
       setSalaryGrades(sorted);
     } catch (error) {
       console.error('Error fetching salary grades:', error);
+    } finally {
+      setLoadingSalaryGrades(false);
     }
   };
 
   const fetchClauses = async () => {
+    setLoadingClauses(true);
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/positions/clauses/all', {
@@ -314,6 +325,8 @@ function AdminDashboard({ user }) {
       setClauses(response.data);
     } catch (error) {
       console.error('Error fetching clauses:', error);
+    } finally {
+      setLoadingClauses(false);
     }
   };
 
@@ -759,22 +772,30 @@ function AdminDashboard({ user }) {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Total Users</h3>
-                  <p className="text-4xl font-bold text-blue-600">{stats.totalUsers}</p>
-                </div>
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Total Contracts</h3>
-                  <p className="text-4xl font-bold text-blue-600">{stats.totalContracts}</p>
-                </div>
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Active Contracts</h3>
-                  <p className="text-4xl font-bold text-green-600">{stats.activeContracts}</p>
-                </div>
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Pending Users</h3>
-                  <p className="text-4xl font-bold text-yellow-600">{stats.pendingUsers}</p>
-                </div>
+                {loadingStats ? (
+                  <>
+                    <SkeletonStatCard /><SkeletonStatCard /><SkeletonStatCard /><SkeletonStatCard />
+                  </>
+                ) : (
+                  <>
+                    <div className="stat-card">
+                      <h3 className="stat-label">Total Users</h3>
+                      <p className="stat-value mt-2">{stats.totalUsers}</p>
+                    </div>
+                    <div className="stat-card">
+                      <h3 className="stat-label">Total Contracts</h3>
+                      <p className="stat-value mt-2">{stats.totalContracts}</p>
+                    </div>
+                    <div className="stat-card">
+                      <h3 className="stat-label">Active Contracts</h3>
+                      <p className="stat-value mt-2" style={{color:'var(--clr-success)'}}>{stats.activeContracts}</p>
+                    </div>
+                    <div className="stat-card">
+                      <h3 className="stat-label">Pending Users</h3>
+                      <p className="stat-value mt-2" style={{color:'var(--clr-warning)'}}>{stats.pendingUsers}</p>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1024,7 +1045,9 @@ function AdminDashboard({ user }) {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {salaryGrades
+                      {loadingSalaryGrades ? (
+                        <SkeletonTable rows={5} cols={8} />
+                      ) : salaryGrades
                         .filter((sg) => {
                           if (!searchTerm) return true;
                           const search = searchTerm.toLowerCase();
@@ -1245,7 +1268,9 @@ function AdminDashboard({ user }) {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {clauses
+                      {loadingClauses ? (
+                        <SkeletonTable rows={5} cols={5} />
+                      ) : clauses
                         .filter((clause) => {
                           if (!clauseSearchTerm) return true;
                           const search = clauseSearchTerm.toLowerCase();

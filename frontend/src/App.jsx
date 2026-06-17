@@ -6,6 +6,7 @@ import AdminDashboard from './components/AdminDashboard';
 import ContractualDashboard from './components/ContractualDashboard';
 import FocalPersonDashboard from './components/FocalPersonDashboard';
 import FinanceOfficerDashboard from './components/FinanceOfficerDashboard';
+import { ToastProvider } from './components/ui.jsx';
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -76,6 +77,7 @@ function App() {
   }
 
   return (
+  <ToastProvider>
     <Router>
       <Routes>
         <Route 
@@ -107,6 +109,7 @@ function App() {
         />
       </Routes>
     </Router>
+  </ToastProvider>
   );
 }
 
