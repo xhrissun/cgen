@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { SkeletonTable, SectionLoader, EmptyState, Spinner } from './ui.jsx';
 import api from '../api.js';
 import ContractDetailsModal from './ContractDetailsModal';
 import Select from 'react-select';
@@ -10,6 +11,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   const [holidays, setHolidays] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingContracts, setLoadingContracts] = useState(true);
   const [previewData, setPreviewData] = useState(null);
   const [formData, setFormData] = useState({
     userId: userId || '',
@@ -214,6 +216,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   }, [userRole]);
 
   const fetchContracts = async () => {
+    setLoadingContracts(true);
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/contracts', {
@@ -222,6 +225,8 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
       setContracts(response.data);
     } catch (error) {
       console.error('Error fetching contracts:', error);
+    } finally {
+      setLoadingContracts(false);
     }
   };
 
@@ -1144,10 +1149,10 @@ const handleFileUpload = (contractId, event) => {
               </button>
               <button 
                 type="submit" 
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                className="btn btn-primary"
                 disabled={loading}
               >
-                {loading ? 'Creating...' : 'Create Contract'}
+                {loading ? <><Spinner size="sm" color="white" />Creating…</> : 'Create Contract'}
               </button>
             </div>
           </form>
@@ -1320,7 +1325,9 @@ const handleFileUpload = (contractId, event) => {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {contracts
+              {loadingContracts ? (
+                <SkeletonTable rows={8} cols={8} />
+              ) : contracts
                 .filter(c => {
                   const matchArchived = showArchived || !c.isArchived;
                   const matchName = !filterName || 

@@ -5,6 +5,8 @@ import api from '../api.js';
 function ClauseGroupManagement() {
   const [groups, setGroups] = useState([]);
   const [clauses, setClauses] = useState([]);
+  const [loadingGroups, setLoadingGroups] = useState(true);
+  const [savingForm, setSavingForm] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
   const [formData, setFormData] = useState({
@@ -19,6 +21,7 @@ function ClauseGroupManagement() {
   }, []);
 
   const fetchGroups = async () => {
+    setLoadingGroups(true);
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/positions/clause-groups', {
@@ -27,6 +30,8 @@ function ClauseGroupManagement() {
       setGroups(response.data);
     } catch (error) {
       console.error('Error fetching clause groups:', error);
+    } finally {
+      setLoadingGroups(false);
     }
   };
 
@@ -44,6 +49,7 @@ function ClauseGroupManagement() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSavingForm(true);
     try {
       const token = localStorage.getItem('token');
       const payload = {
@@ -74,6 +80,8 @@ function ClauseGroupManagement() {
       fetchGroups();
     } catch (error) {
       alert('Error saving clause group: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setSavingForm(false);
     }
   };
 
@@ -186,15 +194,19 @@ function ClauseGroupManagement() {
                 {formData.selectedClauses.length} clause(s) selected
               </p>
             </div>
-            <button type="submit" className="btn btn-primary">
-              {editingGroup ? 'Update Group' : 'Create Group'}
+            <button type="submit" className="btn btn-primary" disabled={savingForm}>
+              {savingForm ? <><Spinner size="sm" color="white" />{editingGroup ? 'Updating…' : 'Creating…'}</> : (editingGroup ? 'Update Group' : 'Create Group')}
             </button>
           </form>
         </div>
       )}
 
       <div className="grid gap-4">
-        {groups.map(group => (
+        {loadingGroups ? (
+          <SectionLoader message="Loading clause groups…" />
+        ) : groups.length === 0 ? (
+          <EmptyState icon="📂" title="No clause groups yet" description="Create one to group related clauses together." />
+        ) : groups.map(group => (
           <div key={group._id} className="card">
             <div className="flex justify-between items-start mb-3">
               <div>
@@ -233,12 +245,6 @@ function ClauseGroupManagement() {
             </div>
           </div>
         ))}
-        
-        {groups.length === 0 && (
-          <div className="card text-center text-gray-500">
-            <p>No clause groups created yet. Create one to group related clauses together.</p>
-          </div>
-        )}
       </div>
     </div>
   );

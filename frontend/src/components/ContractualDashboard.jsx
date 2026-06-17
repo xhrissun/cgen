@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { SectionLoader, EmptyState, Spinner } from './ui.jsx';
 import api, { openDocument, getDocumentUrl, API_BASE } from '../api.js';
 import ContractGenerator from './ContractGenerator';
 import DocumentViewerModal from './DocumentViewerModal';
@@ -147,6 +148,7 @@ function ContractualDashboard({ user }) {
   const [originalPersonalInfo, setOriginalPersonalInfo] = useState(user.personalInfo || {});
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [documents, setDocuments] = useState([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadForm, setUploadForm] = useState({
     type: 'SIGNED_CONTRACT',
@@ -236,7 +238,7 @@ function ContractualDashboard({ user }) {
   const fetchDocuments = async () => {
     const userId = user?.id || user?._id;
     if (!userId) return;
-
+    setLoadingDocuments(true);
     try {
       const token = localStorage.getItem('token');
       if (!token) throw new Error("No token available");
@@ -254,6 +256,8 @@ function ContractualDashboard({ user }) {
       }
     } catch (error) {
       console.error("Error fetching documents:", error);
+    } finally {
+      setLoadingDocuments(false);
     }
   };
 
@@ -801,20 +805,17 @@ function ContractualDashboard({ user }) {
                 className="btn btn-primary"
                 disabled={uploading}
               >
-                {uploading ? 'Uploading...' : 'Upload Document'}
+                {uploading ? <><Spinner size="sm" color="white" />Uploading…</> : 'Upload Document'}
               </button>
             </form>
           </div>
 
           <div className="card">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">My Documents</h3>
-            {documents.length === 0 ? (
-              <div className="text-center py-12">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p className="mt-2 text-sm text-gray-500">No documents uploaded yet.</p>
-              </div>
+            {loadingDocuments ? (
+              <SectionLoader message="Loading documents…" />
+            ) : documents.length === 0 ? (
+              <EmptyState icon="📄" title="No documents yet" description="Upload your first document above." />
             ) : (
               <div className="overflow-x-auto">
                 <table className="table">

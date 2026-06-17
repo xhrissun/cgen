@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
+import { SkeletonTable, Spinner } from './ui.jsx';
 import api from '../api.js';
 
 function FinanceOfficerDashboard({ user }) {
   const [activeTab, setActiveTab] = useState('salaryGrades');
   const [salaryGrades, setSalaryGrades] = useState([]);
   const [positions, setPositions] = useState([]);
+  const [loadingSalaryGrades, setLoadingSalaryGrades] = useState(true);
+  const [loadingPositions, setLoadingPositions] = useState(true);
+  const [savingForm, setSavingForm] = useState(false);
   const [editingSalaryGrade, setEditingSalaryGrade] = useState(null);
   const [salaryGradeForm, setSalaryGradeForm] = useState({
     grade: '',
