@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const clauseSchema = new mongoose.Schema({
   clauseNumber: { type: Number, required: true },
+  sortOrder: { type: Number, default: null }, // null = fall back to clauseNumber for legacy data
   title: { type: String },
   content: { type: String, required: true },
   isBeforeWitnesseth: { type: Boolean, default: false },
@@ -27,5 +28,8 @@ const clauseSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
+
+clauseSchema.index({ sortOrder: 1 });
+clauseSchema.index({ clauseNumber: 1 });
 
 export default mongoose.model('Clause', clauseSchema);

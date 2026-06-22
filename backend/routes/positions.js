@@ -107,7 +107,13 @@ router.delete('/salary-grades/:id', verifyToken, async (req, res) => {
 // Clauses Routes
 router.get('/clauses/all', verifyToken, async (req, res) => {
   try {
-    const clauses = await Clause.find().sort({ clauseNumber: 1 });
+    const clauses = await Clause.find().lean();
+    // Sort by sortOrder if set, fall back to clauseNumber for legacy records
+    clauses.sort((a, b) => {
+      const aOrder = a.sortOrder ?? a.clauseNumber;
+      const bOrder = b.sortOrder ?? b.clauseNumber;
+      return aOrder - bOrder;
+    });
     res.json(clauses);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -116,6 +122,16 @@ router.get('/clauses/all', verifyToken, async (req, res) => {
 
 router.post('/clauses', verifyToken, async (req, res) => {
   try {
+    // Auto-assign sortOrder if not provided — append after current max, in steps of 10
+    if (req.body.sortOrder === undefined || req.body.sortOrder === null) {
+      const last = await Clause.findOne()
+        .sort({ sortOrder: -1 })
+        .select('sortOrder clauseNumber')
+        .lean();
+      // Use the higher of sortOrder or clauseNumber to avoid collisions with legacy data
+      const lastOrder = last ? Math.max(last.sortOrder ?? 0, last.clauseNumber ?? 0) : 0;
+      req.body.sortOrder = lastOrder + 10;
+    }
     const newClause = new Clause(req.body);
     await newClause.save();
     res.status(201).json(newClause);
@@ -144,6 +160,57 @@ router.delete('/clauses/:id', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'Clause not found' });
     }
     res.json({ message: 'Clause deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Bulk reorder clauses — accepts [{ _id, sortOrder }, ...]
+// Called after drag-and-drop reorder in the admin UI
+router.put('/clauses/reorder', verifyToken, async (req, res) => {
+  try {
+    const { orderedIds } = req.body; // array of clause _ids in new order
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      return res.status(400).json({ message: 'orderedIds array is required' });
+    }
+
+    // Assign sortOrder in steps of 10 to preserve insertion room
+    const bulkOps = orderedIds.map((id, index) => ({
+      updateOne: {
+        filter: { _id: id },
+        update: { $set: { sortOrder: (index + 1) * 10, updatedAt: new Date() } }
+      }
+    }));
+
+    await Clause.bulkWrite(bulkOps);
+    res.json({ message: 'Clause order saved', count: orderedIds.length });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Reorder clauses within a clause group — accepts { clauseIds: [...ordered _ids] }
+router.put('/clause-groups/:id/reorder', verifyToken, async (req, res) => {
+  try {
+    const { clauseIds } = req.body;
+    if (!Array.isArray(clauseIds)) {
+      return res.status(400).json({ message: 'clauseIds array is required' });
+    }
+
+    const group = await ClauseGroup.findByIdAndUpdate(
+      req.params.id,
+      { clauses: clauseIds, updatedAt: new Date() },
+      { new: true }
+    ).populate({
+      path: 'clauses',
+      select: 'clauseNumber sortOrder title content clauseType'
+    });
+
+    if (!group) {
+      return res.status(404).json({ message: 'Clause group not found' });
+    }
+
+    res.json(group);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -370,8 +437,8 @@ router.post('/', verifyToken, async (req, res) => {
     
     await newPosition.save();
 
-    // Fire-and-forget — don't block the response for logging
-    logActivity({
+    // Log the activity
+    await logActivity({
       actionType: 'CREATE',
       entityType: 'Position',
       entityId: newPosition._id,
@@ -384,7 +451,7 @@ router.post('/', verifyToken, async (req, res) => {
         placeOfAssignment: finalPlaceOfAssignment
       },
       req
-    }).catch(err => console.error('Activity log failed (CREATE position):', err));
+    });
     
     // Notify admins if position needs clause assignment
     if (req.user.role === 'FOCAL_PERSON' && finalClauses.length === 0) {

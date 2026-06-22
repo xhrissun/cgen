@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { SkeletonStatCard, SkeletonTable, SectionLoader, PageLoader, ToastProvider, useToast } from './ui.jsx';
 import api from '../api.js';
 import { 
   LayoutDashboard, Users, Briefcase, FileText, FolderOpen,
@@ -18,9 +17,6 @@ import ActivityLog from './ActivityLog';
 function AdminDashboard({ user }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedGroup, setExpandedGroup] = useState('main');
-  const [loadingStats, setLoadingStats] = useState(true);
-  const [loadingSalaryGrades, setLoadingSalaryGrades] = useState(true);
-  const [loadingClauses, setLoadingClauses] = useState(true);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalContracts: 0,
@@ -29,6 +25,8 @@ function AdminDashboard({ user }) {
   });
   const [salaryGrades, setSalaryGrades] = useState([]);
   const [clauses, setClauses] = useState([]);
+  const [clauseDragIdx, setClauseDragIdx] = useState(null);
+  const [clauseReordering, setClauseReordering] = useState(false);
   const [showSalaryGradeForm, setShowSalaryGradeForm] = useState(false);
   const [showClauseForm, setShowClauseForm] = useState(false);
   const [editingSalaryGrade, setEditingSalaryGrade] = useState(null);
@@ -49,6 +47,7 @@ function AdminDashboard({ user }) {
   });
   const [newClause, setNewClause] = useState({
     clauseNumber: '',
+    sortOrder: '',
     title: '',
     content: '',
     isBeforeWitnesseth: false,
@@ -271,7 +270,6 @@ function AdminDashboard({ user }) {
   };
 
   const fetchStats = async () => {
-    setLoadingStats(true);
     try {
       const token = localStorage.getItem('token');
       const [usersRes, contractsRes] = await Promise.all([
@@ -287,13 +285,10 @@ function AdminDashboard({ user }) {
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
-    } finally {
-      setLoadingStats(false);
     }
   };
 
   const fetchSalaryGrades = async () => {
-    setLoadingSalaryGrades(true);
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/positions/salary-grades/all', {
@@ -310,13 +305,10 @@ function AdminDashboard({ user }) {
       setSalaryGrades(sorted);
     } catch (error) {
       console.error('Error fetching salary grades:', error);
-    } finally {
-      setLoadingSalaryGrades(false);
     }
   };
 
   const fetchClauses = async () => {
-    setLoadingClauses(true);
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/positions/clauses/all', {
@@ -325,10 +317,37 @@ function AdminDashboard({ user }) {
       setClauses(response.data);
     } catch (error) {
       console.error('Error fetching clauses:', error);
-    } finally {
-      setLoadingClauses(false);
     }
   };
+
+  // ── Clause drag-to-reorder ─────────────────────────────────────────────────
+  const handleClauseDragStart = (index) => setClauseDragIdx(index);
+  const handleClauseDragOver = (e, index) => {
+    e.preventDefault();
+    if (clauseDragIdx === null || clauseDragIdx === index) return;
+    const reordered = [...clauses];
+    const [moved] = reordered.splice(clauseDragIdx, 1);
+    reordered.splice(index, 0, moved);
+    setClauses(reordered);
+    setClauseDragIdx(index);
+  };
+  const handleClauseDrop = async () => {
+    setClauseDragIdx(null);
+    setClauseReordering(true);
+    try {
+      const token = localStorage.getItem('token');
+      await api.put('/api/positions/clauses/reorder',
+        { orderedIds: clauses.map(c => c._id) },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (error) {
+      console.error('Error saving clause order:', error);
+      fetchClauses(); // revert on failure
+    } finally {
+      setClauseReordering(false);
+    }
+  };
+  // ──────────────────────────────────────────────────────────────────────────
 
   const fetchClauseGroups = async () => {
     try {
@@ -555,6 +574,7 @@ function AdminDashboard({ user }) {
       setEditingClause(null);
       setNewClause({
         clauseNumber: '',
+        sortOrder: '',
         title: '',
         content: '',
         isBeforeWitnesseth: false,
@@ -577,7 +597,8 @@ function AdminDashboard({ user }) {
       isBeforeWitnesseth: clause.isBeforeWitnesseth || false,
       isFixed: clause.isFixed || false,
       clauseType: clause.clauseType || 'NORMAL',
-      groups: clause.groups || []
+      groups: clause.groups || [],
+      sortOrder: clause.sortOrder !== null && clause.sortOrder !== undefined ? clause.sortOrder.toString() : ''
     });
     setShowClauseForm(true);
 
@@ -772,30 +793,22 @@ function AdminDashboard({ user }) {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {loadingStats ? (
-                  <>
-                    <SkeletonStatCard /><SkeletonStatCard /><SkeletonStatCard /><SkeletonStatCard />
-                  </>
-                ) : (
-                  <>
-                    <div className="stat-card">
-                      <h3 className="stat-label">Total Users</h3>
-                      <p className="stat-value mt-2">{stats.totalUsers}</p>
-                    </div>
-                    <div className="stat-card">
-                      <h3 className="stat-label">Total Contracts</h3>
-                      <p className="stat-value mt-2">{stats.totalContracts}</p>
-                    </div>
-                    <div className="stat-card">
-                      <h3 className="stat-label">Active Contracts</h3>
-                      <p className="stat-value mt-2" style={{color:'var(--clr-success)'}}>{stats.activeContracts}</p>
-                    </div>
-                    <div className="stat-card">
-                      <h3 className="stat-label">Pending Users</h3>
-                      <p className="stat-value mt-2" style={{color:'var(--clr-warning)'}}>{stats.pendingUsers}</p>
-                    </div>
-                  </>
-                )}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Total Users</h3>
+                  <p className="text-4xl font-bold text-blue-600">{stats.totalUsers}</p>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Total Contracts</h3>
+                  <p className="text-4xl font-bold text-blue-600">{stats.totalContracts}</p>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Active Contracts</h3>
+                  <p className="text-4xl font-bold text-green-600">{stats.activeContracts}</p>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Pending Users</h3>
+                  <p className="text-4xl font-bold text-yellow-600">{stats.pendingUsers}</p>
+                </div>
               </div>
             </div>
           )}
@@ -1045,9 +1058,7 @@ function AdminDashboard({ user }) {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {loadingSalaryGrades ? (
-                        <SkeletonTable rows={5} cols={8} />
-                      ) : salaryGrades
+                      {salaryGrades
                         .filter((sg) => {
                           if (!searchTerm) return true;
                           const search = searchTerm.toLowerCase();
@@ -1166,9 +1177,9 @@ function AdminDashboard({ user }) {
                   </h3>
 
                   <form onSubmit={handleCreateClause} className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                       <div>
-                        <label className="block text-sm font-medium mb-1">Clause Number</label>
+                        <label className="block text-sm font-medium mb-1">Clause Number <span className="text-gray-400 font-normal">(label)</span></label>
                         <input
                           type="number"
                           value={newClause.clauseNumber}
@@ -1177,6 +1188,21 @@ function AdminDashboard({ user }) {
                           required
                           disabled={editingClause !== null}
                         />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-1">
+                          Sort Order
+                          <span className="ml-1 text-xs text-gray-400 font-normal">— controls render sequence</span>
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="e.g. 25 (between 20 and 30)"
+                          value={newClause.sortOrder}
+                          onChange={(e) => setNewClause({ ...newClause, sortOrder: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">Leave blank to append at end. Use steps of 10 (10, 20, 30…) for future flexibility.</p>
                       </div>
 
                       <div>
@@ -1255,22 +1281,33 @@ function AdminDashboard({ user }) {
 
               {/* Table */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                {clauseReordering && (
+                  <div className="flex items-center gap-2 px-5 py-2 bg-amber-50 border-b border-amber-200 text-amber-700 text-xs font-medium">
+                    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>
+                    Saving order…
+                  </div>
+                )}
+                {!clauseReordering && clauses.length > 0 && (
+                  <div className="flex items-center gap-2 px-5 py-2 bg-blue-50 border-b border-blue-100 text-blue-600 text-xs font-medium">
+                    ☰ Drag rows to reorder — saved automatically
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Number</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Content Preview</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Flags</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        <th className="px-3 py-4 w-8"></th>
+                        <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clause #</th>
+                        <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sort Order</th>
+                        <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                        <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                        <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Content Preview</th>
+                        <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Flags</th>
+                        <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {loadingClauses ? (
-                        <SkeletonTable rows={5} cols={5} />
-                      ) : clauses
+                      {clauses
                         .filter((clause) => {
                           if (!clauseSearchTerm) return true;
                           const search = clauseSearchTerm.toLowerCase();
@@ -1281,19 +1318,41 @@ function AdminDashboard({ user }) {
                             clause.clauseType.toLowerCase().includes(search)
                           );
                         })
-                        .map((clause) => (
-                          <tr key={clause._id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        .map((clause, index) => (
+                          <tr
+                            key={clause._id}
+                            draggable={!clauseSearchTerm} // disable drag while searching
+                            onDragStart={() => handleClauseDragStart(index)}
+                            onDragOver={(e) => handleClauseDragOver(e, index)}
+                            onDrop={handleClauseDrop}
+                            onDragEnd={handleClauseDrop}
+                            className={`hover:bg-gray-50 transition-colors ${clauseDragIdx === index ? 'opacity-50 bg-blue-50' : ''} ${!clauseSearchTerm ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                          >
+                            <td className="px-3 py-4 text-gray-300 select-none">
+                              {!clauseSearchTerm && (
+                                <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+                                  <circle cx="5" cy="4" r="1.2"/><circle cx="11" cy="4" r="1.2"/>
+                                  <circle cx="5" cy="8" r="1.2"/><circle cx="11" cy="8" r="1.2"/>
+                                  <circle cx="5" cy="12" r="1.2"/><circle cx="11" cy="12" r="1.2"/>
+                                </svg>
+                              )}
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                               {clause.clauseNumber}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">{getClauseTypeBadge(clause.clauseType)}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                {clause.sortOrder ?? <span className="italic text-gray-400">= {clause.clauseNumber}</span>}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap">{getClauseTypeBadge(clause.clauseType)}</td>
+                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
                               {clause.title || '-'}
                             </td>
-                            <td className="px-6 py-4 max-w-md">
+                            <td className="px-4 py-4 max-w-md">
                               <div className="text-sm text-gray-600 line-clamp-2">{clause.content}</div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-4 py-4 whitespace-nowrap">
                               <div className="flex flex-wrap gap-2">
                                 {clause.isBeforeWitnesseth && (
                                   <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">

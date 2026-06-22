@@ -163,22 +163,21 @@ router.get('/', verifyToken, async (req, res) => {
     if (req.user.role === 'CONTRACTUAL') {
       query.userId = req.user.userId;
     } else if (req.user.role === 'FOCAL_PERSON') {
-      // Fetch current user's placeOfAssignment only (lean + select for speed)
-      const currentUser = await User.findById(req.user.userId).select('placeOfAssignment').lean();
+      // Get current user's place of assignment
+      const currentUser = await User.findById(req.user.userId);
       
-      // Find all users with same place of assignment (lean — we only need _id)
+      // Find all users (both CONTRACTUAL and FOCAL_PERSON) with same place of assignment
       const users = await User.find({ 
         placeOfAssignment: currentUser.placeOfAssignment,
-        role: { $in: ['CONTRACTUAL', 'FOCAL_PERSON'] }
-      }).select('_id').lean();
+        role: { $in: ['CONTRACTUAL', 'FOCAL_PERSON'] }  // Add this line
+      });
       query.userId = { $in: users.map(u => u._id) };
     }
     
     const contracts = await Contract.find(query)
       .populate('userId', 'username personalInfo placeOfAssignment')
       .populate('clauses.clauseId')
-      .sort({ createdAt: -1 })
-      .lean();
+      .sort({ createdAt: -1 });
     
     res.json(contracts);
   } catch (error) {
@@ -191,8 +190,7 @@ router.get('/:id', verifyToken, async (req, res) => {
   try {
     const contract = await Contract.findById(req.params.id)
       .populate('userId')
-      .populate('clauses.clauseId')
-      .lean();
+      .populate('clauses.clauseId');
     
     if (!contract) {
       return res.status(404).json({ message: 'Contract not found' });
@@ -397,8 +395,8 @@ router.post('/', verifyToken, async (req, res) => {
     // Get the user info for notifications
     // const user = await User.findById(userId);
 
-    // Fire-and-forget — don't block the response for logging
-    logActivity({
+    // Log the activity
+    await logActivity({
       actionType: 'CREATE',
       entityType: 'Contract',
       entityId: newContract._id,
@@ -413,7 +411,7 @@ router.post('/', verifyToken, async (req, res) => {
         status: newContract.status
       },
       req
-    }).catch(err => console.error('Activity log failed (CREATE contract):', err));
+    });
 
     // Update user contract history
     await User.findByIdAndUpdate(userId, {
@@ -479,8 +477,10 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
   try {
     const contract = await Contract.findById(req.params.id)
       .populate('userId', 'personalInfo placeOfAssignment username')
-      .populate('clauses.clauseId')
-      .lean();
+      .populate({
+        path: 'clauses.clauseId',
+        select: 'clauseNumber sortOrder title content clauseType isBeforeWitnesseth isFixed variables'
+      });
    
     if (!contract) {
       return res.status(404).json({ message: 'Contract not found' });
@@ -585,10 +585,14 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
       hour12: true
     }).toUpperCase();
     
-    // Sort clauses
+    // Sort clauses — use sortOrder if set, fall back to clauseNumber for legacy data
     const sortedClauses = contract.clauses
       .filter(clause => clause.clauseId)
-      .sort((a, b) => a.clauseId.clauseNumber - b.clauseId.clauseNumber);
+      .sort((a, b) => {
+        const aOrder = a.clauseId.sortOrder ?? a.clauseId.clauseNumber;
+        const bOrder = b.clauseId.sortOrder ?? b.clauseId.clauseNumber;
+        return aOrder - bOrder;
+      });
 
     console.log(` Sorted clauses: ${sortedClauses.length}`);
 
@@ -926,8 +930,8 @@ router.patch('/:id/status', verifyToken, async (req, res) => {
     contract.updatedAt = new Date();
     await contract.save();
 
-    // Fire-and-forget — don't block the response for logging
-    logActivity({
+    // Log the activity
+    await logActivity({
       actionType: 'UPDATE',
       entityType: 'Contract',
       entityId: contract._id,
@@ -936,7 +940,7 @@ router.patch('/:id/status', verifyToken, async (req, res) => {
       changesBefore: { status: oldStatus },
       changesAfter: { status: newStatus },
       req
-    }).catch(err => console.error('Activity log failed (status change):', err));
+    });
 
     console.log(`✓ Contract ${contract.contractNumber} status changed to ${status}`);
     res.json(contract);
