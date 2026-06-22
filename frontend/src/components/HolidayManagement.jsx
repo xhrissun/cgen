@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import api from '../api.js';
+import { SkeletonTable, EmptyState, Spinner } from './ui.jsx';
 
 function HolidayManagement() {
   const [holidays, setHolidays] = useState([]);
+  const [loadingHolidays, setLoadingHolidays] = useState(true);
+  const [savingForm, setSavingForm] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingHoliday, setEditingHoliday] = useState(null);
   const [formData, setFormData] = useState({
@@ -18,6 +21,7 @@ function HolidayManagement() {
   }, []);
 
   const fetchHolidays = async () => {
+    setLoadingHolidays(true);
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/holidays', {
@@ -26,11 +30,14 @@ function HolidayManagement() {
       setHolidays(response.data);
     } catch (error) {
       console.error('Error fetching holidays:', error);
+    } finally {
+      setLoadingHolidays(false);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSavingForm(true);
     try {
       const token = localStorage.getItem('token');
       if (editingHoliday) {
@@ -56,6 +63,8 @@ function HolidayManagement() {
       fetchHolidays();
     } catch (error) {
       alert('Error saving holiday: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setSavingForm(false);
     }
   };
 
@@ -177,8 +186,8 @@ function HolidayManagement() {
               />
               <label className="text-sm">Recurring Annually</label>
             </div>
-            <button type="submit" className="btn btn-primary">
-              {editingHoliday ? 'Update Holiday' : 'Create Holiday'}
+            <button type="submit" className="btn btn-primary" disabled={savingForm}>
+              {savingForm ? <><Spinner size="sm" color="white" />{editingHoliday ? 'Updating…' : 'Creating…'}</> : (editingHoliday ? 'Update Holiday' : 'Create Holiday')}
             </button>
           </form>
         </div>
@@ -197,7 +206,11 @@ function HolidayManagement() {
             </tr>
           </thead>
           <tbody>
-            {holidays.map(holiday => (
+            {loadingHolidays ? (
+              <SkeletonTable rows={6} cols={6} />
+            ) : holidays.length === 0 ? (
+              <tr><td colSpan="6"><EmptyState icon="📅" title="No holidays yet" description="Add holidays to factor them into contract calculations." /></td></tr>
+            ) : holidays.map(holiday => (
               <tr key={holiday._id}>
                 <td>{holiday.name}</td>
                 <td>{new Date(holiday.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</td>

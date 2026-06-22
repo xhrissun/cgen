@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import api from '../api.js';
+import { SkeletonTable, EmptyState, Spinner } from './ui.jsx';
 
 function SignatoryManagement() {
   const [signatories, setSignatories] = useState([]);
+  const [loadingSignatories, setLoadingSignatories] = useState(true);
+  const [savingForm, setSavingForm] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingSignatory, setEditingSignatory] = useState(null);
   const [formData, setFormData] = useState({
@@ -28,6 +31,7 @@ function SignatoryManagement() {
   }, []);
 
   const fetchSignatories = async () => {
+    setLoadingSignatories(true);
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/signatories', {
@@ -36,11 +40,14 @@ function SignatoryManagement() {
       setSignatories(response.data);
     } catch (error) {
       console.error('Error fetching signatories:', error);
+    } finally {
+      setLoadingSignatories(false);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSavingForm(true);
     try {
       const token = localStorage.getItem('token');
       if (editingSignatory) {
@@ -67,6 +74,8 @@ function SignatoryManagement() {
       fetchSignatories();
     } catch (error) {
       alert('Error saving signatory: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setSavingForm(false);
     }
   };
 
@@ -207,15 +216,19 @@ function SignatoryManagement() {
                 <span className="text-sm">Set as Default for this Role</span>
               </label>
             </div>
-            <button type="submit" className="btn btn-primary">
-              {editingSignatory ? 'Update Signatory' : 'Create Signatory'}
+            <button type="submit" className="btn btn-primary" disabled={savingForm}>
+              {savingForm ? <><Spinner size="sm" color="white" />{editingSignatory ? 'Updating…' : 'Creating…'}</> : (editingSignatory ? 'Update Signatory' : 'Create Signatory')}
             </button>
           </form>
         </div>
       )}
 
       <div className="space-y-4">
-        {roleOptions.map(roleOption => {
+        {loadingSignatories ? (
+          <div className="card"><SkeletonTable rows={5} cols={6} /></div>
+        ) : signatories.length === 0 ? (
+          <EmptyState icon="✍️" title="No signatories yet" description="Add signatories to use in contract approvals." />
+        ) : roleOptions.map(roleOption => {
           const rolesigs = groupedSignatories[roleOption.value] || [];
           if (rolesigs.length === 0) return null;
           

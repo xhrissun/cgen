@@ -37,6 +37,7 @@ function FinanceOfficerDashboard({ user }) {
   }, []);
 
   const fetchSalaryGrades = async () => {
+    setLoadingSalaryGrades(true);
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/positions/salary-grades/all', {
@@ -45,10 +46,13 @@ function FinanceOfficerDashboard({ user }) {
       setSalaryGrades(response.data);
     } catch (error) {
       console.error('Error fetching salary grades:', error);
+    } finally {
+      setLoadingSalaryGrades(false);
     }
   };
 
   const fetchPositions = async () => {
+    setLoadingPositions(true);
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/positions', {
@@ -57,6 +61,8 @@ function FinanceOfficerDashboard({ user }) {
       setPositions(response.data);
     } catch (error) {
       console.error('Error fetching positions:', error);
+    } finally {
+      setLoadingPositions(false);
     }
   };
 
@@ -130,6 +136,7 @@ function FinanceOfficerDashboard({ user }) {
 
   const handleSalaryGradeSubmit = async (e) => {
     e.preventDefault();
+    setSavingForm(true);
     try {
       const token = localStorage.getItem('token');
       
@@ -179,6 +186,8 @@ function FinanceOfficerDashboard({ user }) {
       fetchSalaryGrades();
     } catch (error) {
       alert('Error: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setSavingForm(false);
     }
   };
 
@@ -393,8 +402,8 @@ function FinanceOfficerDashboard({ user }) {
               )}
 
               <div className="flex space-x-3">
-                <button type="submit" className="btn btn-primary">
-                  {editingSalaryGrade ? 'Update' : 'Create'} Salary Grade
+                <button type="submit" className="btn btn-primary" disabled={savingForm}>
+                  {savingForm ? <><Spinner size="sm" color="white" />{editingSalaryGrade ? 'Updating…' : 'Creating…'}</> : <>{editingSalaryGrade ? 'Update' : 'Create'} Salary Grade</>}
                 </button>
                 {editingSalaryGrade && (
                   <button
@@ -444,7 +453,9 @@ function FinanceOfficerDashboard({ user }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {salaryGrades.map(sg => {
+                  {loadingSalaryGrades ? (
+                    <SkeletonTable rows={6} cols={8} />
+                  ) : salaryGrades.map(sg => {
                     const basicSalary = sg.basicSalary || 0;
                     const grossPremium = sg.grossPremium || 0;
                     const deductions = sg.deductions || { sss: 0, pagibig: 0, philhealth: 0, drugTest: 0 };
@@ -509,7 +520,9 @@ function FinanceOfficerDashboard({ user }) {
                 </tr>
               </thead>
               <tbody>
-                {positions.map(position => {
+                {loadingPositions ? (
+                  <SkeletonTable rows={6} cols={5} />
+                ) : positions.map(position => {
                   const salaryGrade = salaryGrades.find(sg => sg.grade == position.salaryGrade);
                   return (
                     <tr key={position._id}>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../api.js';
 import PositionDetailsModal from './PositionDetailsModal';
+import { SkeletonTable, EmptyState, Spinner } from './ui.jsx';
 
 // Place of Assignment options
 const PLACE_OF_ASSIGNMENT_OPTIONS = [
@@ -30,6 +31,8 @@ function PositionManagement() {
   const [salaryGrades, setSalaryGrades] = useState([]);
   const [clauses, setClauses] = useState([]);
   const [clauseGroups, setClauseGroups] = useState([]);
+  const [loadingPositions, setLoadingPositions] = useState(true);
+  const [savingForm, setSavingForm] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingPosition, setEditingPosition] = useState(null);
   const [selectedPosition, setSelectedPosition] = useState(null);
@@ -117,6 +120,7 @@ function PositionManagement() {
 
 
   const fetchPositions = async () => {
+    setLoadingPositions(true);
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/positions', {
@@ -126,6 +130,8 @@ function PositionManagement() {
       setFilteredPositions(response.data);
     } catch (error) {
       console.error('Error fetching positions:', error);
+    } finally {
+      setLoadingPositions(false);
     }
   };
 
@@ -167,6 +173,7 @@ function PositionManagement() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSavingForm(true);
     try {
       const token = localStorage.getItem('token');
       
@@ -188,6 +195,8 @@ function PositionManagement() {
       fetchPositions();
     } catch (error) {
       alert('Error: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setSavingForm(false);
     }
   };
 
@@ -646,8 +655,8 @@ function PositionManagement() {
               >
                 Cancel
               </button>
-              <button type="submit" className="btn btn-primary">
-                {editingPosition ? 'Update Position' : 'Create Position'}
+              <button type="submit" className="btn btn-primary" disabled={savingForm}>
+                {savingForm ? <><Spinner size="sm" color="white" />{editingPosition ? 'Updating…' : 'Creating…'}</> : (editingPosition ? 'Update Position' : 'Create Position')}
               </button>
             </div>
           </form>
@@ -668,7 +677,11 @@ function PositionManagement() {
             </tr>
           </thead>
           <tbody>
-            {filteredPositions.map(position => {
+            {loadingPositions ? (
+              <SkeletonTable rows={7} cols={7} />
+            ) : filteredPositions.length === 0 ? (
+              <tr><td colSpan="7"><EmptyState icon="📋" title="No positions found" description="Create a position or adjust your filters." /></td></tr>
+            ) : filteredPositions.map(position => {
               const needsAttention = !position.assignedClauses || position.assignedClauses.length === 0;
               
               return (
