@@ -427,23 +427,27 @@ router.get('/clause-groups/:id/template', verifyToken, async (req, res) => {
     };
 
     // ── Placeholder values used instead of real data ──────────────────────────
+    // [ and ] are special in LaTeX (optional args) — use \lbrack / \rbrack
     // These mirror every .replace() call in contracts.js STEP 3
+    const lb = '\\lbrack{}';
+    const rb = '\\rbrack{}';
+    const ph = (label) => `\\textbf{${lb}${label}${rb}}`;
     const PH = {
-      position:                          '\\textbf{[POSITION]}',
-      placeOfAssignment:                 '\\textbf{[PLACE OF ASSIGNMENT]}',
-      startDate:                         '\\textbf{[START DATE]}',
-      endDate:                           '\\textbf{[END DATE]}',
-      basicSalary:                       '\\textbf{[BASIC SALARY]}',
-      basicSalaryInWords:                '\\textbf{[BASIC SALARY IN WORDS]}',
-      monthlySalaryAsPerContract:        '\\textbf{[MONTHLY SALARY AS PER CONTRACT]}',
-      monthlySalaryAsPerContractInWords: '\\textbf{[MONTHLY SALARY IN WORDS]}',
-      dailySalaryAsPerContract:          '\\textbf{[DAILY SALARY AS PER CONTRACT]}',
-      dailySalaryAsPerContractInWords:   '\\textbf{[DAILY SALARY IN WORDS]}',
-      monthlyPremium:                    '\\textbf{[MONTHLY PREMIUM]}',
-      monthlyPremiumInWords:             '\\textbf{[MONTHLY PREMIUM IN WORDS]}',
-      finalPremium:                      '\\textbf{[FINAL PREMIUM]}',
-      finalPremiumInWords:               '\\textbf{[FINAL PREMIUM IN WORDS]}',
-      bonusType:                         '\\textbf{[BONUS TYPE]}',
+      position:                          ph('POSITION'),
+      placeOfAssignment:                 ph('PLACE OF ASSIGNMENT'),
+      startDate:                         ph('START DATE'),
+      endDate:                           ph('END DATE'),
+      basicSalary:                       ph('BASIC SALARY'),
+      basicSalaryInWords:                ph('BASIC SALARY IN WORDS'),
+      monthlySalaryAsPerContract:        ph('MONTHLY SALARY AS PER CONTRACT'),
+      monthlySalaryAsPerContractInWords: ph('MONTHLY SALARY IN WORDS'),
+      dailySalaryAsPerContract:          ph('DAILY SALARY AS PER CONTRACT'),
+      dailySalaryAsPerContractInWords:   ph('DAILY SALARY IN WORDS'),
+      monthlyPremium:                    ph('MONTHLY PREMIUM'),
+      monthlyPremiumInWords:             ph('MONTHLY PREMIUM IN WORDS'),
+      finalPremium:                      ph('FINAL PREMIUM'),
+      finalPremiumInWords:               ph('FINAL PREMIUM IN WORDS'),
+      bonusType:                         ph('BONUS TYPE'),
     };
 
     // ── Build clausesContent exactly as contracts.js does ────────────────────
@@ -457,10 +461,10 @@ router.get('/clause-groups/:id/template', verifyToken, async (req, res) => {
       if (rawContent.includes('{dutiesAndResponsibilities}')) {
         const dutiesPlaceholder =
           '\n\\begin{enumerate}[label=\\alph*),leftmargin=0.5in,itemsep=0pt,parsep=0pt,topsep=0pt]\n' +
-          '\\item [DUTY A];\n' +
-          '\\item [DUTY B];\n' +
-          '\\item [DUTY C]; and\n' +
-          '\\item [DUTY D].\n' +
+          '\\item \\lbrack{}DUTY A\\rbrack{};\n' +
+          '\\item \\lbrack{}DUTY B\\rbrack{};\n' +
+          '\\item \\lbrack{}DUTY C\\rbrack{}; and\n' +
+          '\\item \\lbrack{}DUTY D\\rbrack{}.\n' +
           '\\end{enumerate}';
         rawContent = rawContent.replace(/\{dutiesAndResponsibilities\}/gi, dutiesPlaceholder);
       }
@@ -550,24 +554,27 @@ router.get('/clause-groups/:id/template', verifyToken, async (req, res) => {
     const dateStr = now.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
     const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
 
+    // Helper: LaTeX-safe bracket placeholder for the .tex header fields
+    const tp = (label) => `\\lbrack{}${label}\\rbrack{}`;
+
     const templatePath = path.join(__dirname, '..', 'templates', 'contract-template.tex');
     let latexTemplate = fs.readFileSync(templatePath, 'utf8');
 
     latexTemplate = latexTemplate
-      .replace(/__GENERATED_DATE__/g,       `${dateStr} ${timeStr} — TEMPLATE PREVIEW`)
-      .replace(/__FIRST_PARTY_NAME__/g,     '[AUTHORIZED SIGNATORY NAME]')
-      .replace(/__FIRST_PARTY_TITLE__/g,    '[TITLE / CESO RANK]')
-      .replace(/__FIRST_PARTY_POSITION__/g, '[POSITION / DESIGNATION]')
-      .replace(/__SECOND_PARTY_NAME__/g,    '[EMPLOYEE FULL NAME]')
-      .replace(/__SECOND_PARTY_ADDRESS__/g, '[EMPLOYEE COMPLETE ADDRESS]')
-      .replace(/__CONTRACT_POSITION__/g,    '[POSITION]')
-      .replace(/__APPROVER_NAME__/g,        '[APPROVER NAME]')
-      .replace(/__APPROVER_POSITION__/g,    '[APPROVER POSITION]')
-      .replace(/__ACCOUNTANT_NAME__/g,      '[ACCOUNTANT NAME]')
-      .replace(/__ACCOUNTANT_POSITION__/g,  '[ACCOUNTANT POSITION]')
-      .replace(/__FINANCE_CHIEF_NAME__/g,   '[FINANCE CHIEF NAME]')
-      .replace(/__FINANCE_CHIEF_POSITION__/g, '[FINANCE CHIEF POSITION]')
-      .replace(/__CONTRACT_CLAUSES__/g,     clausesContent);
+      .replace(/__GENERATED_DATE__/g,        `${dateStr} ${timeStr} --- TEMPLATE PREVIEW`)
+      .replace(/__FIRST_PARTY_NAME__/g,      tp('AUTHORIZED SIGNATORY NAME'))
+      .replace(/__FIRST_PARTY_TITLE__/g,     tp('TITLE / CESO RANK'))
+      .replace(/__FIRST_PARTY_POSITION__/g,  tp('POSITION / DESIGNATION'))
+      .replace(/__SECOND_PARTY_NAME__/g,     tp('EMPLOYEE FULL NAME'))
+      .replace(/__SECOND_PARTY_ADDRESS__/g,  tp('EMPLOYEE COMPLETE ADDRESS'))
+      .replace(/__CONTRACT_POSITION__/g,     tp('POSITION'))
+      .replace(/__APPROVER_NAME__/g,         tp('APPROVER NAME'))
+      .replace(/__APPROVER_POSITION__/g,     tp('APPROVER POSITION'))
+      .replace(/__ACCOUNTANT_NAME__/g,       tp('ACCOUNTANT NAME'))
+      .replace(/__ACCOUNTANT_POSITION__/g,   tp('ACCOUNTANT POSITION'))
+      .replace(/__FINANCE_CHIEF_NAME__/g,    tp('FINANCE CHIEF NAME'))
+      .replace(/__FINANCE_CHIEF_POSITION__/g,tp('FINANCE CHIEF POSITION'))
+      .replace(/__CONTRACT_CLAUSES__/g,      clausesContent);
 
     // ── Compile PDF (same as contracts.js) ───────────────────────────────────
     const tempDir = path.join(process.cwd(), 'temp');
