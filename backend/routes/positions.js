@@ -8,6 +8,11 @@ import User from '../models/User.js';
 import { verifyToken } from './auth.js';
 import Notification from '../models/Notification.js';
 import { logActivity } from '../utils/activityLogger.js';
+import {
+  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+  HeadingLevel, AlignmentType, BorderStyle, WidthType, ShadingType,
+  LevelFormat, PageBreak
+} from 'docx';
 
 const router = express.Router();
 
@@ -333,6 +338,335 @@ router.delete('/clause-groups/:id', verifyToken, async (req, res) => {
     res.json({ message: 'Clause group deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCX TEMPLATE EXPORT  –  Admin only
+// GET /api/positions/clause-groups/:id/template
+// Returns a .docx with placeholders instead of real data, one section per
+// clause, matching the layout of the real contract generator.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/clause-groups/:id/template', verifyToken, async (req, res) => {
+  try {
+    // Admin-only guard
+    if (req.user.role !== 'ADMINISTRATOR') {
+      return res.status(403).json({ message: 'Admin access required.' });
+    }
+
+    const group = await ClauseGroup.findById(req.params.id).populate({
+      path: 'clauses',
+      select: 'clauseNumber sortOrder title content clauseType isBeforeWitnesseth isFixed variables'
+    });
+
+    if (!group) return res.status(404).json({ message: 'Clause group not found.' });
+
+    // Sort clauses: sortOrder > clauseNumber (mirrors ContractGenerator logic)
+    const sorted = [...(group.clauses || [])].sort((a, b) => {
+      return (a.sortOrder ?? a.clauseNumber) - (b.sortOrder ?? b.clauseNumber);
+    });
+
+    // ── Known dynamic variable placeholders (mirrors contracts.js replacements) ──
+    const KNOWN_VARS = {
+      position:                         '[POSITION]',
+      placeOfAssignment:                '[PLACE OF ASSIGNMENT]',
+      startDate:                        '[START DATE]',
+      endDate:                          '[END DATE]',
+      basicSalary:                      '[BASIC SALARY]',
+      basicSalaryInWords:               '[BASIC SALARY IN WORDS]',
+      monthlySalaryAsPerContract:       '[MONTHLY SALARY AS PER CONTRACT]',
+      monthlySalaryAsPerContractInWords:'[MONTHLY SALARY AS PER CONTRACT IN WORDS]',
+      dailySalaryAsPerContract:         '[DAILY SALARY AS PER CONTRACT]',
+      dailySalaryAsPerContractInWords:  '[DAILY SALARY AS PER CONTRACT IN WORDS]',
+      monthlyPremium:                   '[MONTHLY PREMIUM]',
+      monthlyPremiumInWords:            '[MONTHLY PREMIUM IN WORDS]',
+      finalPremium:                     '[FINAL PREMIUM]',
+      finalPremiumInWords:              '[FINAL PREMIUM IN WORDS]',
+      bonusType:                        '[BONUS TYPE]',
+      dutiesAndResponsibilities:        '[DUTIES AND RESPONSIBILITIES]',
+    };
+
+    // Replace {varName} tokens with readable placeholders
+    const resolvePlaceholders = (text) => {
+      if (!text) return '';
+      let out = text;
+      for (const [key, label] of Object.entries(KNOWN_VARS)) {
+        const re = new RegExp(`\\{${key}\\}`, 'gi');
+        out = out.replace(re, label);
+      }
+      // Catch any remaining {unknownVar} patterns
+      out = out.replace(/\{([a-zA-Z_]+)\}/g, (_, name) => `[${name.toUpperCase()}]`);
+      return out;
+    };
+
+    // ── Build document children ──────────────────────────────────────────────
+    const children = [];
+
+    // ── Cover header ─────────────────────────────────────────────────────────
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 120 },
+        children: [new TextRun({ text: 'CONTRACT OF SERVICE', bold: true, size: 32, font: 'Arial' })]
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 240 },
+        children: [new TextRun({ text: 'DOCX Template Preview', size: 22, font: 'Arial', color: '888888', italics: true })]
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 60 },
+        children: [new TextRun({ text: `Clause Group: ${group.name}`, bold: true, size: 24, font: 'Arial', color: '1F4E79' })]
+      }),
+    );
+
+    if (group.description) {
+      children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 480 },
+        children: [new TextRun({ text: group.description, size: 20, font: 'Arial', color: '666666', italics: true })]
+      }));
+    } else {
+      children.push(new Paragraph({ spacing: { after: 480 }, children: [] }));
+    }
+
+    // ── Party placeholders (mirror contract preamble) ─────────────────────────
+    children.push(
+      new Paragraph({
+        spacing: { after: 120 },
+        children: [new TextRun({ text: 'KNOW ALL MEN BY THESE PRESENTS:', bold: true, font: 'Arial', size: 22 })]
+      }),
+      new Paragraph({
+        spacing: { after: 200 },
+        indent: { left: 720 },
+        children: [
+          new TextRun({ text: 'This ', font: 'Arial', size: 22 }),
+          new TextRun({ text: 'CONTRACT OF SERVICE', bold: true, font: 'Arial', size: 22 }),
+          new TextRun({ text: ' entered into by and between:', font: 'Arial', size: 22 }),
+        ]
+      }),
+    );
+
+    // First party block
+    const firstPartyRows = [
+      ['Signatory Name:', '[FIRST_PARTY_NAME]'],
+      ['Title:', '[FIRST_PARTY_TITLE]'],
+      ['Position:', '[FIRST_PARTY_POSITION]'],
+    ];
+
+    const border = { style: BorderStyle.SINGLE, size: 1, color: 'DDDDDD' };
+    const borders = { top: border, bottom: border, left: border, right: border };
+
+    children.push(
+      new Paragraph({
+        spacing: { before: 120, after: 80 },
+        children: [new TextRun({ text: 'FIRST PARTY (DENR CALABARZON):', bold: true, font: 'Arial', size: 22, color: '1F4E79' })]
+      }),
+      new Table({
+        width: { size: 9360, type: WidthType.DXA },
+        columnWidths: [3000, 6360],
+        rows: firstPartyRows.map(([label, val]) =>
+          new TableRow({
+            children: [
+              new TableCell({ borders, width: { size: 3000, type: WidthType.DXA },
+                shading: { fill: 'EEF3FA', type: ShadingType.CLEAR },
+                margins: { top: 60, bottom: 60, left: 120, right: 120 },
+                children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, font: 'Arial', size: 20 })] })] }),
+              new TableCell({ borders, width: { size: 6360, type: WidthType.DXA },
+                margins: { top: 60, bottom: 60, left: 120, right: 120 },
+                children: [new Paragraph({ children: [new TextRun({ text: val, font: 'Arial', size: 20, color: '1F4E79' })] })] }),
+            ]
+          })
+        )
+      }),
+      new Paragraph({ spacing: { after: 160 }, children: [] }),
+    );
+
+    // Second party block
+    const secondPartyRows = [
+      ['Full Name:', '[SECOND_PARTY_NAME]'],
+      ['Address:', '[SECOND_PARTY_ADDRESS]'],
+    ];
+    children.push(
+      new Paragraph({
+        spacing: { before: 120, after: 80 },
+        children: [new TextRun({ text: 'SECOND PARTY (Contractual Employee):', bold: true, font: 'Arial', size: 22, color: '1F4E79' })]
+      }),
+      new Table({
+        width: { size: 9360, type: WidthType.DXA },
+        columnWidths: [3000, 6360],
+        rows: secondPartyRows.map(([label, val]) =>
+          new TableRow({
+            children: [
+              new TableCell({ borders, width: { size: 3000, type: WidthType.DXA },
+                shading: { fill: 'EEF3FA', type: ShadingType.CLEAR },
+                margins: { top: 60, bottom: 60, left: 120, right: 120 },
+                children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, font: 'Arial', size: 20 })] })] }),
+              new TableCell({ borders, width: { size: 6360, type: WidthType.DXA },
+                margins: { top: 60, bottom: 60, left: 120, right: 120 },
+                children: [new Paragraph({ children: [new TextRun({ text: val, font: 'Arial', size: 20, color: '1F4E79' })] })] }),
+            ]
+          })
+        )
+      }),
+      new Paragraph({ spacing: { after: 400 }, children: [] }),
+    );
+
+    // ── Divider heading for clauses ───────────────────────────────────────────
+    children.push(
+      new Paragraph({
+        spacing: { before: 240, after: 240 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '2E75B6', space: 1 } },
+        children: [new TextRun({ text: `CONTRACT CLAUSES  (${sorted.length} clause${sorted.length !== 1 ? 's' : ''})`, bold: true, size: 26, font: 'Arial', color: '2E75B6' })]
+      })
+    );
+
+    // ── Render each clause ───────────────────────────────────────────────────
+    sorted.forEach((clause, idx) => {
+      const displayNum = idx + 1;
+      const title = clause.title || `Clause ${clause.clauseNumber}`;
+      const rawContent = resolvePlaceholders(clause.content || '');
+
+      // Clause header row
+      children.push(
+        new Paragraph({
+          spacing: { before: 280, after: 80 },
+          children: [
+            new TextRun({ text: `${displayNum}.  `, bold: true, font: 'Arial', size: 22 }),
+            new TextRun({ text: title.toUpperCase(), bold: true, font: 'Arial', size: 22 }),
+            ...(clause.clauseType && clause.clauseType !== 'NORMAL'
+              ? [new TextRun({ text: `  [${clause.clauseType}]`, font: 'Arial', size: 18, color: '888888', italics: true })]
+              : []),
+            ...(clause.isFixed ? [new TextRun({ text: '  [FIXED]', font: 'Arial', size: 18, color: 'AA4444', italics: true })] : []),
+            ...(clause.isBeforeWitnesseth ? [new TextRun({ text: '  [BEFORE WITNESSETH]', font: 'Arial', size: 18, color: '448844', italics: true })] : []),
+          ]
+        })
+      );
+
+      // Clause body — split on newlines
+      const lines = rawContent.split('\n').map(l => l.trim()).filter(l => l);
+      if (lines.length === 0) {
+        children.push(new Paragraph({
+          indent: { left: 720 },
+          spacing: { after: 120 },
+          children: [new TextRun({ text: '(No content)', font: 'Arial', size: 20, italics: true, color: 'AAAAAA' })]
+        }));
+      } else {
+        lines.forEach(line => {
+          const isBullet = /^[•\-\*]\s+/.test(line) || /^\d+\.\s+/.test(line);
+          const cleanLine = line.replace(/^[•\-\*]\s+/, '').replace(/^\d+\.\s+/, '').trim();
+          children.push(new Paragraph({
+            indent: { left: isBullet ? 1080 : 720, hanging: isBullet ? 360 : 0 },
+            spacing: { after: 60 },
+            children: [
+              ...(isBullet ? [new TextRun({ text: '•  ', font: 'Arial', size: 20 })] : []),
+              new TextRun({ text: cleanLine, font: 'Arial', size: 20 }),
+            ]
+          }));
+        });
+      }
+
+      // Variables legend (if any)
+      if (clause.variables && clause.variables.length > 0) {
+        children.push(
+          new Paragraph({ spacing: { before: 100, after: 40 }, children: [new TextRun({ text: 'Variables in this clause:', font: 'Arial', size: 18, italics: true, color: '666666' })] }),
+          new Table({
+            width: { size: 9360, type: WidthType.DXA },
+            columnWidths: [2800, 4560, 2000],
+            rows: [
+              new TableRow({
+                children: [
+                  new TableCell({ borders, width: { size: 2800, type: WidthType.DXA }, shading: { fill: 'E8F0FE', type: ShadingType.CLEAR },
+                    margins: { top: 40, bottom: 40, left: 100, right: 100 },
+                    children: [new Paragraph({ children: [new TextRun({ text: 'Variable', bold: true, font: 'Arial', size: 18 })] })] }),
+                  new TableCell({ borders, width: { size: 4560, type: WidthType.DXA }, shading: { fill: 'E8F0FE', type: ShadingType.CLEAR },
+                    margins: { top: 40, bottom: 40, left: 100, right: 100 },
+                    children: [new Paragraph({ children: [new TextRun({ text: 'Description', bold: true, font: 'Arial', size: 18 })] })] }),
+                  new TableCell({ borders, width: { size: 2000, type: WidthType.DXA }, shading: { fill: 'E8F0FE', type: ShadingType.CLEAR },
+                    margins: { top: 40, bottom: 40, left: 100, right: 100 },
+                    children: [new Paragraph({ children: [new TextRun({ text: 'Type', bold: true, font: 'Arial', size: 18 })] })] }),
+                ],
+              }),
+              ...clause.variables.map(v =>
+                new TableRow({
+                  children: [
+                    new TableCell({ borders, width: { size: 2800, type: WidthType.DXA }, margins: { top: 40, bottom: 40, left: 100, right: 100 },
+                      children: [new Paragraph({ children: [new TextRun({ text: `{${v.name}}`, font: 'Courier New', size: 18, color: '1F4E79' })] })] }),
+                    new TableCell({ borders, width: { size: 4560, type: WidthType.DXA }, margins: { top: 40, bottom: 40, left: 100, right: 100 },
+                      children: [new Paragraph({ children: [new TextRun({ text: v.description || '—', font: 'Arial', size: 18 })] })] }),
+                    new TableCell({ borders, width: { size: 2000, type: WidthType.DXA }, margins: { top: 40, bottom: 40, left: 100, right: 100 },
+                      children: [new Paragraph({ children: [new TextRun({ text: v.dataType || 'TEXT', font: 'Arial', size: 18 })] })] }),
+                  ]
+                })
+              )
+            ]
+          }),
+        );
+      }
+
+      children.push(new Paragraph({ spacing: { after: 80 }, children: [] }));
+    });
+
+    // ── Signature block ────────────────────────────────────────────────────────
+    children.push(
+      new Paragraph({ spacing: { before: 480, after: 120 }, border: { top: { style: BorderStyle.SINGLE, size: 6, color: '2E75B6', space: 1 } },
+        children: [new TextRun({ text: 'SIGNATURES', bold: true, size: 24, font: 'Arial', color: '2E75B6' })] }),
+      new Table({
+        width: { size: 9360, type: WidthType.DXA },
+        columnWidths: [4680, 4680],
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({ borders: { top: border, bottom: border, left: border, right: border }, width: { size: 4680, type: WidthType.DXA },
+                margins: { top: 120, bottom: 240, left: 180, right: 180 },
+                children: [
+                  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '[FIRST_PARTY_NAME]', bold: true, font: 'Arial', size: 20, color: '1F4E79' })] }),
+                  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '[FIRST_PARTY_TITLE]', font: 'Arial', size: 18, italics: true })] }),
+                  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'FIRST PARTY', font: 'Arial', size: 18, bold: true })] }),
+                ] }),
+              new TableCell({ borders: { top: border, bottom: border, left: border, right: border }, width: { size: 4680, type: WidthType.DXA },
+                margins: { top: 120, bottom: 240, left: 180, right: 180 },
+                children: [
+                  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '[SECOND_PARTY_NAME]', bold: true, font: 'Arial', size: 20, color: '1F4E79' })] }),
+                  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Contractual Employee', font: 'Arial', size: 18, italics: true })] }),
+                  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'SECOND PARTY', font: 'Arial', size: 18, bold: true })] }),
+                ] }),
+            ]
+          }),
+        ]
+      }),
+    );
+
+    // ── Pack document ─────────────────────────────────────────────────────────
+    const doc = new Document({
+      styles: {
+        default: { document: { run: { font: 'Arial', size: 22 } } }
+      },
+      sections: [{
+        properties: {
+          page: {
+            size: { width: 12240, height: 15840 },
+            margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }
+          }
+        },
+        children
+      }]
+    });
+
+    const buffer = await Packer.toBuffer(doc);
+    const safeName = group.name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').substring(0, 60) || 'template';
+    const filename = `${safeName}_template.docx`;
+
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': buffer.length,
+    });
+    res.send(buffer);
+  } catch (error) {
+    console.error('Error generating clause group template:', error);
+    res.status(500).json({ message: 'Failed to generate template.', error: error.message });
   }
 });
 

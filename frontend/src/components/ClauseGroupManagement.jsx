@@ -129,6 +129,7 @@ function ClauseGroupManagement() {
   const [savingForm, setSavingForm] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
+  const [exportingId, setExportingId] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -222,6 +223,36 @@ function ClauseGroupManagement() {
   };
 
   const resetForm = () => setFormData({ name: '', description: '', selectedClauses: [] });
+
+  const handleExportTemplate = async (group) => {
+    setExportingId(group._id);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await api.get(
+        `/api/positions/clause-groups/${group._id}/template`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          responseType: 'blob',
+        }
+      );
+      const safeName = group.name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').substring(0, 60) || 'template';
+      const filename = `${safeName}_template.docx`;
+      const url = URL.createObjectURL(new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Failed to export template: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setExportingId(null);
+    }
+  };
 
   // Toggle clause selection in the form — keeps insertion order
   const toggleClause = (clauseId) => {
@@ -445,6 +476,22 @@ function ClauseGroupManagement() {
                 </p>
               </div>
               <div className="flex gap-2 flex-shrink-0">
+                <button
+                  onClick={() => handleExportTemplate(group)}
+                  disabled={exportingId === group._id}
+                  title="Download DOCX template with placeholders (Admin only)"
+                  className="btn btn-secondary btn-sm flex items-center gap-1"
+                >
+                  {exportingId === group._id
+                    ? <><Spinner size="sm" color="gray" />Exporting…</>
+                    : <>
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M8 2v8m0 0L5 7m3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1"/>
+                        </svg>
+                        Template
+                      </>
+                  }
+                </button>
                 <button
                   onClick={() => handleEdit(group)}
                   className="btn btn-secondary btn-sm"
