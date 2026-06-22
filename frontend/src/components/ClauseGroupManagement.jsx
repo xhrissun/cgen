@@ -236,10 +236,8 @@ function ClauseGroupManagement() {
         }
       );
       const safeName = group.name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').substring(0, 60) || 'template';
-      const filename = `${safeName}_template.docx`;
-      const url = URL.createObjectURL(new Blob([res.data], {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      }));
+      const filename = `${safeName}_TEMPLATE.pdf`;
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;

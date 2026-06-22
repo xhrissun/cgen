@@ -8,11 +8,15 @@ import User from '../models/User.js';
 import { verifyToken } from './auth.js';
 import Notification from '../models/Notification.js';
 import { logActivity } from '../utils/activityLogger.js';
-import {
-  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  HeadingLevel, AlignmentType, BorderStyle, WidthType, ShadingType,
-  LevelFormat, PageBreak
-} from 'docx';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
+const execPromise = promisify(exec);
 
 const router = express.Router();
 
@@ -342,14 +346,13 @@ router.delete('/clause-groups/:id', verifyToken, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DOCX TEMPLATE EXPORT  –  Admin only
+// PDF TEMPLATE EXPORT  –  Admin only
 // GET /api/positions/clause-groups/:id/template
-// Returns a .docx with placeholders instead of real data, one section per
-// clause, matching the layout of the real contract generator.
+// Runs the EXACT same LaTeX pipeline as the real contract generator but
+// substitutes placeholder text instead of real employee/contract data.
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/clause-groups/:id/template', verifyToken, async (req, res) => {
   try {
-    // Admin-only guard
     if (req.user.role !== 'ADMINISTRATOR') {
       return res.status(403).json({ message: 'Admin access required.' });
     }
@@ -361,309 +364,256 @@ router.get('/clause-groups/:id/template', verifyToken, async (req, res) => {
 
     if (!group) return res.status(404).json({ message: 'Clause group not found.' });
 
-    // Sort clauses: sortOrder > clauseNumber (mirrors ContractGenerator logic)
-    const sorted = [...(group.clauses || [])].sort((a, b) => {
+    // ── Same sort logic as contracts.js ──────────────────────────────────────
+    const sortedClauses = [...(group.clauses || [])].sort((a, b) => {
       return (a.sortOrder ?? a.clauseNumber) - (b.sortOrder ?? b.clauseNumber);
     });
 
-    // ── Known dynamic variable placeholders (mirrors contracts.js replacements) ──
-    const KNOWN_VARS = {
-      position:                         '[POSITION]',
-      placeOfAssignment:                '[PLACE OF ASSIGNMENT]',
-      startDate:                        '[START DATE]',
-      endDate:                          '[END DATE]',
-      basicSalary:                      '[BASIC SALARY]',
-      basicSalaryInWords:               '[BASIC SALARY IN WORDS]',
-      monthlySalaryAsPerContract:       '[MONTHLY SALARY AS PER CONTRACT]',
-      monthlySalaryAsPerContractInWords:'[MONTHLY SALARY AS PER CONTRACT IN WORDS]',
-      dailySalaryAsPerContract:         '[DAILY SALARY AS PER CONTRACT]',
-      dailySalaryAsPerContractInWords:  '[DAILY SALARY AS PER CONTRACT IN WORDS]',
-      monthlyPremium:                   '[MONTHLY PREMIUM]',
-      monthlyPremiumInWords:            '[MONTHLY PREMIUM IN WORDS]',
-      finalPremium:                     '[FINAL PREMIUM]',
-      finalPremiumInWords:              '[FINAL PREMIUM IN WORDS]',
-      bonusType:                        '[BONUS TYPE]',
-      dutiesAndResponsibilities:        '[DUTIES AND RESPONSIBILITIES]',
-    };
-
-    // Replace {varName} tokens with readable placeholders
-    const resolvePlaceholders = (text) => {
+    // ── Helpers copied verbatim from contracts.js ─────────────────────────────
+    const escapeLatex = (text) => {
       if (!text) return '';
-      let out = text;
-      for (const [key, label] of Object.entries(KNOWN_VARS)) {
-        const re = new RegExp(`\\{${key}\\}`, 'gi');
-        out = out.replace(re, label);
-      }
-      // Catch any remaining {unknownVar} patterns
-      out = out.replace(/\{([a-zA-Z_]+)\}/g, (_, name) => `[${name.toUpperCase()}]`);
-      return out;
+      return String(text)
+        .replace(/\\/g, '\\textbackslash{}')
+        .replace(/[&%$#_{}]/g, '\\$&')
+        .replace(/~/g, '\\textasciitilde{}')
+        .replace(/\^/g, '\\textasciicircum{}');
     };
 
-    // ── Build document children ──────────────────────────────────────────────
-    const children = [];
+    const wrapLongText = (text, maxLength = 90) => {
+      if (!text || text.length <= maxLength) return text;
+      const words = text.split(' ');
+      const lines = [];
+      let currentLine = '';
+      words.forEach(word => {
+        if ((currentLine + ' ' + word).length <= maxLength) {
+          currentLine += (currentLine ? ' ' : '') + word;
+        } else {
+          if (currentLine) lines.push(currentLine);
+          currentLine = word;
+        }
+      });
+      if (currentLine) lines.push(currentLine);
+      return lines.join('\n');
+    };
 
-    // ── Cover header ─────────────────────────────────────────────────────────
-    children.push(
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 120 },
-        children: [new TextRun({ text: 'CONTRACT OF SERVICE', bold: true, size: 32, font: 'Arial' })]
-      }),
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 240 },
-        children: [new TextRun({ text: 'DOCX Template Preview', size: 22, font: 'Arial', color: '888888', italics: true })]
-      }),
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 60 },
-        children: [new TextRun({ text: `Clause Group: ${group.name}`, bold: true, size: 24, font: 'Arial', color: '1F4E79' })]
-      }),
-    );
+    const convertBulletsToLatexLocal = (text) => {
+      if (!text) return '';
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+      let result = '';
+      let inList = false;
+      let listItems = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const isBullet = /^[•\-\*]\s+/.test(line) || /^\d+\.\s+/.test(line);
+        if (isBullet) {
+          if (!inList) { inList = true; listItems = []; }
+          listItems.push(line.replace(/^[•\-\*]\s+/, '').replace(/^\d+\.\s+/, '').trim());
+        } else {
+          if (inList) {
+            result += '\n\\begin{itemize}[leftmargin=0.5in,itemsep=2pt,parsep=0pt,topsep=4pt]\n';
+            listItems.forEach(item => { result += `\\item ${item}\n`; });
+            result += '\\end{itemize}\n\n';
+            inList = false; listItems = [];
+          }
+          result += line + '\n';
+        }
+      }
+      if (inList && listItems.length > 0) {
+        result += '\n\\begin{itemize}[leftmargin=0.5in,itemsep=2pt,parsep=0pt,topsep=4pt]\n';
+        listItems.forEach(item => { result += `\\item ${item}\n`; });
+        result += '\\end{itemize}\n';
+      }
+      return result.trim();
+    };
 
-    if (group.description) {
-      children.push(new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 480 },
-        children: [new TextRun({ text: group.description, size: 20, font: 'Arial', color: '666666', italics: true })]
-      }));
-    } else {
-      children.push(new Paragraph({ spacing: { after: 480 }, children: [] }));
+    // ── Placeholder values used instead of real data ──────────────────────────
+    // These mirror every .replace() call in contracts.js STEP 3
+    const PH = {
+      position:                          '\\textbf{[POSITION]}',
+      placeOfAssignment:                 '\\textbf{[PLACE OF ASSIGNMENT]}',
+      startDate:                         '\\textbf{[START DATE]}',
+      endDate:                           '\\textbf{[END DATE]}',
+      basicSalary:                       '\\textbf{[BASIC SALARY]}',
+      basicSalaryInWords:                '\\textbf{[BASIC SALARY IN WORDS]}',
+      monthlySalaryAsPerContract:        '\\textbf{[MONTHLY SALARY AS PER CONTRACT]}',
+      monthlySalaryAsPerContractInWords: '\\textbf{[MONTHLY SALARY IN WORDS]}',
+      dailySalaryAsPerContract:          '\\textbf{[DAILY SALARY AS PER CONTRACT]}',
+      dailySalaryAsPerContractInWords:   '\\textbf{[DAILY SALARY IN WORDS]}',
+      monthlyPremium:                    '\\textbf{[MONTHLY PREMIUM]}',
+      monthlyPremiumInWords:             '\\textbf{[MONTHLY PREMIUM IN WORDS]}',
+      finalPremium:                      '\\textbf{[FINAL PREMIUM]}',
+      finalPremiumInWords:               '\\textbf{[FINAL PREMIUM IN WORDS]}',
+      bonusType:                         '\\textbf{[BONUS TYPE]}',
+    };
+
+    // ── Build clausesContent exactly as contracts.js does ────────────────────
+    let clausesContent = '';
+
+    sortedClauses.forEach((clause, idx) => {
+      let rawContent = clause.content || '';
+      if (!rawContent.trim()) return;
+
+      // duties placeholder
+      if (rawContent.includes('{dutiesAndResponsibilities}')) {
+        const dutiesPlaceholder =
+          '\n\\begin{enumerate}[label=\\alph*),leftmargin=0.5in,itemsep=0pt,parsep=0pt,topsep=0pt]\n' +
+          '\\item [DUTY A];\n' +
+          '\\item [DUTY B];\n' +
+          '\\item [DUTY C]; and\n' +
+          '\\item [DUTY D].\n' +
+          '\\end{enumerate}';
+        rawContent = rawContent.replace(/\{dutiesAndResponsibilities\}/gi, dutiesPlaceholder);
+      }
+
+      // STEP 1: protect party markers
+      rawContent = rawContent
+        .replace(/FIRST PARTY/g,    'XXXXFIRSTPARTYXXXX')
+        .replace(/SECOND PARTY/g,   'XXXXSECONDPARTYXXXX')
+        .replace(/END OF CONTRACT/g, 'XXXXENDOFCONTRACTXXXX');
+
+      // STEP 2: bullets → LaTeX itemize
+      rawContent = convertBulletsToLatexLocal(rawContent);
+
+      const paragraphs = rawContent.split('\n\n').filter(p => p.trim());
+      let clauseText = '';
+
+      paragraphs.forEach((paragraph, pIndex) => {
+        if (paragraph.includes('\\begin{enumerate}') || paragraph.includes('\\begin{itemize}')) {
+          if (pIndex > 0 || clauseText) clauseText += '\n\n';
+          clauseText += paragraph;
+          return;
+        }
+        const lines = paragraph.split('\n').map(l => l.trim()).filter(l => l);
+        const hasSubItems = lines.some(line => /^[a-z]\)\s/.test(line));
+        if (hasSubItems) {
+          const mainText = [];
+          const subItems = [];
+          let inSub = false;
+          lines.forEach(line => {
+            if (/^[a-z]\)\s/.test(line)) {
+              inSub = true;
+              const match = line.match(/^[a-z]\)\s*(.+)/);
+              if (match) subItems.push(wrapLongText(match[1], 85));
+            } else if (!inSub) {
+              mainText.push(line);
+            }
+          });
+          if (mainText.length > 0) {
+            clauseText += escapeLatex(wrapLongText(mainText.join(' '), 85));
+          }
+          if (subItems.length > 0) {
+            clauseText += '\n\\begin{enumerate}[label=\\alph*),leftmargin=0.5in,itemsep=0pt,parsep=0pt,topsep=0pt]\n';
+            subItems.forEach(item => { clauseText += `\\item ${escapeLatex(item)}\n`; });
+            clauseText += '\\end{enumerate}';
+          }
+        } else {
+          if (pIndex > 0 || clauseText) clauseText += '\n\n';
+          clauseText += escapeLatex(wrapLongText(lines.join(' '), 85));
+        }
+      });
+
+      // STEP 3: replace escaped {var} tokens with placeholder text
+      clauseText = clauseText
+        .replace(/\\\{position\\\}/gi,                          PH.position)
+        .replace(/\\\{placeOfAssignment\\\}/gi,                 PH.placeOfAssignment)
+        .replace(/\\\{startDate\\\}/gi,                         PH.startDate)
+        .replace(/\\\{endDate\\\}/gi,                           PH.endDate)
+        .replace(/\\\{basicSalary\\\}/gi,                       PH.basicSalary)
+        .replace(/\\\{basicSalaryInWords\\\}/gi,                PH.basicSalaryInWords)
+        .replace(/\\\{monthlySalaryAsPerContract\\\}/gi,        PH.monthlySalaryAsPerContract)
+        .replace(/\\\{monthlySalaryAsPerContractInWords\\\}/gi, PH.monthlySalaryAsPerContractInWords)
+        .replace(/\\\{dailySalaryAsPerContract\\\}/gi,          PH.dailySalaryAsPerContract)
+        .replace(/\\\{dailySalaryAsPerContractInWords\\\}/gi,   PH.dailySalaryAsPerContractInWords)
+        .replace(/\\\{monthlyPremium\\\}/gi,                    PH.monthlyPremium)
+        .replace(/\\\{monthlyPremiumInWords\\\}/gi,             PH.monthlyPremiumInWords)
+        .replace(/\\\{finalPremium\\\}/gi,                      PH.finalPremium)
+        .replace(/\\\{finalPremiumInWords\\\}/gi,               PH.finalPremiumInWords)
+        .replace(/\\\{bonusType\\\}/gi,                         PH.bonusType)
+        .replace(/\\\{dutiesAndResponsibilities\\\}/gi,         '');
+
+      // STEP 4: restore party markers
+      clauseText = clauseText
+        .replace(/XXXXFIRSTPARTYXXXX/g,    '\\textbf{FIRST PARTY}')
+        .replace(/XXXXSECONDPARTYXXXX/g,   '\\textbf{SECOND PARTY}')
+        .replace(/XXXXENDOFCONTRACTXXXX/g, '\\textbf{END OF CONTRACT}');
+
+      const displayNumber = idx + 1;
+      clausesContent += `\\needspace{5\\baselineskip}\n\\noindent\\textbf{${displayNumber}.} ${clauseText}\n\n`;
+    });
+
+    if (!clausesContent.trim()) {
+      return res.status(400).json({ message: 'No clause content found in this group.' });
     }
 
-    // ── Party placeholders (mirror contract preamble) ─────────────────────────
-    children.push(
-      new Paragraph({
-        spacing: { after: 120 },
-        children: [new TextRun({ text: 'KNOW ALL MEN BY THESE PRESENTS:', bold: true, font: 'Arial', size: 22 })]
-      }),
-      new Paragraph({
-        spacing: { after: 200 },
-        indent: { left: 720 },
-        children: [
-          new TextRun({ text: 'This ', font: 'Arial', size: 22 }),
-          new TextRun({ text: 'CONTRACT OF SERVICE', bold: true, font: 'Arial', size: 22 }),
-          new TextRun({ text: ' entered into by and between:', font: 'Arial', size: 22 }),
-        ]
-      }),
-    );
+    // ── Fill the same LaTeX template used by the real generator ──────────────
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
 
-    // First party block
-    const firstPartyRows = [
-      ['Signatory Name:', '[FIRST_PARTY_NAME]'],
-      ['Title:', '[FIRST_PARTY_TITLE]'],
-      ['Position:', '[FIRST_PARTY_POSITION]'],
-    ];
+    const templatePath = path.join(__dirname, '..', 'templates', 'contract-template.tex');
+    let latexTemplate = fs.readFileSync(templatePath, 'utf8');
 
-    const border = { style: BorderStyle.SINGLE, size: 1, color: 'DDDDDD' };
-    const borders = { top: border, bottom: border, left: border, right: border };
+    latexTemplate = latexTemplate
+      .replace(/__GENERATED_DATE__/g,       `${dateStr} ${timeStr} — TEMPLATE PREVIEW`)
+      .replace(/__FIRST_PARTY_NAME__/g,     '[AUTHORIZED SIGNATORY NAME]')
+      .replace(/__FIRST_PARTY_TITLE__/g,    '[TITLE / CESO RANK]')
+      .replace(/__FIRST_PARTY_POSITION__/g, '[POSITION / DESIGNATION]')
+      .replace(/__SECOND_PARTY_NAME__/g,    '[EMPLOYEE FULL NAME]')
+      .replace(/__SECOND_PARTY_ADDRESS__/g, '[EMPLOYEE COMPLETE ADDRESS]')
+      .replace(/__CONTRACT_POSITION__/g,    '[POSITION]')
+      .replace(/__APPROVER_NAME__/g,        '[APPROVER NAME]')
+      .replace(/__APPROVER_POSITION__/g,    '[APPROVER POSITION]')
+      .replace(/__ACCOUNTANT_NAME__/g,      '[ACCOUNTANT NAME]')
+      .replace(/__ACCOUNTANT_POSITION__/g,  '[ACCOUNTANT POSITION]')
+      .replace(/__FINANCE_CHIEF_NAME__/g,   '[FINANCE CHIEF NAME]')
+      .replace(/__FINANCE_CHIEF_POSITION__/g, '[FINANCE CHIEF POSITION]')
+      .replace(/__CONTRACT_CLAUSES__/g,     clausesContent);
 
-    children.push(
-      new Paragraph({
-        spacing: { before: 120, after: 80 },
-        children: [new TextRun({ text: 'FIRST PARTY (DENR CALABARZON):', bold: true, font: 'Arial', size: 22, color: '1F4E79' })]
-      }),
-      new Table({
-        width: { size: 9360, type: WidthType.DXA },
-        columnWidths: [3000, 6360],
-        rows: firstPartyRows.map(([label, val]) =>
-          new TableRow({
-            children: [
-              new TableCell({ borders, width: { size: 3000, type: WidthType.DXA },
-                shading: { fill: 'EEF3FA', type: ShadingType.CLEAR },
-                margins: { top: 60, bottom: 60, left: 120, right: 120 },
-                children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, font: 'Arial', size: 20 })] })] }),
-              new TableCell({ borders, width: { size: 6360, type: WidthType.DXA },
-                margins: { top: 60, bottom: 60, left: 120, right: 120 },
-                children: [new Paragraph({ children: [new TextRun({ text: val, font: 'Arial', size: 20, color: '1F4E79' })] })] }),
-            ]
-          })
-        )
-      }),
-      new Paragraph({ spacing: { after: 160 }, children: [] }),
-    );
+    // ── Compile PDF (same as contracts.js) ───────────────────────────────────
+    const tempDir = path.join(process.cwd(), 'temp');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-    // Second party block
-    const secondPartyRows = [
-      ['Full Name:', '[SECOND_PARTY_NAME]'],
-      ['Address:', '[SECOND_PARTY_ADDRESS]'],
-    ];
-    children.push(
-      new Paragraph({
-        spacing: { before: 120, after: 80 },
-        children: [new TextRun({ text: 'SECOND PARTY (Contractual Employee):', bold: true, font: 'Arial', size: 22, color: '1F4E79' })]
-      }),
-      new Table({
-        width: { size: 9360, type: WidthType.DXA },
-        columnWidths: [3000, 6360],
-        rows: secondPartyRows.map(([label, val]) =>
-          new TableRow({
-            children: [
-              new TableCell({ borders, width: { size: 3000, type: WidthType.DXA },
-                shading: { fill: 'EEF3FA', type: ShadingType.CLEAR },
-                margins: { top: 60, bottom: 60, left: 120, right: 120 },
-                children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, font: 'Arial', size: 20 })] })] }),
-              new TableCell({ borders, width: { size: 6360, type: WidthType.DXA },
-                margins: { top: 60, bottom: 60, left: 120, right: 120 },
-                children: [new Paragraph({ children: [new TextRun({ text: val, font: 'Arial', size: 20, color: '1F4E79' })] })] }),
-            ]
-          })
-        )
-      }),
-      new Paragraph({ spacing: { after: 400 }, children: [] }),
-    );
+    const timestamp  = Date.now();
+    const safeName   = group.name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').substring(0, 50) || 'template';
+    const baseFile   = `template_${safeName}_${timestamp}`;
+    const texPath    = path.join(tempDir, `${baseFile}.tex`);
+    const pdfPath    = path.join(tempDir, `${baseFile}.pdf`);
 
-    // ── Divider heading for clauses ───────────────────────────────────────────
-    children.push(
-      new Paragraph({
-        spacing: { before: 240, after: 240 },
-        border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '2E75B6', space: 1 } },
-        children: [new TextRun({ text: `CONTRACT CLAUSES  (${sorted.length} clause${sorted.length !== 1 ? 's' : ''})`, bold: true, size: 26, font: 'Arial', color: '2E75B6' })]
-      })
-    );
+    fs.writeFileSync(texPath, latexTemplate, 'utf8');
 
-    // ── Render each clause ───────────────────────────────────────────────────
-    sorted.forEach((clause, idx) => {
-      const displayNum = idx + 1;
-      const title = clause.title || `Clause ${clause.clauseNumber}`;
-      const rawContent = resolvePlaceholders(clause.content || '');
-
-      // Clause header row
-      children.push(
-        new Paragraph({
-          spacing: { before: 280, after: 80 },
-          children: [
-            new TextRun({ text: `${displayNum}.  `, bold: true, font: 'Arial', size: 22 }),
-            new TextRun({ text: title.toUpperCase(), bold: true, font: 'Arial', size: 22 }),
-            ...(clause.clauseType && clause.clauseType !== 'NORMAL'
-              ? [new TextRun({ text: `  [${clause.clauseType}]`, font: 'Arial', size: 18, color: '888888', italics: true })]
-              : []),
-            ...(clause.isFixed ? [new TextRun({ text: '  [FIXED]', font: 'Arial', size: 18, color: 'AA4444', italics: true })] : []),
-            ...(clause.isBeforeWitnesseth ? [new TextRun({ text: '  [BEFORE WITNESSETH]', font: 'Arial', size: 18, color: '448844', italics: true })] : []),
-          ]
-        })
+    try {
+      await execPromise(
+        `pdflatex -interaction=nonstopmode -output-directory="${tempDir}" "${texPath}"`,
+        { cwd: tempDir, timeout: 30000 }
       );
 
-      // Clause body — split on newlines
-      const lines = rawContent.split('\n').map(l => l.trim()).filter(l => l);
-      if (lines.length === 0) {
-        children.push(new Paragraph({
-          indent: { left: 720 },
-          spacing: { after: 120 },
-          children: [new TextRun({ text: '(No content)', font: 'Arial', size: 20, italics: true, color: 'AAAAAA' })]
-        }));
-      } else {
-        lines.forEach(line => {
-          const isBullet = /^[•\-\*]\s+/.test(line) || /^\d+\.\s+/.test(line);
-          const cleanLine = line.replace(/^[•\-\*]\s+/, '').replace(/^\d+\.\s+/, '').trim();
-          children.push(new Paragraph({
-            indent: { left: isBullet ? 1080 : 720, hanging: isBullet ? 360 : 0 },
-            spacing: { after: 60 },
-            children: [
-              ...(isBullet ? [new TextRun({ text: '•  ', font: 'Arial', size: 20 })] : []),
-              new TextRun({ text: cleanLine, font: 'Arial', size: 20 }),
-            ]
-          }));
-        });
+      if (!fs.existsSync(pdfPath)) throw new Error('PDF not created by pdflatex.');
+
+      const downloadName = `${safeName}_TEMPLATE.pdf`;
+      res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
+
+      res.sendFile(pdfPath, (err) => {
+        // cleanup
+        [texPath, pdfPath,
+          path.join(tempDir, `${baseFile}.aux`),
+          path.join(tempDir, `${baseFile}.log`),
+          path.join(tempDir, `${baseFile}.out`),
+        ].forEach(f => { try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {} });
+        if (err) console.error('Error sending template PDF:', err);
+      });
+
+    } catch (pdfErr) {
+      [texPath, pdfPath].forEach(f => { try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {} });
+      const logPath = path.join(tempDir, `${baseFile}.log`);
+      let details = pdfErr.message;
+      if (fs.existsSync(logPath)) {
+        const log = fs.readFileSync(logPath, 'utf8');
+        const errs = log.match(/! .+/g);
+        if (errs) details = errs.join('\n');
       }
+      throw new Error(`PDF compilation failed: ${details}`);
+    }
 
-      // Variables legend (if any)
-      if (clause.variables && clause.variables.length > 0) {
-        children.push(
-          new Paragraph({ spacing: { before: 100, after: 40 }, children: [new TextRun({ text: 'Variables in this clause:', font: 'Arial', size: 18, italics: true, color: '666666' })] }),
-          new Table({
-            width: { size: 9360, type: WidthType.DXA },
-            columnWidths: [2800, 4560, 2000],
-            rows: [
-              new TableRow({
-                children: [
-                  new TableCell({ borders, width: { size: 2800, type: WidthType.DXA }, shading: { fill: 'E8F0FE', type: ShadingType.CLEAR },
-                    margins: { top: 40, bottom: 40, left: 100, right: 100 },
-                    children: [new Paragraph({ children: [new TextRun({ text: 'Variable', bold: true, font: 'Arial', size: 18 })] })] }),
-                  new TableCell({ borders, width: { size: 4560, type: WidthType.DXA }, shading: { fill: 'E8F0FE', type: ShadingType.CLEAR },
-                    margins: { top: 40, bottom: 40, left: 100, right: 100 },
-                    children: [new Paragraph({ children: [new TextRun({ text: 'Description', bold: true, font: 'Arial', size: 18 })] })] }),
-                  new TableCell({ borders, width: { size: 2000, type: WidthType.DXA }, shading: { fill: 'E8F0FE', type: ShadingType.CLEAR },
-                    margins: { top: 40, bottom: 40, left: 100, right: 100 },
-                    children: [new Paragraph({ children: [new TextRun({ text: 'Type', bold: true, font: 'Arial', size: 18 })] })] }),
-                ],
-              }),
-              ...clause.variables.map(v =>
-                new TableRow({
-                  children: [
-                    new TableCell({ borders, width: { size: 2800, type: WidthType.DXA }, margins: { top: 40, bottom: 40, left: 100, right: 100 },
-                      children: [new Paragraph({ children: [new TextRun({ text: `{${v.name}}`, font: 'Courier New', size: 18, color: '1F4E79' })] })] }),
-                    new TableCell({ borders, width: { size: 4560, type: WidthType.DXA }, margins: { top: 40, bottom: 40, left: 100, right: 100 },
-                      children: [new Paragraph({ children: [new TextRun({ text: v.description || '—', font: 'Arial', size: 18 })] })] }),
-                    new TableCell({ borders, width: { size: 2000, type: WidthType.DXA }, margins: { top: 40, bottom: 40, left: 100, right: 100 },
-                      children: [new Paragraph({ children: [new TextRun({ text: v.dataType || 'TEXT', font: 'Arial', size: 18 })] })] }),
-                  ]
-                })
-              )
-            ]
-          }),
-        );
-      }
-
-      children.push(new Paragraph({ spacing: { after: 80 }, children: [] }));
-    });
-
-    // ── Signature block ────────────────────────────────────────────────────────
-    children.push(
-      new Paragraph({ spacing: { before: 480, after: 120 }, border: { top: { style: BorderStyle.SINGLE, size: 6, color: '2E75B6', space: 1 } },
-        children: [new TextRun({ text: 'SIGNATURES', bold: true, size: 24, font: 'Arial', color: '2E75B6' })] }),
-      new Table({
-        width: { size: 9360, type: WidthType.DXA },
-        columnWidths: [4680, 4680],
-        rows: [
-          new TableRow({
-            children: [
-              new TableCell({ borders: { top: border, bottom: border, left: border, right: border }, width: { size: 4680, type: WidthType.DXA },
-                margins: { top: 120, bottom: 240, left: 180, right: 180 },
-                children: [
-                  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '[FIRST_PARTY_NAME]', bold: true, font: 'Arial', size: 20, color: '1F4E79' })] }),
-                  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '[FIRST_PARTY_TITLE]', font: 'Arial', size: 18, italics: true })] }),
-                  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'FIRST PARTY', font: 'Arial', size: 18, bold: true })] }),
-                ] }),
-              new TableCell({ borders: { top: border, bottom: border, left: border, right: border }, width: { size: 4680, type: WidthType.DXA },
-                margins: { top: 120, bottom: 240, left: 180, right: 180 },
-                children: [
-                  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '[SECOND_PARTY_NAME]', bold: true, font: 'Arial', size: 20, color: '1F4E79' })] }),
-                  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Contractual Employee', font: 'Arial', size: 18, italics: true })] }),
-                  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'SECOND PARTY', font: 'Arial', size: 18, bold: true })] }),
-                ] }),
-            ]
-          }),
-        ]
-      }),
-    );
-
-    // ── Pack document ─────────────────────────────────────────────────────────
-    const doc = new Document({
-      styles: {
-        default: { document: { run: { font: 'Arial', size: 22 } } }
-      },
-      sections: [{
-        properties: {
-          page: {
-            size: { width: 12240, height: 15840 },
-            margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }
-          }
-        },
-        children
-      }]
-    });
-
-    const buffer = await Packer.toBuffer(doc);
-    const safeName = group.name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').substring(0, 60) || 'template';
-    const filename = `${safeName}_template.docx`;
-
-    res.set({
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      'Content-Length': buffer.length,
-    });
-    res.send(buffer);
   } catch (error) {
     console.error('Error generating clause group template:', error);
     res.status(500).json({ message: 'Failed to generate template.', error: error.message });
