@@ -585,14 +585,11 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
       hour12: true
     }).toUpperCase();
     
-    // Sort clauses — use sortOrder if set, fall back to clauseNumber for legacy data
+    // Preserve the order clauses were assigned to the position/contract — the array
+    // order IS the intended render order (set when admin built the position from clause groups).
+    // Sorting by sortOrder/clauseNumber here would override the admin's explicit ordering.
     const sortedClauses = contract.clauses
-      .filter(clause => clause.clauseId)
-      .sort((a, b) => {
-        const aOrder = a.clauseId.sortOrder ?? a.clauseId.clauseNumber;
-        const bOrder = b.clauseId.sortOrder ?? b.clauseId.clauseNumber;
-        return aOrder - bOrder;
-      });
+      .filter(clause => clause.clauseId);
 
     console.log(` Sorted clauses: ${sortedClauses.length}`);
 

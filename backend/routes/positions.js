@@ -364,10 +364,10 @@ router.get('/clause-groups/:id/template', verifyToken, async (req, res) => {
 
     if (!group) return res.status(404).json({ message: 'Clause group not found.' });
 
-    // ── Same sort logic as contracts.js ──────────────────────────────────────
-    const sortedClauses = [...(group.clauses || [])].sort((a, b) => {
-      return (a.sortOrder ?? a.clauseNumber) - (b.sortOrder ?? b.clauseNumber);
-    });
+    // Preserve the group's array order — this IS the admin's intended render order.
+    // Do not re-sort by sortOrder/clauseNumber; that global field is for the clause list
+    // view only and should not override the explicit per-group ordering.
+    const sortedClauses = [...(group.clauses || [])];
 
     // ── Helpers copied verbatim from contracts.js ─────────────────────────────
     const escapeLatex = (text) => {
