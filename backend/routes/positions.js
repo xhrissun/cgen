@@ -104,30 +104,20 @@ router.get('/salary-grades/periods', verifyToken, async (req, res) => {
 // GET salary grade by grade value for the active period (used by contract generator preview)
 router.get('/salary-grades/:grade', verifyToken, async (req, res) => {
   try {
-    const gradeParam = req.params.grade;
+    // grade is always stored as String after normalization
+    const gradeParam = String(req.params.grade).trim();
     const today = new Date();
 
-    // Find in active period first
+    // Find in most recent period first (grade stored as string)
     let salaryGrade = await SalaryGrade.findOne({
       grade: gradeParam,
       periodStartDate: { $lte: today },
       $or: [{ periodEndDate: null }, { periodEndDate: { $gte: today } }]
     });
 
-    if (!salaryGrade && !isNaN(gradeParam)) {
-      salaryGrade = await SalaryGrade.findOne({
-        grade: parseFloat(gradeParam),
-        periodStartDate: { $lte: today },
-        $or: [{ periodEndDate: null }, { periodEndDate: { $gte: today } }]
-      });
-    }
-
-    // Fallback: most recent period
+    // Fallback: most recent period regardless of date
     if (!salaryGrade) {
       salaryGrade = await SalaryGrade.findOne({ grade: gradeParam }).sort({ periodStartDate: -1 });
-    }
-    if (!salaryGrade && !isNaN(gradeParam)) {
-      salaryGrade = await SalaryGrade.findOne({ grade: parseFloat(gradeParam) }).sort({ periodStartDate: -1 });
     }
 
     if (!salaryGrade) {
@@ -171,8 +161,7 @@ router.post('/salary-grades/bulk', verifyToken, async (req, res) => {
 
     // Insert all grade rows for the new period
     const docs = grades.map(g => {
-      const gNum = parseFloat(g.grade);
-      const gradeVal = isNaN(gNum) ? g.grade : gNum;
+      const gradeVal = String(g.grade).trim();
       return {
       grade:              gradeVal,
       isSpecialSalaryGrade: g.isSpecialSalaryGrade || false,
@@ -224,9 +213,8 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
       return res.status(400).json({ message: 'periodStartDate is required.' });
     }
 
-    // Normalize grade — always store as number so sorting works consistently
-    const gradeNum = parseFloat(grade);
-    const gradeValue = isNaN(gradeNum) ? grade : gradeNum;
+    // Always store grade as String — covers numeric ("1","10") and named ("LR-RIZAL")
+    const gradeValue = String(grade).trim();
 
     // Use UTC day range to avoid timezone mismatches in date comparison
     const dayStart = new Date(periodStartDate);
@@ -234,19 +222,11 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
     const dayEnd = new Date(periodStartDate);
     dayEnd.setUTCHours(23, 59, 59, 999);
 
-    // Check for duplicate — match both numeric and string variants of the grade
-    // because old records may have been stored as strings before normalization
-    const gradeVariants = isNaN(gradeNum)
-      ? [gradeValue]
-      : [gradeNum, String(gradeNum), String(grade)];
-
+    // Check for duplicate — grade is now always String so single query suffices
     const existing = await SalaryGrade.findOne({
-      grade: { $in: gradeVariants },
+      grade: gradeValue,
       periodStartDate: { $gte: dayStart, $lte: dayEnd }
     });
-    console.log('[DUPLICATE CHECK] grade:', gradeValue, 'variants:', gradeVariants);
-    console.log('[DUPLICATE CHECK] dayStart:', dayStart, 'dayEnd:', dayEnd);
-    console.log('[DUPLICATE CHECK] found:', existing ? JSON.stringify({ grade: existing.grade, periodStartDate: existing.periodStartDate, _id: existing._id }) : null);
     if (existing) {
       return res.status(409).json({
         message: `Salary Grade ${gradeValue} already exists for the period starting ${periodStartDate}. Switch to "Add to Current Set" mode or use a different Period Start Date.`
@@ -288,10 +268,9 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
     await newSalaryGrade.save();
     res.status(201).json(newSalaryGrade);
   } catch (error) {
-    // Duplicate key fallback (race condition)
     if (error.code === 11000) {
       return res.status(409).json({
-        message: `Salary Grade ${req.body.grade} already exists for this period start date. Use a different Period Start Date or edit the existing entry.`,
+        message: `Salary Grade ${req.body.grade} already exists for this period. Please run the normalization migration (node backend/scripts/normalizeSalaryGrades.js) to fix legacy data, then retry.`,
         error: error.message
       });
     }

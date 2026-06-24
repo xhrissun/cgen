@@ -1,7 +1,5 @@
 // FILE: cgen-main/backend/models/SalaryGrade.js
 
-// FILE: cgen-main/backend/models/SalaryGrade.js
-
 import mongoose from 'mongoose';
 
 /**
@@ -11,21 +9,24 @@ import mongoose from 'mongoose';
  * All grades that belong to the same period share the same
  * periodStartDate and periodEndDate — they are one "set".
  *
- * When contract generation needs the rate for Grade 10 on a given
- * contract start date, it calls:
- *   SalaryGrade.getRateForGradeAndDate(grade, contractStartDate)
- * which picks the document whose period covers that date.
+ * IMPORTANT: `grade` is always stored as a STRING (e.g. "1", "10", "6.5", "LR-RIZAL").
+ * Using String instead of Mixed ensures the unique compound index
+ * { grade, periodStartDate } behaves consistently regardless of how
+ * the value was originally inserted (number vs string in legacy data).
+ *
+ * Sorting is done in application code using parseFloat() with non-numeric
+ * grades sorted alphabetically after numeric ones.
  */
 const salaryGradeSchema = new mongoose.Schema({
 
-  // Grade identifier (1–24 or special like 6.5, 6.6)
+  // Grade identifier — always a String: "1"–"24", "6.5", "LR-RIZAL", etc.
   grade: {
-    type: mongoose.Schema.Types.Mixed,
+    type: String,
     required: true
   },
 
   // ── Period this grade entry belongs to ──────────────────────────────
-  // All grades in the same "set" share these two dates.
+  // All grades in the same "set" share these two dates (stored as UTC midnight).
   periodStartDate: {
     type: Date,
     required: true
@@ -62,10 +63,14 @@ const salaryGradeSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-// Compound index: one grade per period (no duplicates within the same set)
+// Compound index: one grade string per period — unambiguous because grade is always String
 salaryGradeSchema.index({ grade: 1, periodStartDate: 1 }, { unique: true });
 
 salaryGradeSchema.pre('save', function (next) {
+  // Ensure grade is always stored as string
+  if (typeof this.grade !== 'string') {
+    this.grade = String(this.grade);
+  }
   this.updatedAt = new Date();
   next();
 });
@@ -78,14 +83,11 @@ salaryGradeSchema.pre('save', function (next) {
 salaryGradeSchema.statics.getRateForGradeAndDate = async function (grade, contractDate) {
   const target = new Date(contractDate);
 
-  // Try exact numeric match first, then string
-  const gradeNum = parseFloat(grade);
-  const gradeQuery = isNaN(gradeNum)
-    ? { grade }
-    : { grade: { $in: [grade, gradeNum] } };
+  // Always query as string — covers both "10" and 10 passed in from callers
+  const gradeStr = String(grade);
 
   // Find all period entries for this grade, sorted newest-first
-  const docs = await this.find(gradeQuery).sort({ periodStartDate: -1 });
+  const docs = await this.find({ grade: gradeStr }).sort({ periodStartDate: -1 });
 
   if (!docs.length) return null;
 
@@ -100,7 +102,7 @@ salaryGradeSchema.statics.getRateForGradeAndDate = async function (grade, contra
     if (afterStart && beforeEnd) return doc;
   }
 
-  // Fallback: use the most recent period (covers contracts before any set existed)
+  // Fallback: use the most recent period
   return docs[0];
 };
 
