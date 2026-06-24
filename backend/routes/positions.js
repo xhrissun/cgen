@@ -244,6 +244,9 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
       grade: { $in: gradeVariants },
       periodStartDate: { $gte: dayStart, $lte: dayEnd }
     });
+    console.log('[DUPLICATE CHECK] grade:', gradeValue, 'variants:', gradeVariants);
+    console.log('[DUPLICATE CHECK] dayStart:', dayStart, 'dayEnd:', dayEnd);
+    console.log('[DUPLICATE CHECK] found:', existing ? JSON.stringify({ grade: existing.grade, periodStartDate: existing.periodStartDate, _id: existing._id }) : null);
     if (existing) {
       return res.status(409).json({
         message: `Salary Grade ${gradeValue} already exists for the period starting ${periodStartDate}. Switch to "Add to Current Set" mode or use a different Period Start Date.`
