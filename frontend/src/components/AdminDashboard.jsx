@@ -1173,7 +1173,8 @@ function AdminDashboard({ user }) {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {salaryGrades
+                      {[...salaryGrades]
+                        .sort((a, b) => parseFloat(a.grade) - parseFloat(b.grade))
                         .filter((sg) => {
                           if (!searchTerm) return true;
                           const search = searchTerm.toLowerCase();

@@ -74,6 +74,7 @@ router.get('/salary-grades/all', verifyToken, async (req, res) => {
       }
     }
 
+    // Always sort by grade number ascending (parseFloat handles specials like 6.5, 6.6)
     docs.sort((a, b) => parseFloat(a.grade) - parseFloat(b.grade));
     res.json(docs);
   } catch (error) {
@@ -207,6 +208,7 @@ router.post('/salary-grades/bulk', verifyToken, async (req, res) => {
 
 // POST — add one grade row to a set.
 // Body must include periodStartDate (and optionally periodEndDate, periodLabel).
+// Also closes any previously open period whose periodStartDate < the new periodStartDate.
 router.post('/salary-grades', verifyToken, async (req, res) => {
   try {
     const {
@@ -220,10 +222,12 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
       return res.status(400).json({ message: 'periodStartDate is required.' });
     }
 
+    const newStart = new Date(periodStartDate);
+
     // Check for duplicate before attempting insert — gives a clear error message
     const existing = await SalaryGrade.findOne({
       grade,
-      periodStartDate: new Date(periodStartDate)
+      periodStartDate: newStart
     });
     if (existing) {
       return res.status(409).json({
@@ -231,11 +235,21 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
       });
     }
 
+    // Close any previously open period (periodEndDate = null) whose start is before
+    // the new period — set its endDate to the day before the new period starts.
+    const dayBefore = new Date(newStart);
+    dayBefore.setDate(dayBefore.getDate() - 1);
+
+    await SalaryGrade.updateMany(
+      { periodEndDate: null, periodStartDate: { $lt: newStart } },
+      { $set: { periodEndDate: dayBefore } }
+    );
+
     const newSalaryGrade = new SalaryGrade({
       grade,
       isSpecialSalaryGrade: isSpecialSalaryGrade || false,
       description: description || '',
-      periodStartDate: new Date(periodStartDate),
+      periodStartDate: newStart,
       periodEndDate:   periodEndDate ? new Date(periodEndDate) : null,
       periodLabel:     periodLabel || '',
       basicSalary:                parseFloat(basicSalary),
