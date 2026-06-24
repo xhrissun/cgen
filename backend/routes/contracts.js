@@ -266,25 +266,14 @@ router.post('/', verifyToken, async (req, res) => {
     
     console.log(`📋 Creating contract for SG: ${salaryGrade}, Period: ${startDate} to ${endDate}`);
     
-    // 1. GET SALARY GRADE DATA (all manually entered by admin)
-    let salaryGradeDoc = await SalaryGrade.findOne({ grade: salaryGrade });
+    // 1. GET SALARY GRADE DATA — pick the set whose period covers the contract start date
+    const salaryGradeData = await SalaryGrade.getRateForGradeAndDate(salaryGrade, startDate);
 
-    // If not found and the param is a valid number, try as number
-    if (!salaryGradeDoc && !isNaN(salaryGrade)) {
-      salaryGradeDoc = await SalaryGrade.findOne({ grade: parseFloat(salaryGrade) });
-    }
-
-    if (!salaryGradeDoc) {
+    if (!salaryGradeData) {
       return res.status(404).json({ message: `Salary grade ${salaryGrade} not found` });
     }
 
-    // Use the rate snapshot effective on the contract start date so that
-    // updating the salary grade table for a future date never overwrites
-    // the values that were in effect for past or in-progress contracts.
-    const salaryGradeData = salaryGradeDoc.getRateForDate(startDate);
-    salaryGradeData.isSpecialSalaryGrade = salaryGradeDoc.isSpecialSalaryGrade;
-
-    console.log(`✓ Salary Grade ${salaryGrade} found — using rate effective ${new Date(salaryGradeData.effectiveDate).toISOString().split('T')[0]} for contract start ${startDate}`);
+    console.log(`✓ Salary Grade ${salaryGrade} found — using period ${new Date(salaryGradeData.periodStartDate).toISOString().split('T')[0]} → ${salaryGradeData.periodEndDate ? new Date(salaryGradeData.periodEndDate).toISOString().split('T')[0] : 'open'} for contract start ${startDate}`);
     
     // 2. GET HOLIDAYS for entire months in contract period
     const contractStart = new Date(startDate);

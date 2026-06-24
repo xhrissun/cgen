@@ -154,40 +154,35 @@ function SalaryGradeDetailsModal({ salaryGrade, onClose }) {
             </div>
           )}
 
-          {/* Rate History */}
-          {salaryGrade.rateHistory && salaryGrade.rateHistory.length > 0 && (
-            <div>
-              <h4 className="text-lg font-semibold mb-3 text-gray-700">📅 Rate History</h4>
-              <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-600">Effective Date</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Basic Salary</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Monthly Contract</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Monthly Premium</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-600">Note</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {[...salaryGrade.rateHistory]
-                      .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate))
-                      .map((snap, idx) => (
-                        <tr key={snap._id || idx} className={idx === 0 ? 'bg-blue-50 font-semibold' : ''}>
-                          <td className="px-4 py-2">
-                            {new Date(snap.effectiveDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}
-                            {idx === 0 && <span className="ml-2 px-1.5 py-0.5 bg-blue-200 text-blue-800 text-xs rounded">current</span>}
-                          </td>
-                          <td className="px-4 py-2 text-right">₱{(snap.basicSalary || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
-                          <td className="px-4 py-2 text-right">₱{(snap.monthlySalaryAsPerContract || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
-                          <td className="px-4 py-2 text-right">₱{(snap.monthlyPremium || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
-                          <td className="px-4 py-2 text-gray-500 italic">{snap.note || '—'}</td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
+          {/* Period Info */}
+          {salaryGrade.periodStartDate && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-blue-800 uppercase tracking-wide mb-2">📅 Salary Grade Period</h4>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Start Date</span>
+                  <p className="font-semibold text-gray-800">
+                    {new Date(salaryGrade.periodStartDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-500">End Date</span>
+                  <p className="font-semibold text-gray-800">
+                    {salaryGrade.periodEndDate
+                      ? new Date(salaryGrade.periodEndDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })
+                      : 'Open (currently active)'}
+                  </p>
+                </div>
+                {salaryGrade.periodLabel && (
+                  <div className="col-span-2">
+                    <span className="text-gray-500">Period Label</span>
+                    <p className="font-semibold text-gray-800">{salaryGrade.periodLabel}</p>
+                  </div>
+                )}
               </div>
-              <p className="text-xs text-gray-500 mt-2">Contract generation automatically uses the rate in effect on the contract's start date.</p>
+              <p className="text-xs text-blue-600 mt-2">
+                Contracts with a start date within this period will use these rates.
+              </p>
             </div>
           )}
         </div>

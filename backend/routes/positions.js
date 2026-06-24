@@ -25,63 +25,145 @@ const router = express.Router();
 // ⚠️ IMPORTANT: Specific routes MUST come BEFORE dynamic routes like /:id
 
 // Salary Grades Routes (specific paths first)
-router.get('/salary-grades/all', verifyToken, async (req, res) => { 
+// ─────────────────────────────────────────────────────────────────────────────
+// SALARY GRADE ROUTES  (period/set-based)
+//
+// A "set" = all grade rows that share the same periodStartDate + periodEndDate.
+// When you add a new set, every grade in it gets those dates.
+// Contract generation picks the set whose period covers the contract start date.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET all grades — optionally filtered by ?periodStart=YYYY-MM-DD
+// If no filter, returns the ACTIVE set (today falls within the period).
+// If ?all=true, returns every document grouped by period.
+router.get('/salary-grades/all', verifyToken, async (req, res) => {
   try {
-    const salaryGrades = await SalaryGrade.find().lean();
-    
-    // Sort numerically by grade
-    salaryGrades.sort((a, b) => {
-      const gradeA = parseFloat(a.grade);
-      const gradeB = parseFloat(b.grade);
-      return gradeA - gradeB;
-    });
-    
-    res.json(salaryGrades);
+    const { periodStart, all } = req.query;
+
+    if (all === 'true') {
+      // Return every document; frontend can group by periodStartDate
+      const docs = await SalaryGrade.find().lean();
+      docs.sort((a, b) => parseFloat(a.grade) - parseFloat(b.grade));
+      return res.json(docs);
+    }
+
+    let docs;
+
+    if (periodStart) {
+      // Return the set that starts on the given date
+      docs = await SalaryGrade.find({ periodStartDate: new Date(periodStart) }).lean();
+    } else {
+      // Return the currently active set (today is within the period)
+      const today = new Date();
+
+      // Active: started on or before today, and either no end date or end date >= today
+      docs = await SalaryGrade.find({
+        periodStartDate: { $lte: today },
+        $or: [
+          { periodEndDate: null },
+          { periodEndDate: { $gte: today } }
+        ]
+      }).lean();
+
+      // If no active set found, fall back to the most recent set
+      if (!docs.length) {
+        const latest = await SalaryGrade.find().sort({ periodStartDate: -1 }).limit(1).lean();
+        if (latest.length) {
+          docs = await SalaryGrade.find({ periodStartDate: latest[0].periodStartDate }).lean();
+        }
+      }
+    }
+
+    docs.sort((a, b) => parseFloat(a.grade) - parseFloat(b.grade));
+    res.json(docs);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Get salary grade by grade value (e.g., "10", "6.5")
+// GET list of all distinct periods (for the period switcher in the UI)
+router.get('/salary-grades/periods', verifyToken, async (req, res) => {
+  try {
+    const periods = await SalaryGrade.aggregate([
+      {
+        $group: {
+          _id: '$periodStartDate',
+          periodStartDate: { $first: '$periodStartDate' },
+          periodEndDate:   { $first: '$periodEndDate' },
+          periodLabel:     { $first: '$periodLabel' },
+          count:           { $sum: 1 }
+        }
+      },
+      { $sort: { periodStartDate: -1 } }
+    ]);
+    res.json(periods);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// GET salary grade by grade value for the active period (used by contract generator preview)
 router.get('/salary-grades/:grade', verifyToken, async (req, res) => {
   try {
     const gradeParam = req.params.grade;
-    
-    // Try to find by string first, then by number
-    let salaryGrade = await SalaryGrade.findOne({ grade: gradeParam });
-    
-    // If not found and the param is a valid number, try as number
+    const today = new Date();
+
+    // Find in active period first
+    let salaryGrade = await SalaryGrade.findOne({
+      grade: gradeParam,
+      periodStartDate: { $lte: today },
+      $or: [{ periodEndDate: null }, { periodEndDate: { $gte: today } }]
+    });
+
     if (!salaryGrade && !isNaN(gradeParam)) {
-      salaryGrade = await SalaryGrade.findOne({ grade: parseFloat(gradeParam) });
+      salaryGrade = await SalaryGrade.findOne({
+        grade: parseFloat(gradeParam),
+        periodStartDate: { $lte: today },
+        $or: [{ periodEndDate: null }, { periodEndDate: { $gte: today } }]
+      });
     }
-    
+
+    // Fallback: most recent period
+    if (!salaryGrade) {
+      salaryGrade = await SalaryGrade.findOne({ grade: gradeParam }).sort({ periodStartDate: -1 });
+    }
+    if (!salaryGrade && !isNaN(gradeParam)) {
+      salaryGrade = await SalaryGrade.findOne({ grade: parseFloat(gradeParam) }).sort({ periodStartDate: -1 });
+    }
+
     if (!salaryGrade) {
       return res.status(404).json({ message: `Salary grade ${gradeParam} not found` });
     }
-    
+
     res.json(salaryGrade);
   } catch (error) {
-    console.error('Error fetching salary grade:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
+// POST — add one grade row to a set.
+// Body must include periodStartDate (and optionally periodEndDate, periodLabel).
+// Typically the frontend sends an entire set in bulk via POST /salary-grades/bulk.
 router.post('/salary-grades', verifyToken, async (req, res) => {
   try {
     const {
       grade, isSpecialSalaryGrade, description,
       basicSalary, grossPremium, deductions,
       monthlySalaryAsPerContract, dailySalaryAsPerContract, monthlyPremium,
-      effectiveDate, note
+      periodStartDate, periodEndDate, periodLabel, note
     } = req.body;
 
-    // Require effectiveDate
-    if (!effectiveDate) {
-      return res.status(400).json({ message: 'effectiveDate is required when creating a salary grade.' });
+    if (!periodStartDate) {
+      return res.status(400).json({ message: 'periodStartDate is required.' });
     }
 
-    const snapshot = {
-      effectiveDate: new Date(effectiveDate),
+    const newSalaryGrade = new SalaryGrade({
+      grade,
+      isSpecialSalaryGrade: isSpecialSalaryGrade || false,
+      description: description || '',
+      periodStartDate: new Date(periodStartDate),
+      periodEndDate:   periodEndDate ? new Date(periodEndDate) : null,
+      periodLabel:     periodLabel || '',
       basicSalary:                parseFloat(basicSalary),
       grossPremium:               parseFloat(grossPremium) || 0,
       deductions: {
@@ -93,13 +175,6 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
       dailySalaryAsPerContract:   parseFloat(dailySalaryAsPerContract),
       monthlyPremium:             parseFloat(monthlyPremium) || 0,
       note: note || ''
-    };
-
-    const newSalaryGrade = new SalaryGrade({
-      grade,
-      isSpecialSalaryGrade: isSpecialSalaryGrade || false,
-      description: description || '',
-      rateHistory: [snapshot]
     });
 
     await newSalaryGrade.save();
@@ -109,147 +184,102 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
   }
 });
 
-// PUT /salary-grades/:id
-// Instead of overwriting, appends a new rate snapshot with its effectiveDate.
-// Existing snapshots (and any contracts generated against past dates) are preserved.
-router.put('/salary-grades/:id', verifyToken, async (req, res) => {
+// POST /salary-grades/bulk — saves an entire set of grade rows at once.
+// Body: { grades: [...], periodStartDate, periodEndDate, periodLabel }
+// Before inserting, closes the previous active period's endDate to the day before
+// the new period starts (so there are no gaps or overlaps).
+router.post('/salary-grades/bulk', verifyToken, async (req, res) => {
   try {
-    const {
-      basicSalary, grossPremium, deductions,
-      monthlySalaryAsPerContract, dailySalaryAsPerContract, monthlyPremium,
-      effectiveDate, note,
-      // top-level non-rate fields
-      isSpecialSalaryGrade, description
-    } = req.body;
+    const { grades, periodStartDate, periodEndDate, periodLabel } = req.body;
 
-    // Require effectiveDate for rate updates
-    if (!effectiveDate) {
-      return res.status(400).json({ message: 'effectiveDate is required when updating salary grade rates.' });
+    if (!periodStartDate) {
+      return res.status(400).json({ message: 'periodStartDate is required.' });
+    }
+    if (!grades || !grades.length) {
+      return res.status(400).json({ message: 'grades array is required.' });
     }
 
-    const salaryGrade = await SalaryGrade.findById(req.params.id);
-    if (!salaryGrade) {
-      return res.status(404).json({ message: 'Salary grade not found' });
-    }
+    const newStart = new Date(periodStartDate);
+    const newEnd   = periodEndDate ? new Date(periodEndDate) : null;
 
-    // Prevent backdating: effectiveDate must not be earlier than the most
-    // recent existing snapshot to avoid silently changing past calculations.
-    if (salaryGrade.rateHistory && salaryGrade.rateHistory.length > 0) {
-      const latestSnapshotDate = salaryGrade.rateHistory.reduce((max, s) => {
-        const d = new Date(s.effectiveDate);
-        return d > max ? d : max;
-      }, new Date(0));
+    // Close the previous open period's endDate to the day before newStart
+    const dayBefore = new Date(newStart);
+    dayBefore.setDate(dayBefore.getDate() - 1);
 
-      const incoming = new Date(effectiveDate);
-      if (incoming < latestSnapshotDate) {
-        return res.status(400).json({
-          message: `effectiveDate (${incoming.toISOString().split('T')[0]}) cannot be earlier than the most recent rate entry (${latestSnapshotDate.toISOString().split('T')[0]}). Past salary rates are protected.`
-        });
-      }
-
-      // If the exact same date already exists, replace that snapshot instead
-      // of duplicating (idempotent re-save).
-      const sameDate = salaryGrade.rateHistory.find(
-        s => new Date(s.effectiveDate).toISOString().split('T')[0] === new Date(effectiveDate).toISOString().split('T')[0]
-      );
-      if (sameDate) {
-        sameDate.basicSalary                = parseFloat(basicSalary);
-        sameDate.grossPremium               = parseFloat(grossPremium) || 0;
-        sameDate.deductions                 = {
-          sss:        parseFloat(deductions?.sss)        || sameDate.deductions.sss,
-          pagibig:    parseFloat(deductions?.pagibig)    || sameDate.deductions.pagibig,
-          philhealth: parseFloat(deductions?.philhealth) || sameDate.deductions.philhealth
-        };
-        sameDate.monthlySalaryAsPerContract = parseFloat(monthlySalaryAsPerContract);
-        sameDate.dailySalaryAsPerContract   = parseFloat(dailySalaryAsPerContract);
-        sameDate.monthlyPremium             = parseFloat(monthlyPremium) || 0;
-        sameDate.note                       = note || '';
-      } else {
-        salaryGrade.rateHistory.push({
-          effectiveDate: new Date(effectiveDate),
-          basicSalary:                parseFloat(basicSalary),
-          grossPremium:               parseFloat(grossPremium) || 0,
-          deductions: {
-            sss:        parseFloat(deductions?.sss)        || 475.00,
-            pagibig:    parseFloat(deductions?.pagibig)    || 400.00,
-            philhealth: parseFloat(deductions?.philhealth) || 0
-          },
-          monthlySalaryAsPerContract: parseFloat(monthlySalaryAsPerContract),
-          dailySalaryAsPerContract:   parseFloat(dailySalaryAsPerContract),
-          monthlyPremium:             parseFloat(monthlyPremium) || 0,
-          note: note || ''
-        });
-      }
-    } else {
-      // No rateHistory yet — migrate flat fields into history
-      salaryGrade.rateHistory = [{
-        effectiveDate: new Date(effectiveDate),
-        basicSalary:                parseFloat(basicSalary),
-        grossPremium:               parseFloat(grossPremium) || 0,
-        deductions: {
-          sss:        parseFloat(deductions?.sss)        || 475.00,
-          pagibig:    parseFloat(deductions?.pagibig)    || 400.00,
-          philhealth: parseFloat(deductions?.philhealth) || 0
-        },
-        monthlySalaryAsPerContract: parseFloat(monthlySalaryAsPerContract),
-        dailySalaryAsPerContract:   parseFloat(dailySalaryAsPerContract),
-        monthlyPremium:             parseFloat(monthlyPremium) || 0,
-        note: note || ''
-      }];
-    }
-
-    // Update non-rate fields if provided
-    if (isSpecialSalaryGrade !== undefined) salaryGrade.isSpecialSalaryGrade = isSpecialSalaryGrade;
-    if (description !== undefined) salaryGrade.description = description;
-
-    await salaryGrade.save(); // pre-save hook syncs flat fields from latest snapshot
-    res.json(salaryGrade);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
-// DELETE a specific rate snapshot from rateHistory (admin only, for corrections)
-router.delete('/salary-grades/:id/history/:snapshotId', verifyToken, async (req, res) => {
-  try {
-    const salaryGrade = await SalaryGrade.findById(req.params.id);
-    if (!salaryGrade) return res.status(404).json({ message: 'Salary grade not found' });
-
-    if (salaryGrade.rateHistory.length <= 1) {
-      return res.status(400).json({ message: 'Cannot remove the only rate entry. Delete the entire salary grade instead.' });
-    }
-
-    salaryGrade.rateHistory = salaryGrade.rateHistory.filter(
-      s => s._id.toString() !== req.params.snapshotId
+    await SalaryGrade.updateMany(
+      { periodEndDate: null, periodStartDate: { $lt: newStart } },
+      { $set: { periodEndDate: dayBefore } }
     );
 
-    await salaryGrade.save();
-    res.json({ message: 'Rate snapshot removed', salaryGrade });
+    // Insert all grade rows for the new period
+    const docs = grades.map(g => ({
+      grade:              g.grade,
+      isSpecialSalaryGrade: g.isSpecialSalaryGrade || false,
+      description:        g.description || '',
+      periodStartDate:    newStart,
+      periodEndDate:      newEnd,
+      periodLabel:        periodLabel || '',
+      basicSalary:                parseFloat(g.basicSalary),
+      grossPremium:               parseFloat(g.grossPremium) || 0,
+      deductions: {
+        sss:        parseFloat(g.deductions?.sss)        || 475.00,
+        pagibig:    parseFloat(g.deductions?.pagibig)    || 400.00,
+        philhealth: parseFloat(g.deductions?.philhealth) || 0
+      },
+      monthlySalaryAsPerContract: parseFloat(g.monthlySalaryAsPerContract),
+      dailySalaryAsPerContract:   parseFloat(g.dailySalaryAsPerContract),
+      monthlyPremium:             parseFloat(g.monthlyPremium) || 0,
+      note: g.note || ''
+    }));
+
+    const inserted = await SalaryGrade.insertMany(docs);
+    res.status(201).json({ message: `${inserted.length} salary grade(s) saved for period starting ${periodStartDate}.`, grades: inserted });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
+// PUT /salary-grades/:id — update a single grade row (rates or period dates)
+router.put('/salary-grades/:id', verifyToken, async (req, res) => {
+  try {
+    const doc = await SalaryGrade.findByIdAndUpdate(
+      req.params.id,
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!doc) return res.status(404).json({ message: 'Salary grade not found' });
+    res.json(doc);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// DELETE entire period set by periodStartDate
+router.delete('/salary-grades/period/:periodStart', verifyToken, async (req, res) => {
+  try {
+    const result = await SalaryGrade.deleteMany({ periodStartDate: new Date(req.params.periodStart) });
+    res.json({ message: `Deleted ${result.deletedCount} grade(s) for period starting ${req.params.periodStart}.` });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// DELETE a single grade row by _id
 router.delete('/salary-grades/:id', verifyToken, async (req, res) => {
   try {
-    // Check if any positions are using this salary grade
-    const positionsUsingGrade = await Position.find({ 
-      salaryGrade: (await SalaryGrade.findById(req.params.id)).grade 
-    });
-    
+    const sg = await SalaryGrade.findById(req.params.id);
+    if (!sg) return res.status(404).json({ message: 'Salary grade not found' });
+
+    // Check if any positions reference this grade
+    const positionsUsingGrade = await Position.find({ salaryGrade: sg.grade });
     if (positionsUsingGrade.length > 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: `Cannot delete salary grade. It is currently used by ${positionsUsingGrade.length} position(s).`,
         positions: positionsUsingGrade.map(p => p.title)
       });
     }
-    
-    const salaryGrade = await SalaryGrade.findByIdAndDelete(req.params.id);
-    
-    if (!salaryGrade) {
-      return res.status(404).json({ message: 'Salary grade not found' });
-    }
-    
+
+    await SalaryGrade.findByIdAndDelete(req.params.id);
     res.json({ message: 'Salary grade deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

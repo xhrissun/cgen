@@ -1,150 +1,107 @@
 // FILE: cgen-main/backend/models/SalaryGrade.js
 
-// backend/models/SalaryGrade.js
+// FILE: cgen-main/backend/models/SalaryGrade.js
 
 import mongoose from 'mongoose';
 
-// Sub-schema for a single rate snapshot
-const salaryGradeSnapshotSchema = new mongoose.Schema({
-  // Effective from this date onward (until the next snapshot)
-  effectiveDate: {
+/**
+ * A SalaryGrade document represents ONE grade entry (e.g. Grade 10)
+ * inside a specific salary grade PERIOD/SET.
+ *
+ * All grades that belong to the same period share the same
+ * periodStartDate and periodEndDate — they are one "set".
+ *
+ * When contract generation needs the rate for Grade 10 on a given
+ * contract start date, it calls:
+ *   SalaryGrade.getRateForGradeAndDate(grade, contractStartDate)
+ * which picks the document whose period covers that date.
+ */
+const salaryGradeSchema = new mongoose.Schema({
+
+  // Grade identifier (1–24 or special like 6.5, 6.6)
+  grade: {
+    type: mongoose.Schema.Types.Mixed,
+    required: true
+  },
+
+  // ── Period this grade entry belongs to ──────────────────────────────
+  // All grades in the same "set" share these two dates.
+  periodStartDate: {
     type: Date,
     required: true
   },
-
-  // B. BASIC SALARY
-  basicSalary: {
-    type: Number,
-    required: true
+  // null/undefined = open-ended (still active)
+  periodEndDate: {
+    type: Date,
+    default: null
   },
 
-  // C. GROSS PREMIUM (15% OF BASIC SALARY)
-  grossPremium: {
-    type: Number,
-    required: true
+  // Optional label for the set, e.g. "FY 2026 Salary Schedule"
+  periodLabel: {
+    type: String,
+    default: ''
   },
 
-  // D. DEDUCTIONS
+  // ── Rate fields ──────────────────────────────────────────────────────
+  isSpecialSalaryGrade: { type: Boolean, default: false },
+  description:          { type: String,  default: '' },
+
+  basicSalary:                { type: Number, required: true },
+  grossPremium:               { type: Number, default: 0 },
   deductions: {
-    sss:        { type: Number, required: true, default: 475.00 },
-    pagibig:    { type: Number, required: true, default: 400.00 },
-    philhealth: { type: Number, required: true, default: 0 }
+    sss:        { type: Number, default: 475.00 },
+    pagibig:    { type: Number, default: 400.00 },
+    philhealth: { type: Number, default: 0 }
   },
-
-  // E. MONTHLY SALARY AS PER CONTRACT
   monthlySalaryAsPerContract: { type: Number, required: true },
-
-  // F. DAILY SALARY AS PER CONTRACT
   dailySalaryAsPerContract:   { type: Number, required: true },
+  monthlyPremium:             { type: Number, default: 0 },
 
-  // G. MONTHLY PREMIUM
-  monthlyPremium: { type: Number, required: true },
-
-  // Optional note about this revision
-  note: { type: String, default: '' },
-
-  createdAt: { type: Date, default: Date.now }
-}, { _id: true });
-
-const salaryGradeSchema = new mongoose.Schema({
-  // Grade identifier (can be 1-24 or special like 6.5, 6.6)
-  grade: {
-    type: mongoose.Schema.Types.Mixed,
-    required: true,
-    unique: true
-  },
-
-  // Flag for special salary grades (no premium calculation needed)
-  isSpecialSalaryGrade: {
-    type: Boolean,
-    default: false
-  },
-
-  // Optional description
-  description: String,
-
-  // ── NEW: versioned rate history, sorted by effectiveDate ascending ──
-  // The LAST entry (highest effectiveDate) is the "current" rate.
-  // During contract generation we pick the entry whose effectiveDate
-  // is <= the contract startDate.
-  rateHistory: {
-    type: [salaryGradeSnapshotSchema],
-    default: []
-  },
-
-  // ── FLAT FIELDS kept for backward-compat with existing documents ──
-  // They are auto-populated from rateHistory[latest] on save.
-  basicSalary:                { type: Number },
-  grossPremium:               { type: Number },
-  deductions: {
-    sss:        { type: Number },
-    pagibig:    { type: Number },
-    philhealth: { type: Number }
-  },
-  monthlySalaryAsPerContract: { type: Number },
-  dailySalaryAsPerContract:   { type: Number },
-  monthlyPremium:             { type: Number },
-
-  createdAt:  { type: Date, default: Date.now },
-  updatedAt:  { type: Date, default: Date.now }
+  note:      { type: String, default: '' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 });
 
-// ── Helper: get the rate snapshot applicable for a given contract date ──
-salaryGradeSchema.methods.getRateForDate = function (contractDate) {
-  if (!this.rateHistory || this.rateHistory.length === 0) {
-    // Legacy document — return flat fields as a snapshot
-    return {
-      effectiveDate: this.createdAt || new Date(0),
-      basicSalary:                this.basicSalary,
-      grossPremium:               this.grossPremium,
-      deductions:                 this.deductions,
-      monthlySalaryAsPerContract: this.monthlySalaryAsPerContract,
-      dailySalaryAsPerContract:   this.dailySalaryAsPerContract,
-      monthlyPremium:             this.monthlyPremium
-    };
-  }
+// Compound index: one grade per period (no duplicates within the same set)
+salaryGradeSchema.index({ grade: 1, periodStartDate: 1 }, { unique: true });
 
-  const target = new Date(contractDate);
-
-  // Sort ascending and pick the latest whose effectiveDate <= contractDate
-  const sorted = [...this.rateHistory].sort(
-    (a, b) => new Date(a.effectiveDate) - new Date(b.effectiveDate)
-  );
-
-  let applicable = null;
-  for (const snapshot of sorted) {
-    if (new Date(snapshot.effectiveDate) <= target) {
-      applicable = snapshot;
-    }
-  }
-
-  // If no snapshot is on or before the contract date, fall back to the
-  // earliest available (edge case: contract predates all known rates)
-  if (!applicable) {
-    applicable = sorted[0];
-  }
-
-  return applicable;
-};
-
-// ── Keep flat fields in sync with the latest rateHistory entry ──
 salaryGradeSchema.pre('save', function (next) {
   this.updatedAt = new Date();
-
-  if (this.rateHistory && this.rateHistory.length > 0) {
-    const latest = [...this.rateHistory].sort(
-      (a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate)
-    )[0];
-
-    this.basicSalary                = latest.basicSalary;
-    this.grossPremium               = latest.grossPremium;
-    this.deductions                 = latest.deductions;
-    this.monthlySalaryAsPerContract = latest.monthlySalaryAsPerContract;
-    this.dailySalaryAsPerContract   = latest.dailySalaryAsPerContract;
-    this.monthlyPremium             = latest.monthlyPremium;
-  }
-
   next();
 });
+
+/**
+ * Static helper used by contract generation.
+ * Returns the SalaryGrade document for `grade` whose period covers `contractDate`.
+ * Falls back to the most recent period if none explicitly covers the date.
+ */
+salaryGradeSchema.statics.getRateForGradeAndDate = async function (grade, contractDate) {
+  const target = new Date(contractDate);
+
+  // Try exact numeric match first, then string
+  const gradeNum = parseFloat(grade);
+  const gradeQuery = isNaN(gradeNum)
+    ? { grade }
+    : { grade: { $in: [grade, gradeNum] } };
+
+  // Find all period entries for this grade, sorted newest-first
+  const docs = await this.find(gradeQuery).sort({ periodStartDate: -1 });
+
+  if (!docs.length) return null;
+
+  // Pick the entry whose period covers the contract date
+  for (const doc of docs) {
+    const start = new Date(doc.periodStartDate);
+    const end   = doc.periodEndDate ? new Date(doc.periodEndDate) : null;
+
+    const afterStart = target >= start;
+    const beforeEnd  = !end || target <= end;
+
+    if (afterStart && beforeEnd) return doc;
+  }
+
+  // Fallback: use the most recent period (covers contracts before any set existed)
+  return docs[0];
+};
 
 export default mongoose.model('SalaryGrade', salaryGradeSchema);

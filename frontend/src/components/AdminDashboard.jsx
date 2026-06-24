@@ -26,6 +26,8 @@ function AdminDashboard({ user }) {
     pendingUsers: 0
   });
   const [salaryGrades, setSalaryGrades] = useState([]);
+  const [salaryPeriods, setSalaryPeriods] = useState([]); // list of distinct periods
+  const [activePeriodStart, setActivePeriodStart] = useState(null); // currently viewed period
   const [clauses, setClauses] = useState([]);
   const [clauseDragIdx, setClauseDragIdx] = useState(null);
   const [clauseReordering, setClauseReordering] = useState(false);
@@ -33,6 +35,14 @@ function AdminDashboard({ user }) {
   const [showClauseForm, setShowClauseForm] = useState(false);
   const [editingSalaryGrade, setEditingSalaryGrade] = useState(null);
   const [editingClause, setEditingClause] = useState(null);
+
+  // Period-level fields (shared by all grades in a set)
+  const [periodFields, setPeriodFields] = useState({
+    periodStartDate: '',
+    periodEndDate: '',
+    periodLabel: ''
+  });
+
   const [newSalaryGrade, setNewSalaryGrade] = useState({
     grade: '',
     isSpecialSalaryGrade: false,
@@ -46,7 +56,6 @@ function AdminDashboard({ user }) {
     monthlySalaryAsPerContract: '0.00',
     dailySalaryAsPerContract: '0.00',
     monthlyPremium: '0.00',
-    effectiveDate: '',
     note: ''
   });
   const [newClause, setNewClause] = useState({
@@ -292,21 +301,29 @@ function AdminDashboard({ user }) {
     }
   };
 
-  const fetchSalaryGrades = async () => {
+  const fetchSalaryGrades = async (periodStart = null) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await api.get('/api/positions/salary-grades/all', {
+
+      // Fetch all distinct periods for the period switcher
+      const periodsRes = await api.get('/api/positions/salary-grades/periods', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
-      // Sort numerically by grade (client-side backup)
-      const sorted = response.data.sort((a, b) => {
-        const gradeA = parseFloat(a.grade);
-        const gradeB = parseFloat(b.grade);
-        return gradeA - gradeB;
+      setSalaryPeriods(periodsRes.data);
+
+      // Fetch grades for the selected period (or active period if none selected)
+      const params = periodStart ? `?periodStart=${periodStart}` : '';
+      const response = await api.get(`/api/positions/salary-grades/all${params}`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-      
+
+      const sorted = response.data.sort((a, b) => parseFloat(a.grade) - parseFloat(b.grade));
       setSalaryGrades(sorted);
+
+      // Track which period we're viewing
+      if (sorted.length) {
+        setActivePeriodStart(sorted[0].periodStartDate);
+      }
     } catch (error) {
       console.error('Error fetching salary grades:', error);
     }
@@ -453,14 +470,14 @@ function AdminDashboard({ user }) {
   const handleCreateSalaryGrade = async (e) => {
     e.preventDefault();
 
-    if (!newSalaryGrade.effectiveDate) {
-      alert('Please enter an Effective Date for this salary grade.');
+    if (!periodFields.periodStartDate) {
+      alert('Please enter a Period Start Date for this salary grade set.');
       return;
     }
 
     try {
       const token = localStorage.getItem('token');
-      
+
       const payload = {
         ...newSalaryGrade,
         basicSalary: parseFloat(newSalaryGrade.basicSalary),
@@ -473,22 +490,23 @@ function AdminDashboard({ user }) {
         monthlySalaryAsPerContract: parseFloat(newSalaryGrade.monthlySalaryAsPerContract),
         dailySalaryAsPerContract: parseFloat(newSalaryGrade.dailySalaryAsPerContract),
         monthlyPremium: parseFloat(newSalaryGrade.monthlyPremium) || 0,
-        effectiveDate: newSalaryGrade.effectiveDate,
-        note: newSalaryGrade.note || ''
+        periodStartDate: periodFields.periodStartDate,
+        periodEndDate: periodFields.periodEndDate || null,
+        periodLabel: periodFields.periodLabel || ''
       };
-      
+
       if (editingSalaryGrade) {
         await api.put(`/api/positions/salary-grades/${editingSalaryGrade._id}`, payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        alert(`Salary grade updated successfully! New rates effective from ${newSalaryGrade.effectiveDate}.`);
+        alert('Salary grade updated successfully!');
       } else {
         await api.post('/api/positions/salary-grades', payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
         alert('Salary grade created successfully!');
       }
-      
+
       setShowSalaryGradeForm(false);
       setEditingSalaryGrade(null);
       setNewSalaryGrade({
@@ -496,15 +514,10 @@ function AdminDashboard({ user }) {
         isSpecialSalaryGrade: false,
         basicSalary: '',
         grossPremium: '0.00',
-        deductions: {
-          sss: '475.00',
-          pagibig: '400.00',
-          philhealth: '0.00'
-        },
+        deductions: { sss: '475.00', pagibig: '400.00', philhealth: '0.00' },
         monthlySalaryAsPerContract: '0.00',
         dailySalaryAsPerContract: '0.00',
         monthlyPremium: '0.00',
-        effectiveDate: '',
         note: ''
       });
       fetchSalaryGrades();
@@ -515,10 +528,9 @@ function AdminDashboard({ user }) {
 
   const handleEditSalaryGrade = (sg) => {
     setEditingSalaryGrade(sg);
-    
-    // Ensure all fields have values (handle old data structure)
-    const deductions = sg.deductions || { sss: 0, pagibig: 0, philhealth: 0, drugTest: 0 };
-    
+
+    const deductions = sg.deductions || { sss: 0, pagibig: 0, philhealth: 0 };
+
     setNewSalaryGrade({
       grade: sg.grade || '',
       isSpecialSalaryGrade: sg.isSpecialSalaryGrade || false,
@@ -532,17 +544,18 @@ function AdminDashboard({ user }) {
       monthlySalaryAsPerContract: (sg.monthlySalaryAsPerContract || 0).toString(),
       dailySalaryAsPerContract: (sg.dailySalaryAsPerContract || 0).toString(),
       monthlyPremium: (sg.monthlyPremium || 0).toString(),
-      // effectiveDate intentionally blank — admin MUST supply the date
-      // from which the new rates take effect
-      effectiveDate: '',
-      note: ''
+      note: sg.note || ''
     });
-    setShowSalaryGradeForm(true);
 
-    // Smooth scroll to top of page
-    setTimeout(() => {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 100);
+    // Pre-fill period fields from the existing document
+    setPeriodFields({
+      periodStartDate: sg.periodStartDate ? sg.periodStartDate.split('T')[0] : '',
+      periodEndDate:   sg.periodEndDate   ? sg.periodEndDate.split('T')[0]   : '',
+      periodLabel:     sg.periodLabel     || ''
+    });
+
+    setShowSalaryGradeForm(true);
+    setTimeout(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, 100);
   };
 
   const handleDeleteSalaryGrade = async (id) => {
@@ -862,13 +875,43 @@ function AdminDashboard({ user }) {
                           monthlySalaryAsPerContract: '0.00',
                           dailySalaryAsPerContract: '0.00',
                           monthlyPremium: '0.00',
+                          note: ''
                         });
+                        setPeriodFields({ periodStartDate: '', periodEndDate: '', periodLabel: '' });
                       }}
                       className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm whitespace-nowrap"
                     >
                       {showSalaryGradeForm ? 'Cancel' : 'Add Salary Grade'}
                     </button>
                   </div>
+
+                  {/* Period Switcher */}
+                  {salaryPeriods.length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-2 items-center">
+                      <span className="text-sm font-medium text-gray-600">View period:</span>
+                      {salaryPeriods.map(p => {
+                        const startStr = new Date(p.periodStartDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+                        const endStr   = p.periodEndDate
+                          ? new Date(p.periodEndDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' })
+                          : 'present';
+                        const isActive = activePeriodStart && new Date(p.periodStartDate).toISOString() === new Date(activePeriodStart).toISOString();
+                        return (
+                          <button
+                            key={p._id}
+                            onClick={() => fetchSalaryGrades(new Date(p.periodStartDate).toISOString().split('T')[0])}
+                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                              isActive
+                                ? 'bg-blue-600 text-white border-blue-600'
+                                : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'
+                            }`}
+                          >
+                            {p.periodLabel || `${startStr} – ${endStr}`}
+                            <span className="ml-1 text-gray-400">({p.count})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   <div className="mt-6 max-w-md">
                     <input
@@ -1046,35 +1089,50 @@ function AdminDashboard({ user }) {
                       </div>
                     </div>
 
-                    {/* ── EFFECTIVE DATE (required) ── */}
-                    <div className="border border-amber-300 bg-amber-50 rounded-lg p-4 space-y-4">
-                      <div>
-                        <h4 className="text-sm font-semibold text-amber-800 uppercase tracking-wide mb-1">
-                          ⚠ Effective Date <span className="text-red-600">*</span>
-                        </h4>
-                        <p className="text-xs text-amber-700 mb-3">
-                          {editingSalaryGrade
-                            ? 'Enter the date from which these updated rates take effect. Contracts with a start date before this date will continue to use the previous rates.'
-                            : 'Enter the date from which these rates are valid.'}
-                        </p>
-                        <input
-                          type="date"
-                          required
-                          value={newSalaryGrade.effectiveDate}
-                          onChange={e => setNewSalaryGrade({ ...newSalaryGrade, effectiveDate: e.target.value })}
-                          className="w-full px-3 py-2 border border-amber-400 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white text-gray-900 font-medium"
-                        />
+                    {/* ── PERIOD / SET DATES ── */}
+                    <div className="border border-blue-300 bg-blue-50 rounded-lg p-4 space-y-4">
+                      <h4 className="text-sm font-semibold text-blue-800 uppercase tracking-wide">
+                        📅 Salary Grade Period
+                      </h4>
+                      <p className="text-xs text-blue-700">
+                        All grades saved with the same Period Start Date belong to one set.
+                        Contracts use the set whose period covers the contract start date.
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-blue-800 mb-1">
+                            Period Start Date <span className="text-red-600">*</span>
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={periodFields.periodStartDate}
+                            onChange={e => setPeriodFields({ ...periodFields, periodStartDate: e.target.value })}
+                            className="w-full px-3 py-2 border border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 font-medium"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-blue-800 mb-1">
+                            Period End Date <span className="text-gray-500 font-normal">(leave blank if open)</span>
+                          </label>
+                          <input
+                            type="date"
+                            value={periodFields.periodEndDate}
+                            onChange={e => setPeriodFields({ ...periodFields, periodEndDate: e.target.value })}
+                            className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-gray-700"
+                          />
+                        </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-amber-800 mb-1">
-                          Revision Note <span className="text-gray-500 font-normal">(optional)</span>
+                        <label className="block text-sm font-medium text-blue-800 mb-1">
+                          Period Label <span className="text-gray-500 font-normal">(optional)</span>
                         </label>
                         <input
                           type="text"
-                          placeholder="e.g. DBM Circular No. 2025-01 salary adjustment"
-                          value={newSalaryGrade.note}
-                          onChange={e => setNewSalaryGrade({ ...newSalaryGrade, note: e.target.value })}
-                          className="w-full px-3 py-2 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white text-gray-700"
+                          placeholder="e.g. FY 2026 Salary Schedule"
+                          value={periodFields.periodLabel}
+                          onChange={e => setPeriodFields({ ...periodFields, periodLabel: e.target.value })}
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-gray-700"
                         />
                       </div>
                     </div>
