@@ -172,8 +172,11 @@ router.post('/salary-grades/bulk', verifyToken, async (req, res) => {
     );
 
     // Insert all grade rows for the new period
-    const docs = grades.map(g => ({
-      grade:              g.grade,
+    const docs = grades.map(g => {
+      const gNum = parseFloat(g.grade);
+      const gradeVal = isNaN(gNum) ? g.grade : gNum;
+      return {
+      grade:              gradeVal,
       isSpecialSalaryGrade: g.isSpecialSalaryGrade || false,
       description:        g.description || '',
       periodStartDate:    newStart,
@@ -190,7 +193,8 @@ router.post('/salary-grades/bulk', verifyToken, async (req, res) => {
       dailySalaryAsPerContract:   parseFloat(g.dailySalaryAsPerContract),
       monthlyPremium:             parseFloat(g.monthlyPremium) || 0,
       note: g.note || ''
-    }));
+    };
+    });
 
     const inserted = await SalaryGrade.insertMany(docs);
     res.status(201).json({ message: `${inserted.length} salary grade(s) saved for period starting ${periodStartDate}.`, grades: inserted });
@@ -224,14 +228,18 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
 
     const newStart = new Date(periodStartDate);
 
+    // Normalize grade — always store as number so sorting works consistently
+    const gradeNum = parseFloat(grade);
+    const gradeValue = isNaN(gradeNum) ? grade : gradeNum;
+
     // Check for duplicate before attempting insert — gives a clear error message
     const existing = await SalaryGrade.findOne({
-      grade,
+      grade: gradeValue,
       periodStartDate: newStart
     });
     if (existing) {
       return res.status(409).json({
-        message: `Salary Grade ${grade} already exists for the period starting ${periodStartDate}. Use a different Period Start Date, or edit the existing entry instead.`
+        message: `Salary Grade ${gradeValue} already exists for the period starting ${periodStartDate}. Switch to "Add to Current Set" mode or use a different Period Start Date.`
       });
     }
 
@@ -246,7 +254,7 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
     );
 
     const newSalaryGrade = new SalaryGrade({
-      grade,
+      grade: gradeValue,
       isSpecialSalaryGrade: isSpecialSalaryGrade || false,
       description: description || '',
       periodStartDate: newStart,

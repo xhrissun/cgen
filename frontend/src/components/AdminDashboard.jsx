@@ -37,6 +37,7 @@ function AdminDashboard({ user }) {
   const [editingClause, setEditingClause] = useState(null);
 
   // Period-level fields (shared by all grades in a set)
+  const [isNewSet, setIsNewSet] = useState(true);
   const [periodFields, setPeriodFields] = useState({
     periodStartDate: '',
     periodEndDate: '',
@@ -866,8 +867,10 @@ function AdminDashboard({ user }) {
                     </div>
                     <button
                       onClick={() => {
-                        setShowSalaryGradeForm(!showSalaryGradeForm);
+                        const opening = !showSalaryGradeForm;
+                        setShowSalaryGradeForm(opening);
                         setEditingSalaryGrade(null);
+                        setIsNewSet(true);
                         setNewSalaryGrade({
                           grade: '',
                           isSpecialSalaryGrade: false,
@@ -883,7 +886,20 @@ function AdminDashboard({ user }) {
                           monthlyPremium: '0.00',
                           note: ''
                         });
-                        setPeriodFields({ periodStartDate: '', periodEndDate: '', periodLabel: '' });
+                        // When opening for a new grade in the CURRENT set, pre-fill the active period date
+                        if (opening && activePeriodStart) {
+                          const currentPeriod = salaryPeriods.find(p =>
+                            new Date(p.periodStartDate).toISOString() === new Date(activePeriodStart).toISOString()
+                          );
+                          setPeriodFields({
+                            periodStartDate: new Date(activePeriodStart).toISOString().split('T')[0],
+                            periodEndDate: currentPeriod?.periodEndDate ? new Date(currentPeriod.periodEndDate).toISOString().split('T')[0] : '',
+                            periodLabel: currentPeriod?.periodLabel || ''
+                          });
+                          setIsNewSet(false);
+                        } else {
+                          setPeriodFields({ periodStartDate: '', periodEndDate: '', periodLabel: '' });
+                        }
                       }}
                       className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm whitespace-nowrap"
                     >
@@ -934,9 +950,43 @@ function AdminDashboard({ user }) {
               {/* Form */}
               {showSalaryGradeForm && (
                 <div ref={salaryGradeFormRef} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 lg:p-8 scroll-mt-6">
-                  <h3 className="text-xl font-bold mb-6">
-                    {editingSalaryGrade ? 'Edit Salary Grade' : 'New Salary Grade'}
+                  <h3 className="text-xl font-bold mb-2">
+                    {editingSalaryGrade ? 'Edit Salary Grade' : isNewSet ? 'New Salary Grade — New Set' : 'Add Salary Grade to Current Set'}
                   </h3>
+
+                  {!editingSalaryGrade && (
+                    <div className="flex gap-2 mb-6">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsNewSet(false);
+                          if (activePeriodStart) {
+                            const currentPeriod = salaryPeriods.find(p =>
+                              new Date(p.periodStartDate).toISOString() === new Date(activePeriodStart).toISOString()
+                            );
+                            setPeriodFields({
+                              periodStartDate: new Date(activePeriodStart).toISOString().split('T')[0],
+                              periodEndDate: currentPeriod?.periodEndDate ? new Date(currentPeriod.periodEndDate).toISOString().split('T')[0] : '',
+                              periodLabel: currentPeriod?.periodLabel || ''
+                            });
+                          }
+                        }}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${!isNewSet ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'}`}
+                      >
+                        Add to Current Set
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsNewSet(true);
+                          setPeriodFields({ periodStartDate: '', periodEndDate: '', periodLabel: '' });
+                        }}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${isNewSet ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-green-50'}`}
+                      >
+                        + New Set
+                      </button>
+                    </div>
+                  )}
 
                   <form onSubmit={handleCreateSalaryGrade} className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1114,7 +1164,8 @@ function AdminDashboard({ user }) {
                             required
                             value={periodFields.periodStartDate}
                             onChange={e => setPeriodFields({ ...periodFields, periodStartDate: e.target.value })}
-                            className="w-full px-3 py-2 border border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 font-medium"
+                            readOnly={!isNewSet && !editingSalaryGrade}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 font-medium ${!isNewSet && !editingSalaryGrade ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed' : 'border-blue-400 bg-white text-gray-900'}`}
                           />
                         </div>
                         <div>
