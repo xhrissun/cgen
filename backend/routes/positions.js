@@ -224,16 +224,25 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
       return res.status(400).json({ message: 'periodStartDate is required.' });
     }
 
-    const newStart = new Date(periodStartDate);
-
     // Normalize grade — always store as number so sorting works consistently
     const gradeNum = parseFloat(grade);
     const gradeValue = isNaN(gradeNum) ? grade : gradeNum;
 
-    // Check for duplicate before attempting insert — gives a clear error message
+    // Use UTC day range to avoid timezone mismatches in date comparison
+    const dayStart = new Date(periodStartDate);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd = new Date(periodStartDate);
+    dayEnd.setUTCHours(23, 59, 59, 999);
+
+    // Check for duplicate — match both numeric and string variants of the grade
+    // because old records may have been stored as strings before normalization
+    const gradeVariants = isNaN(gradeNum)
+      ? [gradeValue]
+      : [gradeNum, String(gradeNum), String(grade)];
+
     const existing = await SalaryGrade.findOne({
-      grade: gradeValue,
-      periodStartDate: newStart
+      grade: { $in: gradeVariants },
+      periodStartDate: { $gte: dayStart, $lte: dayEnd }
     });
     if (existing) {
       return res.status(409).json({
@@ -241,15 +250,17 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
       });
     }
 
-    // Close any previously open period (periodEndDate = null) whose start is before
-    // the new period — set its endDate to the day before the new period starts.
-    const dayBefore = new Date(newStart);
+    // Close any previously open period whose start is before the new period
+    const dayBefore = new Date(dayStart);
     dayBefore.setDate(dayBefore.getDate() - 1);
+    dayBefore.setUTCHours(23, 59, 59, 999);
 
     await SalaryGrade.updateMany(
-      { periodEndDate: null, periodStartDate: { $lt: newStart } },
+      { periodEndDate: null, periodStartDate: { $lt: dayStart } },
       { $set: { periodEndDate: dayBefore } }
     );
+
+    const newStart = dayStart;
 
     const newSalaryGrade = new SalaryGrade({
       grade: gradeValue,
