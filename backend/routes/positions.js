@@ -40,11 +40,23 @@ router.get('/salary-grades/all', verifyToken, async (req, res) => {
   try {
     const { periodStart, all } = req.query;
 
+    const sortByGrade = (docs) => {
+      return docs.sort((a, b) => {
+        const aNum = parseFloat(a.grade);
+        const bNum = parseFloat(b.grade);
+        const aIsNum = !isNaN(aNum);
+        const bIsNum = !isNaN(bNum);
+        // Numeric grades first, sorted ascending; non-numeric (e.g. LR-RIZAL) go to the end, sorted alphabetically
+        if (aIsNum && bIsNum) return aNum - bNum;
+        if (aIsNum) return -1;
+        if (bIsNum) return 1;
+        return String(a.grade).localeCompare(String(b.grade));
+      });
+    };
+
     if (all === 'true') {
-      // Return every document; frontend can group by periodStartDate
       const docs = await SalaryGrade.find().lean();
-      docs.sort((a, b) => parseFloat(a.grade) - parseFloat(b.grade));
-      return res.json(docs);
+      return res.json(sortByGrade(docs));
     }
 
     let docs;
@@ -53,30 +65,16 @@ router.get('/salary-grades/all', verifyToken, async (req, res) => {
       // Return the set that starts on the given date
       docs = await SalaryGrade.find({ periodStartDate: new Date(periodStart) }).lean();
     } else {
-      // Return the currently active set (today is within the period)
-      const today = new Date();
-
-      // Active: started on or before today, and either no end date or end date >= today
-      docs = await SalaryGrade.find({
-        periodStartDate: { $lte: today },
-        $or: [
-          { periodEndDate: null },
-          { periodEndDate: { $gte: today } }
-        ]
-      }).lean();
-
-      // If no active set found, fall back to the most recent set
-      if (!docs.length) {
-        const latest = await SalaryGrade.find().sort({ periodStartDate: -1 }).limit(1).lean();
-        if (latest.length) {
-          docs = await SalaryGrade.find({ periodStartDate: latest[0].periodStartDate }).lean();
-        }
+      // Default: show the set with the most recent (latest) periodStartDate
+      const latest = await SalaryGrade.find().sort({ periodStartDate: -1 }).limit(1).lean();
+      if (latest.length) {
+        docs = await SalaryGrade.find({ periodStartDate: latest[0].periodStartDate }).lean();
+      } else {
+        docs = [];
       }
     }
 
-    // Always sort by grade number ascending (parseFloat handles specials like 6.5, 6.6)
-    docs.sort((a, b) => parseFloat(a.grade) - parseFloat(b.grade));
-    res.json(docs);
+    res.json(sortByGrade(docs));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

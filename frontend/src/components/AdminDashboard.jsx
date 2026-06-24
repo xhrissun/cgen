@@ -318,10 +318,21 @@ function AdminDashboard({ user }) {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      const sorted = response.data.sort((a, b) => parseFloat(a.grade) - parseFloat(b.grade));
+      const sortByGrade = (arr) => [...arr].sort((a, b) => {
+        const aNum = parseFloat(a.grade);
+        const bNum = parseFloat(b.grade);
+        const aIsNum = !isNaN(aNum);
+        const bIsNum = !isNaN(bNum);
+        if (aIsNum && bIsNum) return aNum - bNum;
+        if (aIsNum) return -1;
+        if (bIsNum) return 1;
+        return String(a.grade).localeCompare(String(b.grade));
+      });
+
+      const sorted = sortByGrade(response.data);
       setSalaryGrades(sorted);
 
-      // Track which period we're viewing
+      // Set activePeriodStart to the most recent period in the fetched set
       if (sorted.length) {
         setActivePeriodStart(sorted[0].periodStartDate);
       }
@@ -1225,7 +1236,16 @@ function AdminDashboard({ user }) {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {[...salaryGrades]
-                        .sort((a, b) => parseFloat(a.grade) - parseFloat(b.grade))
+                        .sort((a, b) => {
+                          const aNum = parseFloat(a.grade);
+                          const bNum = parseFloat(b.grade);
+                          const aIsNum = !isNaN(aNum);
+                          const bIsNum = !isNaN(bNum);
+                          if (aIsNum && bIsNum) return aNum - bNum;
+                          if (aIsNum) return -1;
+                          if (bIsNum) return 1;
+                          return String(a.grade).localeCompare(String(b.grade));
+                        })
                         .filter((sg) => {
                           if (!searchTerm) return true;
                           const search = searchTerm.toLowerCase();
