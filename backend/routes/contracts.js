@@ -1,3 +1,5 @@
+// FILE: cgen-main/backend/routes/contracts.js
+
 import express from 'express';
 import Contract from '../models/Contract.js';
 import User from '../models/User.js';
@@ -265,18 +267,24 @@ router.post('/', verifyToken, async (req, res) => {
     console.log(`📋 Creating contract for SG: ${salaryGrade}, Period: ${startDate} to ${endDate}`);
     
     // 1. GET SALARY GRADE DATA (all manually entered by admin)
-    let salaryGradeData = await SalaryGrade.findOne({ grade: salaryGrade });
+    let salaryGradeDoc = await SalaryGrade.findOne({ grade: salaryGrade });
 
     // If not found and the param is a valid number, try as number
-    if (!salaryGradeData && !isNaN(salaryGrade)) {
-      salaryGradeData = await SalaryGrade.findOne({ grade: parseFloat(salaryGrade) });
+    if (!salaryGradeDoc && !isNaN(salaryGrade)) {
+      salaryGradeDoc = await SalaryGrade.findOne({ grade: parseFloat(salaryGrade) });
     }
 
-    if (!salaryGradeData) {
+    if (!salaryGradeDoc) {
       return res.status(404).json({ message: `Salary grade ${salaryGrade} not found` });
     }
-    
-    console.log(`✓ Salary Grade ${salaryGrade} found`);
+
+    // Use the rate snapshot effective on the contract start date so that
+    // updating the salary grade table for a future date never overwrites
+    // the values that were in effect for past or in-progress contracts.
+    const salaryGradeData = salaryGradeDoc.getRateForDate(startDate);
+    salaryGradeData.isSpecialSalaryGrade = salaryGradeDoc.isSpecialSalaryGrade;
+
+    console.log(`✓ Salary Grade ${salaryGrade} found — using rate effective ${new Date(salaryGradeData.effectiveDate).toISOString().split('T')[0]} for contract start ${startDate}`);
     
     // 2. GET HOLIDAYS for entire months in contract period
     const contractStart = new Date(startDate);

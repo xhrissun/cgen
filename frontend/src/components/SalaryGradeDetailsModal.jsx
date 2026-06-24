@@ -1,3 +1,5 @@
+// FILE: cgen-main/frontend/src/components/SalaryGradeDetailsModal.jsx
+
 function SalaryGradeDetailsModal({ salaryGrade, onClose }) {
   if (!salaryGrade) return null;
 
@@ -149,6 +151,43 @@ function SalaryGradeDetailsModal({ salaryGrade, onClose }) {
             <div className="bg-yellow-100 p-4 rounded-lg text-sm text-yellow-800">
               <p className="font-semibold mb-1">ℹ️ Special Salary Grade Notice</p>
               <p>This is a special salary grade with no premium calculation. Only the basic salary applies to contracts using this grade.</p>
+            </div>
+          )}
+
+          {/* Rate History */}
+          {salaryGrade.rateHistory && salaryGrade.rateHistory.length > 0 && (
+            <div>
+              <h4 className="text-lg font-semibold mb-3 text-gray-700">📅 Rate History</h4>
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">Effective Date</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Basic Salary</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Monthly Contract</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Monthly Premium</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">Note</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {[...salaryGrade.rateHistory]
+                      .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate))
+                      .map((snap, idx) => (
+                        <tr key={snap._id || idx} className={idx === 0 ? 'bg-blue-50 font-semibold' : ''}>
+                          <td className="px-4 py-2">
+                            {new Date(snap.effectiveDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}
+                            {idx === 0 && <span className="ml-2 px-1.5 py-0.5 bg-blue-200 text-blue-800 text-xs rounded">current</span>}
+                          </td>
+                          <td className="px-4 py-2 text-right">₱{(snap.basicSalary || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                          <td className="px-4 py-2 text-right">₱{(snap.monthlySalaryAsPerContract || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                          <td className="px-4 py-2 text-right">₱{(snap.monthlyPremium || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                          <td className="px-4 py-2 text-gray-500 italic">{snap.note || '—'}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">Contract generation automatically uses the rate in effect on the contract's start date.</p>
             </div>
           )}
         </div>

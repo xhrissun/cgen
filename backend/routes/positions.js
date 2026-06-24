@@ -1,3 +1,5 @@
+// FILE: cgen-main/backend/routes/positions.js
+
 import mongoose from 'mongoose';
 import express from 'express';
 import Position from '../models/Position.js';
@@ -66,7 +68,40 @@ router.get('/salary-grades/:grade', verifyToken, async (req, res) => {
 
 router.post('/salary-grades', verifyToken, async (req, res) => {
   try {
-    const newSalaryGrade = new SalaryGrade(req.body);
+    const {
+      grade, isSpecialSalaryGrade, description,
+      basicSalary, grossPremium, deductions,
+      monthlySalaryAsPerContract, dailySalaryAsPerContract, monthlyPremium,
+      effectiveDate, note
+    } = req.body;
+
+    // Require effectiveDate
+    if (!effectiveDate) {
+      return res.status(400).json({ message: 'effectiveDate is required when creating a salary grade.' });
+    }
+
+    const snapshot = {
+      effectiveDate: new Date(effectiveDate),
+      basicSalary:                parseFloat(basicSalary),
+      grossPremium:               parseFloat(grossPremium) || 0,
+      deductions: {
+        sss:        parseFloat(deductions?.sss)        || 475.00,
+        pagibig:    parseFloat(deductions?.pagibig)    || 400.00,
+        philhealth: parseFloat(deductions?.philhealth) || 0
+      },
+      monthlySalaryAsPerContract: parseFloat(monthlySalaryAsPerContract),
+      dailySalaryAsPerContract:   parseFloat(dailySalaryAsPerContract),
+      monthlyPremium:             parseFloat(monthlyPremium) || 0,
+      note: note || ''
+    };
+
+    const newSalaryGrade = new SalaryGrade({
+      grade,
+      isSpecialSalaryGrade: isSpecialSalaryGrade || false,
+      description: description || '',
+      rateHistory: [snapshot]
+    });
+
     await newSalaryGrade.save();
     res.status(201).json(newSalaryGrade);
   } catch (error) {
@@ -74,14 +109,122 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
   }
 });
 
+// PUT /salary-grades/:id
+// Instead of overwriting, appends a new rate snapshot with its effectiveDate.
+// Existing snapshots (and any contracts generated against past dates) are preserved.
 router.put('/salary-grades/:id', verifyToken, async (req, res) => {
   try {
-    const salaryGrade = await SalaryGrade.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, updatedAt: new Date() },
-      { new: true }
-    );
+    const {
+      basicSalary, grossPremium, deductions,
+      monthlySalaryAsPerContract, dailySalaryAsPerContract, monthlyPremium,
+      effectiveDate, note,
+      // top-level non-rate fields
+      isSpecialSalaryGrade, description
+    } = req.body;
+
+    // Require effectiveDate for rate updates
+    if (!effectiveDate) {
+      return res.status(400).json({ message: 'effectiveDate is required when updating salary grade rates.' });
+    }
+
+    const salaryGrade = await SalaryGrade.findById(req.params.id);
+    if (!salaryGrade) {
+      return res.status(404).json({ message: 'Salary grade not found' });
+    }
+
+    // Prevent backdating: effectiveDate must not be earlier than the most
+    // recent existing snapshot to avoid silently changing past calculations.
+    if (salaryGrade.rateHistory && salaryGrade.rateHistory.length > 0) {
+      const latestSnapshotDate = salaryGrade.rateHistory.reduce((max, s) => {
+        const d = new Date(s.effectiveDate);
+        return d > max ? d : max;
+      }, new Date(0));
+
+      const incoming = new Date(effectiveDate);
+      if (incoming < latestSnapshotDate) {
+        return res.status(400).json({
+          message: `effectiveDate (${incoming.toISOString().split('T')[0]}) cannot be earlier than the most recent rate entry (${latestSnapshotDate.toISOString().split('T')[0]}). Past salary rates are protected.`
+        });
+      }
+
+      // If the exact same date already exists, replace that snapshot instead
+      // of duplicating (idempotent re-save).
+      const sameDate = salaryGrade.rateHistory.find(
+        s => new Date(s.effectiveDate).toISOString().split('T')[0] === new Date(effectiveDate).toISOString().split('T')[0]
+      );
+      if (sameDate) {
+        sameDate.basicSalary                = parseFloat(basicSalary);
+        sameDate.grossPremium               = parseFloat(grossPremium) || 0;
+        sameDate.deductions                 = {
+          sss:        parseFloat(deductions?.sss)        || sameDate.deductions.sss,
+          pagibig:    parseFloat(deductions?.pagibig)    || sameDate.deductions.pagibig,
+          philhealth: parseFloat(deductions?.philhealth) || sameDate.deductions.philhealth
+        };
+        sameDate.monthlySalaryAsPerContract = parseFloat(monthlySalaryAsPerContract);
+        sameDate.dailySalaryAsPerContract   = parseFloat(dailySalaryAsPerContract);
+        sameDate.monthlyPremium             = parseFloat(monthlyPremium) || 0;
+        sameDate.note                       = note || '';
+      } else {
+        salaryGrade.rateHistory.push({
+          effectiveDate: new Date(effectiveDate),
+          basicSalary:                parseFloat(basicSalary),
+          grossPremium:               parseFloat(grossPremium) || 0,
+          deductions: {
+            sss:        parseFloat(deductions?.sss)        || 475.00,
+            pagibig:    parseFloat(deductions?.pagibig)    || 400.00,
+            philhealth: parseFloat(deductions?.philhealth) || 0
+          },
+          monthlySalaryAsPerContract: parseFloat(monthlySalaryAsPerContract),
+          dailySalaryAsPerContract:   parseFloat(dailySalaryAsPerContract),
+          monthlyPremium:             parseFloat(monthlyPremium) || 0,
+          note: note || ''
+        });
+      }
+    } else {
+      // No rateHistory yet — migrate flat fields into history
+      salaryGrade.rateHistory = [{
+        effectiveDate: new Date(effectiveDate),
+        basicSalary:                parseFloat(basicSalary),
+        grossPremium:               parseFloat(grossPremium) || 0,
+        deductions: {
+          sss:        parseFloat(deductions?.sss)        || 475.00,
+          pagibig:    parseFloat(deductions?.pagibig)    || 400.00,
+          philhealth: parseFloat(deductions?.philhealth) || 0
+        },
+        monthlySalaryAsPerContract: parseFloat(monthlySalaryAsPerContract),
+        dailySalaryAsPerContract:   parseFloat(dailySalaryAsPerContract),
+        monthlyPremium:             parseFloat(monthlyPremium) || 0,
+        note: note || ''
+      }];
+    }
+
+    // Update non-rate fields if provided
+    if (isSpecialSalaryGrade !== undefined) salaryGrade.isSpecialSalaryGrade = isSpecialSalaryGrade;
+    if (description !== undefined) salaryGrade.description = description;
+
+    await salaryGrade.save(); // pre-save hook syncs flat fields from latest snapshot
     res.json(salaryGrade);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// DELETE a specific rate snapshot from rateHistory (admin only, for corrections)
+router.delete('/salary-grades/:id/history/:snapshotId', verifyToken, async (req, res) => {
+  try {
+    const salaryGrade = await SalaryGrade.findById(req.params.id);
+    if (!salaryGrade) return res.status(404).json({ message: 'Salary grade not found' });
+
+    if (salaryGrade.rateHistory.length <= 1) {
+      return res.status(400).json({ message: 'Cannot remove the only rate entry. Delete the entire salary grade instead.' });
+    }
+
+    salaryGrade.rateHistory = salaryGrade.rateHistory.filter(
+      s => s._id.toString() !== req.params.snapshotId
+    );
+
+    await salaryGrade.save();
+    res.json({ message: 'Rate snapshot removed', salaryGrade });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

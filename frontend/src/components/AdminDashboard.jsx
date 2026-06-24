@@ -1,3 +1,5 @@
+// FILE: cgen-main/frontend/src/components/AdminDashboard.jsx
+
 import { useState, useEffect, useRef } from 'react';
 import api from '../api.js';
 import { 
@@ -43,7 +45,9 @@ function AdminDashboard({ user }) {
     },
     monthlySalaryAsPerContract: '0.00',
     dailySalaryAsPerContract: '0.00',
-    monthlyPremium: '0.00'
+    monthlyPremium: '0.00',
+    effectiveDate: '',
+    note: ''
   });
   const [newClause, setNewClause] = useState({
     clauseNumber: '',
@@ -448,6 +452,12 @@ function AdminDashboard({ user }) {
 
   const handleCreateSalaryGrade = async (e) => {
     e.preventDefault();
+
+    if (!newSalaryGrade.effectiveDate) {
+      alert('Please enter an Effective Date for this salary grade.');
+      return;
+    }
+
     try {
       const token = localStorage.getItem('token');
       
@@ -462,14 +472,16 @@ function AdminDashboard({ user }) {
         },
         monthlySalaryAsPerContract: parseFloat(newSalaryGrade.monthlySalaryAsPerContract),
         dailySalaryAsPerContract: parseFloat(newSalaryGrade.dailySalaryAsPerContract),
-        monthlyPremium: parseFloat(newSalaryGrade.monthlyPremium) || 0
+        monthlyPremium: parseFloat(newSalaryGrade.monthlyPremium) || 0,
+        effectiveDate: newSalaryGrade.effectiveDate,
+        note: newSalaryGrade.note || ''
       };
       
       if (editingSalaryGrade) {
         await api.put(`/api/positions/salary-grades/${editingSalaryGrade._id}`, payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        alert('Salary grade updated successfully!');
+        alert(`Salary grade updated successfully! New rates effective from ${newSalaryGrade.effectiveDate}.`);
       } else {
         await api.post('/api/positions/salary-grades', payload, {
           headers: { Authorization: `Bearer ${token}` }
@@ -491,11 +503,13 @@ function AdminDashboard({ user }) {
         },
         monthlySalaryAsPerContract: '0.00',
         dailySalaryAsPerContract: '0.00',
-        monthlyPremium: '0.00'
+        monthlyPremium: '0.00',
+        effectiveDate: '',
+        note: ''
       });
       fetchSalaryGrades();
     } catch (error) {
-      alert('Error creating salary grade: ' + (error.response?.data?.message || error.message));
+      alert('Error saving salary grade: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -517,7 +531,11 @@ function AdminDashboard({ user }) {
       },
       monthlySalaryAsPerContract: (sg.monthlySalaryAsPerContract || 0).toString(),
       dailySalaryAsPerContract: (sg.dailySalaryAsPerContract || 0).toString(),
-      monthlyPremium: (sg.monthlyPremium || 0).toString()
+      monthlyPremium: (sg.monthlyPremium || 0).toString(),
+      // effectiveDate intentionally blank — admin MUST supply the date
+      // from which the new rates take effect
+      effectiveDate: '',
+      note: ''
     });
     setShowSalaryGradeForm(true);
 
@@ -1025,6 +1043,39 @@ function AdminDashboard({ user }) {
                             ₱{parseFloat(newSalaryGrade.monthlyPremium || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                           </div>
                         </div>
+                      </div>
+                    </div>
+
+                    {/* ── EFFECTIVE DATE (required) ── */}
+                    <div className="border border-amber-300 bg-amber-50 rounded-lg p-4 space-y-4">
+                      <div>
+                        <h4 className="text-sm font-semibold text-amber-800 uppercase tracking-wide mb-1">
+                          ⚠ Effective Date <span className="text-red-600">*</span>
+                        </h4>
+                        <p className="text-xs text-amber-700 mb-3">
+                          {editingSalaryGrade
+                            ? 'Enter the date from which these updated rates take effect. Contracts with a start date before this date will continue to use the previous rates.'
+                            : 'Enter the date from which these rates are valid.'}
+                        </p>
+                        <input
+                          type="date"
+                          required
+                          value={newSalaryGrade.effectiveDate}
+                          onChange={e => setNewSalaryGrade({ ...newSalaryGrade, effectiveDate: e.target.value })}
+                          className="w-full px-3 py-2 border border-amber-400 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white text-gray-900 font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-amber-800 mb-1">
+                          Revision Note <span className="text-gray-500 font-normal">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. DBM Circular No. 2025-01 salary adjustment"
+                          value={newSalaryGrade.note}
+                          onChange={e => setNewSalaryGrade({ ...newSalaryGrade, note: e.target.value })}
+                          className="w-full px-3 py-2 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white text-gray-700"
+                        />
                       </div>
                     </div>
 
