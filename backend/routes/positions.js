@@ -141,53 +141,12 @@ router.get('/salary-grades/:grade', verifyToken, async (req, res) => {
   }
 });
 
-// POST — add one grade row to a set.
-// Body must include periodStartDate (and optionally periodEndDate, periodLabel).
-// Typically the frontend sends an entire set in bulk via POST /salary-grades/bulk.
-router.post('/salary-grades', verifyToken, async (req, res) => {
-  try {
-    const {
-      grade, isSpecialSalaryGrade, description,
-      basicSalary, grossPremium, deductions,
-      monthlySalaryAsPerContract, dailySalaryAsPerContract, monthlyPremium,
-      periodStartDate, periodEndDate, periodLabel, note
-    } = req.body;
-
-    if (!periodStartDate) {
-      return res.status(400).json({ message: 'periodStartDate is required.' });
-    }
-
-    const newSalaryGrade = new SalaryGrade({
-      grade,
-      isSpecialSalaryGrade: isSpecialSalaryGrade || false,
-      description: description || '',
-      periodStartDate: new Date(periodStartDate),
-      periodEndDate:   periodEndDate ? new Date(periodEndDate) : null,
-      periodLabel:     periodLabel || '',
-      basicSalary:                parseFloat(basicSalary),
-      grossPremium:               parseFloat(grossPremium) || 0,
-      deductions: {
-        sss:        parseFloat(deductions?.sss)        || 475.00,
-        pagibig:    parseFloat(deductions?.pagibig)    || 400.00,
-        philhealth: parseFloat(deductions?.philhealth) || 0
-      },
-      monthlySalaryAsPerContract: parseFloat(monthlySalaryAsPerContract),
-      dailySalaryAsPerContract:   parseFloat(dailySalaryAsPerContract),
-      monthlyPremium:             parseFloat(monthlyPremium) || 0,
-      note: note || ''
-    });
-
-    await newSalaryGrade.save();
-    res.status(201).json(newSalaryGrade);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
 // POST /salary-grades/bulk — saves an entire set of grade rows at once.
 // Body: { grades: [...], periodStartDate, periodEndDate, periodLabel }
 // Before inserting, closes the previous active period's endDate to the day before
 // the new period starts (so there are no gaps or overlaps).
+// NOTE: This route MUST be declared before POST /salary-grades to avoid Express
+// matching '/bulk' as the /:grade param on the GET route and to keep routing unambiguous.
 router.post('/salary-grades/bulk', verifyToken, async (req, res) => {
   try {
     const { grades, periodStartDate, periodEndDate, periodLabel } = req.body;
@@ -235,6 +194,73 @@ router.post('/salary-grades/bulk', verifyToken, async (req, res) => {
     const inserted = await SalaryGrade.insertMany(docs);
     res.status(201).json({ message: `${inserted.length} salary grade(s) saved for period starting ${periodStartDate}.`, grades: inserted });
   } catch (error) {
+    // Duplicate key: same grade already exists in this period
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message: 'One or more salary grades already exist for this period start date. Use a different Period Start Date or delete the existing set first.',
+        error: error.message
+      });
+    }
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// POST — add one grade row to a set.
+// Body must include periodStartDate (and optionally periodEndDate, periodLabel).
+router.post('/salary-grades', verifyToken, async (req, res) => {
+  try {
+    const {
+      grade, isSpecialSalaryGrade, description,
+      basicSalary, grossPremium, deductions,
+      monthlySalaryAsPerContract, dailySalaryAsPerContract, monthlyPremium,
+      periodStartDate, periodEndDate, periodLabel, note
+    } = req.body;
+
+    if (!periodStartDate) {
+      return res.status(400).json({ message: 'periodStartDate is required.' });
+    }
+
+    // Check for duplicate before attempting insert — gives a clear error message
+    const existing = await SalaryGrade.findOne({
+      grade,
+      periodStartDate: new Date(periodStartDate)
+    });
+    if (existing) {
+      return res.status(409).json({
+        message: `Salary Grade ${grade} already exists for the period starting ${periodStartDate}. Use a different Period Start Date, or edit the existing entry instead.`
+      });
+    }
+
+    const newSalaryGrade = new SalaryGrade({
+      grade,
+      isSpecialSalaryGrade: isSpecialSalaryGrade || false,
+      description: description || '',
+      periodStartDate: new Date(periodStartDate),
+      periodEndDate:   periodEndDate ? new Date(periodEndDate) : null,
+      periodLabel:     periodLabel || '',
+      basicSalary:                parseFloat(basicSalary),
+      grossPremium:               parseFloat(grossPremium) || 0,
+      deductions: {
+        sss:        parseFloat(deductions?.sss)        || 475.00,
+        pagibig:    parseFloat(deductions?.pagibig)    || 400.00,
+        philhealth: parseFloat(deductions?.philhealth) || 0
+      },
+      monthlySalaryAsPerContract: parseFloat(monthlySalaryAsPerContract),
+      dailySalaryAsPerContract:   parseFloat(dailySalaryAsPerContract),
+      monthlyPremium:             parseFloat(monthlyPremium) || 0,
+      note: note || ''
+    });
+
+    await newSalaryGrade.save();
+    res.status(201).json(newSalaryGrade);
+  } catch (error) {
+    // Duplicate key fallback (race condition)
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message: `Salary Grade ${req.body.grade} already exists for this period start date. Use a different Period Start Date or edit the existing entry.`,
+        error: error.message
+      });
+    }
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

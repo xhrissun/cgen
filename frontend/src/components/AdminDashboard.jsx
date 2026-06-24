@@ -522,7 +522,13 @@ function AdminDashboard({ user }) {
       });
       fetchSalaryGrades();
     } catch (error) {
-      alert('Error saving salary grade: ' + (error.response?.data?.message || error.message));
+      const msg = error.response?.data?.message || error.message;
+      const status = error.response?.status;
+      if (status === 409) {
+        alert('Duplicate Entry: ' + msg);
+      } else {
+        alert('Error saving salary grade: ' + msg);
+      }
     }
   };
 
