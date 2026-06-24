@@ -592,11 +592,14 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
 
     let clausesContent = '';
     sortedClauses.forEach((clause) => {
-    // Always use live clause content from database
-    let rawContent = clause.clauseId.content || '';
+    // Use the snapshotted content (customContent) captured at contract creation time.
+    // This preserves the clause wording exactly as it was when the contract was issued,
+    // even if the clause has since been edited. Fall back to live content only if no
+    // snapshot exists (e.g. very old contracts created before snapshotting was introduced).
+    let rawContent = clause.customContent || (clause.clauseId && clause.clauseId.content) || '';
     
     if (!rawContent.trim()) {
-      console.warn(` ⚠️ Empty content for clause ${clause.clauseId.clauseNumber}`);
+      console.warn(` ⚠️ Empty content for clause ${clause.clauseId?.clauseNumber}`);
       return;
     }
 

@@ -1065,7 +1065,56 @@ router.put('/:id', verifyToken, async (req, res) => {
     if (!position) {
       return res.status(404).json({ message: 'Position not found' });
     }
-    
+
+    // ── Temporal integrity: refresh clause snapshots on unsigned contracts ──────
+    // Contracts in DRAFT or PENDING status have not been signed/approved yet,
+    // so it is safe (and correct) to update their clause snapshots to match the
+    // newly updated position.
+    //
+    // Contracts in APPROVED, ACTIVE, EXPIRED, TERMINATED, or CANCELLED status
+    // are NEVER touched — their customContent snapshot is the legal record of
+    // what was agreed at the time of signing.
+    //
+    // dutiesAndResponsibilities is already snapshotted per-contract at creation
+    // and is NOT updated here — if duties change, only new contracts get the new
+    // duties. Existing unsigned contracts keep the duties they were generated with
+    // (admin can regenerate the contract if needed).
+    const draftStatuses = ['DRAFT', 'PENDING'];
+    const Contract = (await import('../models/Contract.js')).default;
+
+    if (position.assignedClauses && position.assignedClauses.length > 0) {
+      // Build map of clauseId → content from the freshly updated position
+      const clauseContentMap = {};
+      position.assignedClauses.forEach(c => {
+        clauseContentMap[c._id.toString()] = c.content;
+      });
+
+      // Find all unsigned contracts for this positionCode
+      const unsignedContracts = await Contract.find({
+        positionCode: existingPosition.positionCode,
+        status: { $in: draftStatuses }
+      });
+
+      for (const contract of unsignedContracts) {
+        let changed = false;
+        contract.clauses = contract.clauses.map(entry => {
+          const idStr = entry.clauseId?.toString();
+          if (idStr && clauseContentMap[idStr] !== undefined) {
+            const newContent = clauseContentMap[idStr];
+            if (entry.customContent !== newContent) {
+              changed = true;
+              return { ...entry.toObject(), customContent: newContent };
+            }
+          }
+          return entry;
+        });
+        if (changed) {
+          await contract.save();
+          console.log(`↺ Refreshed clause snapshots for contract ${contract.contractNumber} (${contract.status})`);
+        }
+      }
+    }
+
     res.json(position);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
