@@ -1066,37 +1066,43 @@ router.put('/:id', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'Position not found' });
     }
 
-    // ── Temporal integrity: refresh clause snapshots on unsigned contracts ──────
-    // Contracts in DRAFT or PENDING status have not been signed/approved yet,
-    // so it is safe (and correct) to update their clause snapshots to match the
-    // newly updated position.
+    // ── Temporal integrity: refresh DRAFT/PENDING contracts for this position ──
     //
-    // Contracts in APPROVED, ACTIVE, EXPIRED, TERMINATED, or CANCELLED status
-    // are NEVER touched — their customContent snapshot is the legal record of
-    // what was agreed at the time of signing.
+    // RULE: Contracts that have NOT yet been signed/approved (DRAFT, PENDING)
+    // should always reflect the current position definition — duties, clauses.
+    // They have not been legally committed yet so updating them is correct.
     //
-    // dutiesAndResponsibilities is already snapshotted per-contract at creation
-    // and is NOT updated here — if duties change, only new contracts get the new
-    // duties. Existing unsigned contracts keep the duties they were generated with
-    // (admin can regenerate the contract if needed).
+    // Contracts in APPROVED, ACTIVE, EXPIRED, TERMINATED, or CANCELLED are
+    // NEVER modified — their snapshots are the legal record as of signing date.
+    //
+    // This covers the scenario: "I created a contract for Jul 2 – Dec 31, then
+    // edited the position on Jun 25 (before the contract starts) — the DRAFT
+    // contract should reflect the edited position."
     const draftStatuses = ['DRAFT', 'PENDING'];
     const Contract = (await import('../models/Contract.js')).default;
 
-    if (position.assignedClauses && position.assignedClauses.length > 0) {
-      // Build map of clauseId → content from the freshly updated position
-      const clauseContentMap = {};
-      position.assignedClauses.forEach(c => {
-        clauseContentMap[c._id.toString()] = c.content;
-      });
+    // Find all unsigned contracts for this positionCode
+    const unsignedContracts = await Contract.find({
+      positionCode: existingPosition.positionCode,
+      status: { $in: draftStatuses }
+    });
 
-      // Find all unsigned contracts for this positionCode
-      const unsignedContracts = await Contract.find({
-        positionCode: existingPosition.positionCode,
-        status: { $in: draftStatuses }
-      });
+    if (unsignedContracts.length > 0) {
+      // Build clauseId → content map from the updated position
+      const clauseContentMap = {};
+      if (position.assignedClauses && position.assignedClauses.length > 0) {
+        position.assignedClauses.forEach(c => {
+          clauseContentMap[c._id.toString()] = c.content;
+        });
+      }
+
+      // New duties from the updated position
+      const newDuties = updateData.dutiesAndResponsibilities || existingPosition.dutiesAndResponsibilities;
 
       for (const contract of unsignedContracts) {
         let changed = false;
+
+        // 1. Refresh clause content snapshots
         contract.clauses = contract.clauses.map(entry => {
           const idStr = entry.clauseId?.toString();
           if (idStr && clauseContentMap[idStr] !== undefined) {
@@ -1108,9 +1114,17 @@ router.put('/:id', verifyToken, async (req, res) => {
           }
           return entry;
         });
+
+        // 2. Refresh duties and responsibilities
+        const dutiesChanged = JSON.stringify(contract.dutiesAndResponsibilities) !== JSON.stringify(newDuties);
+        if (dutiesChanged) {
+          contract.dutiesAndResponsibilities = newDuties;
+          changed = true;
+        }
+
         if (changed) {
           await contract.save();
-          console.log(`↺ Refreshed clause snapshots for contract ${contract.contractNumber} (${contract.status})`);
+          console.log(`↺ Refreshed duties+clauses for contract ${contract.contractNumber} (${contract.status})`);
         }
       }
     }
