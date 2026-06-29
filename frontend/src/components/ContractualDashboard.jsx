@@ -539,6 +539,11 @@ function ContractualDashboard({ user }) {
                       src={profilePhotoUrl}
                       alt="Profile"
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        const fallback = e.target.parentElement;
+                        if (fallback) fallback.innerHTML = `<span class="text-2xl font-semibold">${(personalInfo.firstName?.charAt(0) || user.username?.charAt(0) || 'U').toUpperCase()}</span>`;
+                      }}
                     />
                   ) : (
                     <span>{personalInfo.firstName?.charAt(0) || user.username?.charAt(0)?.toUpperCase() || 'U'}</span>

@@ -2,7 +2,8 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import { documentUpload, profilePhotoUpload } from '../utils/r2Upload.js';
 import { deleteFromR2 } from '../utils/r2Delete.js';
-import { R2_PUBLIC_URL } from '../config/r2.js';
+import { r2Client, R2_BUCKET, R2_PUBLIC_URL } from '../config/r2.js';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import User from '../models/User.js';
 import { verifyToken } from './auth.js';
 import path from 'path';
@@ -141,30 +142,106 @@ router.post('/', verifyToken, async (req, res) => {
 // Update user
 router.put('/:id', verifyToken, async (req, res) => {
   try {
-    const { personalInfo, placeOfAssignment, status } = req.body;
-    
+    const { username, role, personalInfo, placeOfAssignment, status } = req.body;
+
+    // Only admins can change role or username
+    const isAdmin = req.user.role === 'ADMINISTRATOR';
+    const isFocalPerson = req.user.role === 'FOCAL_PERSON';
+
+    // Role changes: admin only
+    if (role && !isAdmin) {
+      return res.status(403).json({ message: 'Access denied. Only administrators can change user roles.' });
+    }
+
+    // Focal persons cannot assign non-CONTRACTUAL roles
+    if (role && isFocalPerson && role !== 'CONTRACTUAL') {
+      return res.status(403).json({ message: 'Focal persons can only assign Contractual role.' });
+    }
+
+    // Username changes: admin only
+    if (username && !isAdmin) {
+      return res.status(403).json({ message: 'Access denied. Only administrators can change usernames.' });
+    }
+
+    // If username is being changed, check uniqueness (exclude current user)
+    if (username) {
+      const existingUser = await User.findOne({ username, _id: { $ne: req.params.id } });
+      if (existingUser) {
+        return res.status(400).json({ message: 'Username already taken. Please choose a different username.' });
+      }
+    }
+
+    // Fetch old user state for audit log
+    const oldUser = await User.findById(req.params.id).select('-password');
+    if (!oldUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
     const updateData = {
       updatedAt: new Date()
     };
-    
+
     if (personalInfo) updateData.personalInfo = personalInfo;
     if (placeOfAssignment) updateData.placeOfAssignment = placeOfAssignment;
-    
-    // ✅ CHANGE THIS: Allow both ADMIN and FOCAL_PERSON to change status
-    if (status && (req.user.role === 'ADMINISTRATOR' || req.user.role === 'FOCAL_PERSON')) {
+
+    // Allow both ADMIN and FOCAL_PERSON to change status
+    if (status && (isAdmin || isFocalPerson)) {
       updateData.status = status;
     }
-    
+
+    // Role update — admin only; past contracts are NOT affected because
+    // contracts store their own snapshot of position/signatory data at generation time.
+    if (role && isAdmin) {
+      updateData.role = role;
+    }
+
+    // Username update — admin only; past contracts reference userId (ObjectId),
+    // not the username string, so existing contracts remain unaffected.
+    if (username && isAdmin) {
+      updateData.username = username;
+    }
+
     const user = await User.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true }
     ).select('-password');
-    
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
+
+    // Build audit log changes
+    const changesBefore = {};
+    const changesAfter = {};
+    if (role && role !== oldUser.role) {
+      changesBefore.role = oldUser.role;
+      changesAfter.role = role;
+    }
+    if (username && username !== oldUser.username) {
+      changesBefore.username = oldUser.username;
+      changesAfter.username = username;
+    }
+    if (status && status !== oldUser.status) {
+      changesBefore.status = oldUser.status;
+      changesAfter.status = status;
+    }
+    if (placeOfAssignment && placeOfAssignment !== oldUser.placeOfAssignment) {
+      changesBefore.placeOfAssignment = oldUser.placeOfAssignment;
+      changesAfter.placeOfAssignment = placeOfAssignment;
+    }
+
+    await logActivity({
+      actionType: 'UPDATE',
+      entityType: 'User',
+      entityId: user._id,
+      entityName: `${user.username} (${user.role})`,
+      performedBy: req.user.userId,
+      changesBefore: Object.keys(changesBefore).length ? changesBefore : undefined,
+      changesAfter: Object.keys(changesAfter).length ? changesAfter : undefined,
+      req
+    });
+
     res.json(user);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -215,6 +292,49 @@ router.delete('/:id', verifyToken, async (req, res) => {
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Authenticated photo proxy — streams any R2 object through the backend.
+// Use this when the R2 bucket is NOT configured for public access, or when
+// VITE_R2_PUBLIC_URL is missing. The frontend calls /api/users/:id/photo/:key
+// and the backend fetches from R2 with credentials, then pipes the response.
+router.get('/:id/photo/*', verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('placeOfAssignment');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Access control: own profile, admin, or same-assignment focal person
+    const canView =
+      req.user.userId === req.params.id ||
+      req.user.role === 'ADMINISTRATOR' ||
+      req.user.role === 'FOCAL_PERSON' ||
+      req.user.role === 'FINANCE_OFFICER';
+
+    if (!canView) return res.status(403).json({ message: 'Access denied' });
+
+    // The key is everything after /photo/
+    const key = req.params[0];
+    if (!key) return res.status(400).json({ message: 'Missing file key' });
+
+    const command = new GetObjectCommand({ Bucket: R2_BUCKET, Key: key });
+    const r2Response = await r2Client.send(command);
+
+    // Forward content type and length
+    if (r2Response.ContentType) res.setHeader('Content-Type', r2Response.ContentType);
+    if (r2Response.ContentLength) res.setHeader('Content-Length', r2Response.ContentLength);
+
+    // Cache for 1 hour in browser — photos don't change often
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+
+    // Stream R2 body directly to client
+    r2Response.Body.pipe(res);
+  } catch (err) {
+    if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
+      return res.status(404).json({ message: 'Photo not found' });
+    }
+    console.error('R2 photo proxy error:', err.message);
+    res.status(500).json({ message: 'Failed to load photo' });
   }
 });
 
