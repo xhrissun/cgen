@@ -68,7 +68,12 @@ const contractSchema = new mongoose.Schema({
     monthlyPremiumRate: Number,
     dailyPremiumRate: Number,
     calculatedPremium: Number,
-    isFullMonth: Boolean
+    isFullMonth: Boolean,
+    holidaysInMonth: [{
+      date: String,
+      name: String,
+      type: String
+    }]
   }],
   
   // Premium Summary

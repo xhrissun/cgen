@@ -165,81 +165,189 @@ function ContractDetailsModal({ contract, onClose }) {
           {/* Salary Information */}
           <div>
             <h4 className="text-lg font-semibold mb-3 text-gray-700">Salary Information</h4>
-            <div className="bg-green-50 p-4 rounded-lg space-y-3">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="bg-green-50 p-4 rounded-lg space-y-4">
+
+              {/* ── Salary Summary Grid ── */}
+              <div className="grid grid-cols-2 gap-x-8 gap-y-3">
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Salary Grade</label>
+                  <label className="text-xs text-gray-500 uppercase tracking-wide">Salary Grade</label>
                   <p className="font-semibold">
-                    {contract.isSpecialSalaryGrade ? (
-                      <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-sm">
-                        SG {contract.salaryGrade} (Special)
-                      </span>
-                    ) : (
-                      `SG ${contract.salaryGrade}`
-                    )}
+                    {contract.isSpecialSalaryGrade
+                      ? <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded text-sm">SG {contract.salaryGrade} (Special)</span>
+                      : `SG ${contract.salaryGrade}`
+                    }
                   </p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Basic Salary</label>
-                  <p className="font-bold text-lg">
-                    ₱{contract.basicSalary.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  <label className="text-xs text-gray-500 uppercase tracking-wide">Basic Salary</label>
+                  <p className="font-bold text-base">
+                    ₱{contract.basicSalary.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
+
+                {!contract.isSpecialSalaryGrade && (
+                  <>
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase tracking-wide">Monthly Salary (Contract)</label>
+                      <p className="font-semibold">
+                        ₱{contract.monthlySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase tracking-wide">Daily Salary (Contract)</label>
+                      <p className="font-semibold">
+                        ₱{contract.dailySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase tracking-wide">Monthly Premium</label>
+                      <p className="font-semibold">
+                        ₱{contract.monthlyPremium.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase tracking-wide">{contract.bonusType} Premium</label>
+                      <p className="font-bold text-base text-green-700">
+                        ₱{contract.finalPremium?.toLocaleString('en-PH', { minimumFractionDigits: 2 }) || '0.00'}
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
 
               {!contract.isSpecialSalaryGrade && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-600">Monthly Salary (Contract)</label>
-                      <p className="font-semibold">
-                        ₱{contract.monthlySalaryAsPerContract.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-600">Daily Salary (Contract)</label>
-                      <p className="font-semibold">
-                        ₱{contract.dailySalaryAsPerContract.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-600">Monthly Premium</label>
-                      <p className="font-semibold">
-                        ₱{contract.monthlyPremium.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-600">{contract.bonusType} Premium</label>
-                      <p className="font-bold text-lg text-green-900">
-                        ₱{contract.finalPremium?.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2}) || '0.00'}
-                      </p>
-                    </div>
-                  </div>
-
+                  {/* ── Summary Counts ── */}
                   {contract.premiumSummary && (
-                    <div className="border-t pt-3 mt-3">
-                      <label className="text-sm font-medium text-gray-600 block mb-2">Premium Calculation Summary</label>
-                      <div className="grid grid-cols-4 gap-2 text-sm">
-                        <div className="bg-white p-2 rounded">
-                          <p className="text-gray-600 text-xs">Total Months</p>
-                          <p className="font-semibold">{contract.premiumSummary.totalMonths}</p>
-                        </div>
-                        <div className="bg-white p-2 rounded">
-                          <p className="text-gray-600 text-xs">Full Months</p>
-                          <p className="font-semibold">{contract.premiumSummary.fullMonths}</p>
-                        </div>
-                        <div className="bg-white p-2 rounded">
-                          <p className="text-gray-600 text-xs">Partial Months</p>
-                          <p className="font-semibold">{contract.premiumSummary.partialMonths}</p>
-                        </div>
-                        <div className="bg-white p-2 rounded">
-                          <p className="text-gray-600 text-xs">Working Days</p>
-                          <p className="font-semibold">{contract.premiumSummary.totalWorkingDays}</p>
-                        </div>
+                    <div className="pt-3 border-t border-green-200">
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Premium Calculation Summary</p>
+                      <div className="grid grid-cols-4 gap-3 text-center">
+                        {[
+                          { label: 'Total Months',   value: contract.premiumSummary.totalMonths },
+                          { label: 'Full Months',    value: contract.premiumSummary.fullMonths },
+                          { label: 'Partial Months', value: contract.premiumSummary.partialMonths },
+                          { label: 'Working Days',   value: contract.premiumSummary.totalWorkingDays, highlight: true }
+                        ].map(({ label, value, highlight }) => (
+                          <div key={label} className="bg-white rounded p-2 shadow-sm">
+                            <p className="text-xs text-gray-500">{label}</p>
+                            <p className={`text-lg font-bold ${highlight ? 'text-blue-600' : ''}`}>{value}</p>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
+
+                  {/* ── Per-Month Breakdown Table ── */}
+                  {contract.workingDaysBreakdown && contract.workingDaysBreakdown.length > 0 && (
+                    <div className="pt-3 border-t border-green-200">
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Monthly Premium Breakdown</p>
+                      <div className="overflow-x-auto rounded border border-green-200">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-green-100 text-gray-600 text-xs uppercase tracking-wide">
+                              <th className="text-left px-3 py-2">Month</th>
+                              <th className="text-center px-3 py-2">Type</th>
+                              <th className="text-center px-3 py-2">Working Days<br/><span className="font-normal normal-case">(in month / in range)</span></th>
+                              <th className="text-right px-3 py-2">Daily Rate</th>
+                              <th className="text-right px-3 py-2">Premium</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {contract.workingDaysBreakdown.map((m, idx) => (
+                              <>
+                                <tr key={m.monthKey} className={idx % 2 === 0 ? 'bg-white' : 'bg-green-50'}>
+                                  <td className="px-3 py-2 font-medium">{m.monthName} {m.year}</td>
+                                  <td className="px-3 py-2 text-center">
+                                    {m.isFullMonth
+                                      ? <span className="inline-block px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">Full</span>
+                                      : <span className="inline-block px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 text-xs font-medium">Partial</span>
+                                    }
+                                  </td>
+                                  <td className="px-3 py-2 text-center text-gray-700">
+                                    {m.totalWorkingDaysInMonth} / {m.actualWorkingDaysInRange}
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-gray-700">
+                                    ₱{(m.dailyPremiumRate || 0).toLocaleString('en-PH', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                                  </td>
+                                  <td className="px-3 py-2 text-right font-semibold">
+                                    ₱{(m.calculatedPremium || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+
+                                {/* Holiday sub-row */}
+                                {m.holidaysInMonth && m.holidaysInMonth.length > 0 && (
+                                  <tr key={`${m.monthKey}-hols`} className={idx % 2 === 0 ? 'bg-white' : 'bg-green-50'}>
+                                    <td colSpan={5} className="px-3 pb-2 pt-0">
+                                      <div className="flex flex-wrap gap-1 pl-1">
+                                        {m.holidaysInMonth.map(h => {
+                                          const labelColor =
+                                            h.type === 'REGULAR'
+                                              ? 'bg-red-100 text-red-700'
+                                              : h.type === 'SPECIAL_NON_WORKING'
+                                              ? 'bg-orange-100 text-orange-700'
+                                              : 'bg-blue-100 text-blue-700';
+                                          const typeLabel =
+                                            h.type === 'REGULAR' ? 'Regular'
+                                            : h.type === 'SPECIAL_NON_WORKING' ? 'Special Non-Working'
+                                            : 'Special Working';
+                                          return (
+                                            <span
+                                              key={h.date}
+                                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${labelColor}`}
+                                            >
+                                              🗓️ {new Date(h.date + 'T00:00:00Z').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' })} — {h.name}
+                                              <span className="opacity-60">({typeLabel})</span>
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-green-200 font-bold text-sm">
+                              <td className="px-3 py-2" colSpan={2}>TOTAL</td>
+                              <td className="px-3 py-2 text-center">{contract.premiumSummary?.totalWorkingDays} days</td>
+                              <td className="px-3 py-2"></td>
+                              <td className="px-3 py-2 text-right text-green-800">
+                                ₱{contract.finalPremium?.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Holiday Legend ── */}
+                  {contract.workingDaysBreakdown?.some(m => m.holidaysInMonth?.length > 0) && (
+                    <div className="pt-3 border-t border-green-200">
+                      <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block"></span> Regular Holiday (excluded from working days)</span>
+                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block"></span> Special Non-Working (excluded)</span>
+                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span> Special Working (counted)</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-green-200">
+                    <p className="text-xs text-gray-500">
+                      ℹ️ Partial-month premium = (Monthly Premium ÷ Total Working Days in Month) × Actual Working Days in Range.
+                      Full-month premium = Monthly Premium Rate. Excludes weekends, regular holidays, and special non-working holidays.
+                    </p>
+                  </div>
                 </>
+              )}
+
+              {contract.isSpecialSalaryGrade && (
+                <div className="mt-2">
+                  <p className="text-sm text-yellow-800 bg-yellow-100 p-2 rounded">
+                    ⚠️ Special Salary Grade: No premium was calculated for this contract.
+                  </p>
+                </div>
               )}
             </div>
           </div>
