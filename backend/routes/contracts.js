@@ -10,6 +10,7 @@ import { Parser } from 'json2csv';
 import csv from 'csv-parser';
 import { signedContractUpload } from '../utils/r2Upload.js';
 import { deleteFromR2 } from '../utils/r2Delete.js';
+import { R2_PUBLIC_URL } from '../config/r2.js';
 import { exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -969,11 +970,16 @@ router.post('/:id/upload-signed', verifyToken, signedContractUpload.single('sign
       }
     }
 
+    // Build public URL from key — never use file.location (private r2.cloudflarestorage.com endpoint)
+    const signedFileUrl = R2_PUBLIC_URL
+      ? `${R2_PUBLIC_URL}/${req.file.key}`
+      : req.file.key;  // key-only fallback; served via backend proxy
+
     contract.signedContractFile = {
       filename: req.file.key,
       originalName: req.file.originalname,
       key: req.file.key,
-      url: req.file.location,
+      url: signedFileUrl,
       uploadedAt: new Date(),
       uploadedBy: req.user.userId
     };

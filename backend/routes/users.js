@@ -356,15 +356,26 @@ router.post('/:id/documents', verifyToken, documentUpload.single('file'), async 
 
     if (!user.personalInfo) user.personalInfo = {};
 
-    const fileUrl = req.file.location;  // Full R2 public URL
-    const fileKey = req.file.key;       // R2 object key for deletion
+    const fileKey = req.file.key;  // R2 object key — always safe to store
+
+    // Build a publicly accessible URL.
+    // file.location from multer-s3 is the PRIVATE r2.cloudflarestorage.com endpoint —
+    // browsers cannot access it. Use R2_PUBLIC_URL (custom domain or pub-*.r2.dev)
+    // when available; otherwise store only the key so the backend proxy serves it.
+    const fileUrl = R2_PUBLIC_URL
+      ? `${R2_PUBLIC_URL}/${fileKey}`
+      : fileKey;  // key-only: getDocumentUrl() will proxy via /api/users/:id/photo/:key
 
     // Handle profile photo
     if (isProfilePhoto === 'true') {
       // Delete old profile photo from R2 if exists
-      const oldDoc = user.documents.find(doc => doc.filename === user.personalInfo.profilePhoto);
+      const oldDoc = user.documents.find(doc => doc.filename === user.personalInfo.profilePhoto)
+                  || user.documents.find(doc => doc.key === user.personalInfo.profilePhoto);
       if (oldDoc?.key) await deleteFromR2(oldDoc.key);
-      user.documents = user.documents.filter(doc => doc.filename !== user.personalInfo.profilePhoto);
+      user.documents = user.documents.filter(doc =>
+        doc.filename !== user.personalInfo.profilePhoto &&
+        doc.key !== user.personalInfo.profilePhoto
+      );
       user.personalInfo.profilePhoto = fileUrl;
     }
 
@@ -377,8 +388,9 @@ router.post('/:id/documents', verifyToken, documentUpload.single('file'), async 
 
     user.documents.push({
       type: type || 'PHOTO',
-      filename: fileUrl,
+      filename: fileUrl,  // public URL or key (never the private cloudflarestorage.com URL)
       key: fileKey,
+      url: fileUrl,
       description: description || (isProfilePhoto === 'true' ? 'Profile Photo' : ''),
       contractNumber: contractNumber || undefined
     });

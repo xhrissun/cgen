@@ -37,21 +37,37 @@ export const getDocumentUrl = (filenameOrUrl, userId, token) => {
 
   // (a) Already a full URL
   if (filenameOrUrl.startsWith('http')) {
-    // If R2 public URL is configured, use the direct URL — bucket is public
+    // Detect private R2 storage endpoint — browsers cannot access this directly.
+    // multer-s3 used to store file.location which pointed to the private endpoint.
+    // Extract the key and route through the backend proxy instead.
+    const isPrivateR2 = filenameOrUrl.includes('.r2.cloudflarestorage.com');
+
+    if (isPrivateR2) {
+      // Extract the key: URL is https://<accountId>.r2.cloudflarestorage.com/<bucket>/<key>
+      // or sometimes https://<accountId>.r2.cloudflarestorage.com/<key>
+      try {
+        const parsed = new URL(filenameOrUrl);
+        const parts = parsed.pathname.replace(/^\//, '').split('/');
+        // If first segment looks like a bucket name (no extension), strip it
+        const key = parts.length > 1 && !parts[0].includes('.') ? parts.slice(1).join('/') : parts.join('/');
+        if (key && userId && token) {
+          return `${BASE_URL}/api/users/${userId}/photo/${key}?token=${token}`;
+        }
+      } catch (_) { /* fall through */ }
+    }
+
+    // Public URL — if R2_PUBLIC_URL is set, trust it's accessible directly
     if (R2_PUBLIC_URL) return filenameOrUrl;
 
-    // No public URL configured — extract the R2 key from the full URL and proxy it.
-    // R2 URLs look like: https://pub-xxx.r2.dev/key  or  https://accountid.r2.cloudflarestorage.com/bucket/key
+    // No public URL configured — proxy through backend
     try {
       const parsed = new URL(filenameOrUrl);
-      // The key is the pathname minus any leading slash (and bucket name for private endpoints)
       const key = parsed.pathname.replace(/^\//, '');
       if (key && userId && token) {
         return `${BASE_URL}/api/users/${userId}/photo/${key}?token=${token}`;
       }
-    } catch (_) {
-      // Malformed URL — fall through to return as-is
-    }
+    } catch (_) { /* fall through */ }
+
     return filenameOrUrl;
   }
 
