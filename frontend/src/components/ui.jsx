@@ -6,6 +6,117 @@
 
 import { useEffect, useState, useCallback } from 'react';
 
+// ─── Top Progress Bar ────────────────────────────────────────────────────────
+// Mounts at the very top of the viewport (fixed). Animates from 0→85% while
+// loading is true, then quickly completes to 100% and fades out.
+// Usage: <TopProgressBar loading={isLoading} />
+export function TopProgressBar({ loading }) {
+  const [width, setWidth]     = useState(0);
+  const [visible, setVisible] = useState(false);
+  const [done, setDone]       = useState(false);
+
+  useEffect(() => {
+    let growTimer, doneTimer, hideTimer;
+
+    if (loading) {
+      setDone(false);
+      setVisible(true);
+      setWidth(0);
+      // Ramp quickly to 30%, then slowly crawl toward 85%
+      growTimer = setTimeout(() => setWidth(30), 30);
+      const crawl = setTimeout(() => setWidth(85), 300);
+      return () => { clearTimeout(growTimer); clearTimeout(crawl); };
+    } else {
+      // Complete and fade out
+      setWidth(100);
+      doneTimer = setTimeout(() => setDone(true), 400);
+      hideTimer = setTimeout(() => { setVisible(false); setWidth(0); setDone(false); }, 700);
+      return () => { clearTimeout(doneTimer); clearTimeout(hideTimer); };
+    }
+  }, [loading]);
+
+  if (!visible) return null;
+
+  return (
+    <div
+      className="fixed top-0 left-0 right-0 z-[9999] h-[3px] bg-blue-100"
+      aria-hidden="true"
+    >
+      <div
+        style={{
+          width: `${width}%`,
+          transition: done
+            ? 'width 0.2s ease-out, opacity 0.3s ease 0.1s'
+            : width === 0
+            ? 'none'
+            : 'width 0.8s cubic-bezier(0.1, 0.4, 0.2, 1)',
+          opacity: done ? 0 : 1,
+        }}
+        className="h-full bg-blue-600 rounded-r shadow-[0_0_8px_rgba(37,99,235,0.6)]"
+      />
+    </div>
+  );
+}
+
+// ─── App Boot Skeleton ────────────────────────────────────────────────────────
+// Full-page skeleton shown immediately after login while the dashboard fetches
+// its first payload. Matches the general layout (sidebar + content area).
+export function AppBootSkeleton() {
+  return (
+    <div className="flex min-h-screen bg-gray-50" aria-busy="true" aria-label="Loading dashboard">
+      {/* Sidebar skeleton */}
+      <div className="hidden md:flex flex-col w-56 bg-gray-900 p-4 gap-4 shrink-0">
+        <div className="h-8 w-32 bg-gray-700 rounded animate-pulse mb-4" />
+        {[80, 64, 72, 60, 68].map((w, i) => (
+          <div key={i} className={`h-8 bg-gray-700/60 rounded-lg animate-pulse`} style={{ width: `${w}%`, animationDelay: `${i * 60}ms` }} />
+        ))}
+      </div>
+
+      {/* Main content skeleton */}
+      <div className="flex-1 p-6 space-y-6 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-7 w-56 bg-gray-200 rounded animate-pulse" />
+            <div className="h-4 w-36 bg-gray-100 rounded animate-pulse" />
+          </div>
+          <div className="h-9 w-9 bg-gray-200 rounded-full animate-pulse" />
+        </div>
+
+        {/* KPI cards row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-gray-100 p-5 space-y-3 shadow-sm" style={{ animationDelay: `${i * 80}ms` }}>
+              <div className="flex justify-between items-start">
+                <div className="h-10 w-10 bg-gray-100 rounded-lg animate-pulse" />
+                <div className="h-4 w-16 bg-gray-100 rounded-full animate-pulse" />
+              </div>
+              <div className="h-7 w-20 bg-gray-200 rounded animate-pulse" />
+              <div className="h-3 w-28 bg-gray-100 rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+
+        {/* Two-column content */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-gray-100 p-5 space-y-4 shadow-sm">
+              <div className="h-5 w-36 bg-gray-200 rounded animate-pulse" />
+              {[...Array(5)].map((_, j) => (
+                <div key={j} className="flex items-center gap-3">
+                  <div className="h-4 w-4 bg-gray-100 rounded animate-pulse shrink-0" />
+                  <div className="h-4 bg-gray-100 rounded animate-pulse flex-1" style={{ width: `${60 + j * 7}%` }} />
+                  <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Spinner ─────────────────────────────────────────────────────────────────
 // Usage: <Spinner /> <Spinner size="sm" /> <Spinner size="lg" color="white" />
 export function Spinner({ size = 'md', color = 'blue', className = '' }) {

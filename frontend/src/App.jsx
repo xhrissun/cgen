@@ -6,7 +6,7 @@ import AdminDashboard from './components/AdminDashboard';
 import ContractualDashboard from './components/ContractualDashboard';
 import FocalPersonDashboard from './components/FocalPersonDashboard';
 import FinanceOfficerDashboard from './components/FinanceOfficerDashboard';
-import { ToastProvider } from './components/ui.jsx';
+import { ToastProvider, TopProgressBar, AppBootSkeleton } from './components/ui.jsx';
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -70,9 +70,10 @@ function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl text-gray-600">Loading...</div>
-      </div>
+      <>
+        <TopProgressBar loading={true} />
+        <AppBootSkeleton />
+      </>
     );
   }
 

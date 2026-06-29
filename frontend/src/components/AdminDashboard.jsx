@@ -6,6 +6,7 @@ import {
   LayoutDashboard, Users, Briefcase, FileText, FolderOpen,
   DollarSign, FileCheck, Layers, Calendar, PenTool, ScrollText
 } from 'lucide-react';
+import { TopProgressBar, SkeletonStatCard, SkeletonTable, SectionLoader } from './ui.jsx';
 import UserManagement from './UserManagement';
 import PositionManagement from './PositionManagement';
 import ContractGenerator from './ContractGenerator';
@@ -879,18 +880,16 @@ function AdminDashboard({ user }) {
                   </div>
                 </div>
                 {dashLoading && (
-                  <div className="flex items-center gap-2 text-sm text-gray-400">
-                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                    </svg>
-                    Loading data…
-                  </div>
+                  <span className="text-xs text-blue-500 font-medium animate-pulse">Fetching data…</span>
                 )}
               </div>
 
               {/* KPI Strip */}
+              <TopProgressBar loading={dashLoading} />
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
+                {dashLoading ? (
+                  [...Array(4)].map((_, i) => <SkeletonStatCard key={i} />)
+                ) : [
                   {
                     label: 'Total Contracts',
                     value: stats.totalContracts,

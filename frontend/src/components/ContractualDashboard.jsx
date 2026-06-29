@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SectionLoader, EmptyState, Spinner } from './ui.jsx';
+import { SectionLoader, EmptyState, Spinner, TopProgressBar, SkeletonTable } from './ui.jsx';
 import api, { openDocument, getDocumentUrl, API_BASE } from '../api.js';
 import ContractGenerator from './ContractGenerator';
 import DocumentViewerModal from './DocumentViewerModal';
@@ -498,6 +498,7 @@ function ContractualDashboard({ user }) {
 
   return (
     <div className="space-y-6">
+      <TopProgressBar loading={loadingDocuments} />
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-semibold text-gray-900">Contractual Dashboard</h2>
       </div>
@@ -818,7 +819,7 @@ function ContractualDashboard({ user }) {
           <div className="card">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">My Documents</h3>
             {loadingDocuments ? (
-              <SectionLoader message="Loading documents…" />
+              <table className="table w-full"><tbody><SkeletonTable rows={4} cols={5} /></tbody></table>
             ) : documents.length === 0 ? (
               <EmptyState icon="📄" title="No documents yet" description="Upload your first document above." />
             ) : (
