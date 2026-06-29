@@ -400,9 +400,12 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
     try {
       const token = localStorage.getItem('token');
       
-      // Get salary grade data
+      // Get salary grade data using the contract START DATE so that advance-drafted
+      // contracts (e.g. drafted today for a July 2 start) correctly resolve the
+      // salary grade period that is effective on the contract's start date.
       const sgResponse = await api.get(`/api/positions/salary-grades/${formData.salaryGrade}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        params: { contractDate: formData.startDate }
       });
       
       const salaryGrade = sgResponse.data;

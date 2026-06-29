@@ -106,13 +106,20 @@ router.get('/salary-grades/:grade', verifyToken, async (req, res) => {
   try {
     // grade is always stored as String after normalization
     const gradeParam = String(req.params.grade).trim();
-    const today = new Date();
 
-    // Find in most recent period first (grade stored as string)
+    // Use contractDate query param when provided (for advance contract drafting),
+    // otherwise fall back to today. This ensures a contract starting July 2, 2026
+    // correctly picks up the July 1, 2026 salary grade period instead of the
+    // current (pre-July 1) period.
+    const referenceDate = req.query.contractDate
+      ? new Date(req.query.contractDate)
+      : new Date();
+
+    // Find the salary grade period that covers the reference date
     let salaryGrade = await SalaryGrade.findOne({
       grade: gradeParam,
-      periodStartDate: { $lte: today },
-      $or: [{ periodEndDate: null }, { periodEndDate: { $gte: today } }]
+      periodStartDate: { $lte: referenceDate },
+      $or: [{ periodEndDate: null }, { periodEndDate: { $gte: referenceDate } }]
     });
 
     // Fallback: most recent period regardless of date
