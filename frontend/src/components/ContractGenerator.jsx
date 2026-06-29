@@ -803,226 +803,192 @@ const handleFileUpload = (contractId, event) => {
   }
 };
 
-  /* ── Design tokens ── */
-  const D = {
-    bg: '#0a1628',
-    panel: '#0f1e35',
-    card: '#152236',
-    cardDeep: '#111d30',
-    border: 'rgba(255,255,255,0.08)',
-    borderStrong: 'rgba(255,255,255,0.14)',
-    green: '#2e8b57',
-    greenMuted: 'rgba(46,139,87,0.15)',
-    greenBorder: 'rgba(46,139,87,0.35)',
-    textPrimary: '#f0f4f8',
-    textSecondary: 'rgba(240,244,248,0.70)',
-    textMuted: 'rgba(240,244,248,0.40)',
-    blue: '#3b82f6',
-    blueMuted: 'rgba(59,130,246,0.15)',
-    blueBorder: 'rgba(59,130,246,0.3)',
-    red: '#ef4444',
-    redMuted: 'rgba(239,68,68,0.15)',
-    yellow: '#f59e0b',
-    yellowMuted: 'rgba(245,158,11,0.12)',
-    yellowBorder: 'rgba(245,158,11,0.3)',
-    orange: '#fb923c',
-    orangeMuted: 'rgba(251,146,60,0.15)',
-    purple: '#a78bfa',
-    purpleMuted: 'rgba(167,139,250,0.12)',
-  };
-
-  const iStyle = {
-    width: '100%', padding: '10px 14px',
-    background: 'rgba(255,255,255,0.05)',
-    border: `1px solid ${D.border}`,
-    borderRadius: 8,
-    color: D.textPrimary, fontSize: 13,
-    outline: 'none', boxSizing: 'border-box',
-    transition: 'border-color 0.2s',
-  };
-  const lStyle = {
-    display: 'block', fontSize: 10, fontWeight: 700,
-    letterSpacing: '0.1em', textTransform: 'uppercase',
-    color: D.textMuted, marginBottom: 6,
-  };
-  const focusGreen = (e) => e.target.style.borderColor = D.green;
-  const blurBorder = (e) => e.target.style.borderColor = D.border;
-
-  const STATUS_STYLE = {
-    ACTIVE:    { bg: D.greenMuted,  border: D.greenBorder,  color: D.green },
-    DRAFT:     { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.25)', color: '#94a3b8' },
-    EXPIRED:   { bg: D.redMuted,    border: 'rgba(239,68,68,0.3)',  color: D.red },
-    APPROVED:  { bg: D.blueMuted,   border: D.blueBorder,   color: D.blue },
-    CANCELLED: { bg: D.orangeMuted, border: 'rgba(251,146,60,0.3)', color: D.orange },
-    PENDING:   { bg: D.yellowMuted, border: D.yellowBorder,  color: D.yellow },
-    TERMINATED:{ bg: D.redMuted,    border: 'rgba(239,68,68,0.3)',  color: D.red },
-  };
-
   return (
-    <div style={{ background: D.bg, minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 40 }}>
-      {/* ── Header row ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 3, height: 20, background: D.green, borderRadius: 2 }} />
-          <h3 style={{ fontSize: 20, fontWeight: 700, color: D.textPrimary, margin: 0 }}>Contract Generator</h3>
-        </div>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h3 className="text-xl font-bold">Contract Generator</h3>
         {(userRole === 'ADMINISTRATOR' || userRole === 'FOCAL_PERSON') && (
           <button
             onClick={() => setShowForm(!showForm)}
-            style={{ padding: '10px 22px', background: showForm ? 'rgba(255,255,255,0.07)' : D.green, border: showForm ? `1px solid ${D.borderStrong}` : 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 8 }}
+            className="btn btn-primary"
           >
-            {showForm ? (
-              <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</>
-            ) : (
-              <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Create New Contract</>
-            )}
+            {showForm ? 'Cancel' : 'Create New Contract'}
           </button>
         )}
       </div>
 
-      {/* ── Create Form ── */}
       {showForm && !viewOnly && (
-        <div style={{ background: D.card, border: `1px solid ${D.borderStrong}`, borderRadius: 14, overflow: 'hidden' }}>
-          <div style={{ background: D.panel, borderBottom: `1px solid ${D.border}`, padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 3, height: 16, background: D.green, borderRadius: 2 }} />
-            <h4 style={{ fontSize: 14, fontWeight: 700, color: D.textPrimary, margin: 0 }}>New Contract</h4>
-          </div>
-          <div style={{ padding: '24px' }}>
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              {(userRole === 'ADMINISTRATOR' || userRole === 'FOCAL_PERSON') && (
-                <div>
-                  <label style={lStyle}>Select User</label>
-                  <Select
-                    value={users.find(u => u._id === formData.userId) ? {
-                      value: formData.userId,
-                      label: `${users.find(u => u._id === formData.userId)?.personalInfo?.firstName} ${users.find(u => u._id === formData.userId)?.personalInfo?.lastName} (${users.find(u => u._id === formData.userId)?.username})`
-                    } : null}
-                    onChange={(option) => setFormData({...formData, userId: option?.value || ''})}
-                    options={users
-                      .sort((a, b) => {
-                        const aL = (a.personalInfo?.lastName || '').toUpperCase();
-                        const bL = (b.personalInfo?.lastName || '').toUpperCase();
-                        const aF = (a.personalInfo?.firstName || '').toUpperCase();
-                        const bF = (b.personalInfo?.firstName || '').toUpperCase();
-                        if (aL && bL) { if (aL !== bL) return aL.localeCompare(bL); return aF.localeCompare(bF); }
-                        if (!aL && bL) return 1; if (aL && !bL) return -1;
-                        return a.username.localeCompare(b.username);
-                      })
-                      .map(user => ({
-                        value: user._id,
-                        label: user.personalInfo?.lastName && user.personalInfo?.firstName
-                          ? `${user.personalInfo.lastName}, ${user.personalInfo.firstName}${user.personalInfo.middleName ? ' ' + user.personalInfo.middleName : ''} (${user.username})`
-                          : `${user.personalInfo?.lastName || user.personalInfo?.firstName || ''} (${user.username})`
-                      }))}
-                    placeholder="Select User"
-                    isClearable isSearchable
-                    className="react-select-dark"
-                    classNamePrefix="react-select-dark"
-                    required
-                    styles={{
-                      control: (base) => ({ ...base, background: 'rgba(255,255,255,0.05)', border: `1px solid ${D.border}`, borderRadius: 8, color: D.textPrimary, boxShadow: 'none', '&:hover': { borderColor: D.green } }),
-                      menu: (base) => ({ ...base, background: D.card, border: `1px solid ${D.borderStrong}`, borderRadius: 8 }),
-                      option: (base, { isFocused }) => ({ ...base, background: isFocused ? D.greenMuted : 'transparent', color: D.textPrimary, fontSize: 13 }),
-                      singleValue: (base) => ({ ...base, color: D.textPrimary }),
-                      input: (base) => ({ ...base, color: D.textPrimary }),
-                      placeholder: (base) => ({ ...base, color: D.textMuted }),
-                      indicatorSeparator: () => ({ display: 'none' }),
-                      dropdownIndicator: (base) => ({ ...base, color: D.textMuted }),
-                    }}
-                  />
-                </div>
-              )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-                <div>
-                  <label style={lStyle}>Mode</label>
-                  <select value={formData.mode} onChange={(e) => setFormData({...formData, mode: e.target.value})} style={iStyle} required onFocus={focusGreen} onBlur={blurBorder}>
-                    <option value="NEW">New</option>
-                    <option value="RENEWAL">Renewal</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={lStyle}>Year</label>
-                  <input type="number" value={formData.year} onChange={(e) => setFormData({...formData, year: e.target.value})} style={iStyle} required onFocus={focusGreen} onBlur={blurBorder} />
-                </div>
-                <div>
-                  <label style={lStyle}>Semester</label>
-                  <select value={formData.semester} onChange={(e) => setFormData({...formData, semester: parseInt(e.target.value)})} style={iStyle} onFocus={focusGreen} onBlur={blurBorder}>
-                    <option value={1}>First Semester</option>
-                    <option value={2}>Second Semester</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <div>
-                  <label style={lStyle}>Start Date</label>
-                  <input type="date" value={formData.startDate} onChange={(e) => setFormData({...formData, startDate: e.target.value})} style={iStyle} required onFocus={focusGreen} onBlur={blurBorder} />
-                </div>
-                <div>
-                  <label style={lStyle}>End Date</label>
-                  <input type="date" value={formData.endDate} onChange={(e) => setFormData({...formData, endDate: e.target.value})} style={iStyle} required onFocus={focusGreen} onBlur={blurBorder} />
-                </div>
-              </div>
-
+        <div className="card bg-white shadow-lg rounded-lg p-6">
+          <h4 className="text-lg font-semibold mb-4">New Contract</h4>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {(userRole === 'ADMINISTRATOR' || userRole === 'FOCAL_PERSON') && (
               <div>
-                <label style={lStyle}>Position</label>
+                <label className="block text-sm font-medium mb-1">Select User</label>
                 <Select
-                  value={positions.find(p => p.positionCode === formData.positionCode) ? {
-                    value: formData.positionCode,
-                    label: `[${formData.positionCode}] ${positions.find(p => p.positionCode === formData.positionCode)?.title} (Grade ${positions.find(p => p.positionCode === formData.positionCode)?.salaryGrade}) - ${positions.find(p => p.positionCode === formData.positionCode)?.assignedClauses?.length || 0} clauses`
+                  value={users.find(u => u._id === formData.userId) ? {
+                    value: formData.userId,
+                    label: `${users.find(u => u._id === formData.userId)?.personalInfo?.firstName} ${users.find(u => u._id === formData.userId)?.personalInfo?.lastName} (${users.find(u => u._id === formData.userId)?.username})`
                   } : null}
-                  onChange={(option) => handlePositionChange(option?.value || '')}
-                  options={positions.map(pos => ({ value: pos.positionCode, label: `[${pos.positionCode}] ${pos.title}${pos.description ? ` - ${pos.description}` : ''} (Grade ${pos.salaryGrade}) - ${pos.assignedClauses?.length || 0} clauses` }))}
-                  placeholder="Select Position"
-                  isClearable isSearchable required
-                  styles={{
-                    control: (base) => ({ ...base, background: 'rgba(255,255,255,0.05)', border: `1px solid ${D.border}`, borderRadius: 8, boxShadow: 'none', '&:hover': { borderColor: D.green } }),
-                    menu: (base) => ({ ...base, background: D.card, border: `1px solid ${D.borderStrong}`, borderRadius: 8 }),
-                    option: (base, { isFocused }) => ({ ...base, background: isFocused ? D.greenMuted : 'transparent', color: D.textPrimary, fontSize: 13 }),
-                    singleValue: (base) => ({ ...base, color: D.textPrimary }),
-                    input: (base) => ({ ...base, color: D.textPrimary }),
-                    placeholder: (base) => ({ ...base, color: D.textMuted }),
-                    indicatorSeparator: () => ({ display: 'none' }),
-                    dropdownIndicator: (base) => ({ ...base, color: D.textMuted }),
-                  }}
+                  onChange={(option) => setFormData({...formData, userId: option?.value || ''})}
+                  options={users
+                    .sort((a, b) => {
+                      const aLastName = (a.personalInfo?.lastName || '').toUpperCase();
+                      const bLastName = (b.personalInfo?.lastName || '').toUpperCase();
+                      const aFirstName = (a.personalInfo?.firstName || '').toUpperCase();
+                      const bFirstName = (b.personalInfo?.firstName || '').toUpperCase();
+                      
+                      if (aLastName && bLastName) {
+                        if (aLastName !== bLastName) {
+                          return aLastName.localeCompare(bLastName);
+                        }
+                        return aFirstName.localeCompare(bFirstName);
+                      }
+                      
+                      if (!aLastName && bLastName) return 1;
+                      if (aLastName && !bLastName) return -1;
+                      
+                      return a.username.localeCompare(b.username);
+                    })
+                    .map(user => ({
+                      value: user._id,
+                      label: user.personalInfo?.lastName && user.personalInfo?.firstName
+                        ? `${user.personalInfo.lastName}, ${user.personalInfo.firstName}${user.personalInfo.middleName ? ' ' + user.personalInfo.middleName : ''} (${user.username})`
+                        : `${user.personalInfo?.lastName || user.personalInfo?.firstName || ''} (${user.username})`
+                    }))}
+                  placeholder="Select User"
+                  isClearable
+                  isSearchable
+                  className="react-select-container"
+                  classNamePrefix="react-select"
+                  required
                 />
               </div>
+            )}
 
-              {/* ── Premium Preview ── */}
-              {previewData && (
-                <div style={{ background: D.cardDeep, border: `1px solid ${D.greenBorder}`, borderRadius: 10, padding: '20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                    <div style={{ width: 3, height: 14, background: D.green, borderRadius: 2 }} />
-                    <h5 style={{ fontSize: 12, fontWeight: 700, color: D.textSecondary, margin: 0, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Salary Information</h5>
-                  </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Mode</label>
+                <select
+                  value={formData.mode}
+                  onChange={(e) => setFormData({...formData, mode: e.target.value})}
+                  className="input w-full px-3 py-2 border rounded-md"
+                  required
+                >
+                  <option value="NEW">New</option>
+                  <option value="RENEWAL">Renewal</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Year</label>
+                <input
+                  type="number"
+                  value={formData.year}
+                  onChange={(e) => setFormData({...formData, year: e.target.value})}
+                  className="input w-full px-3 py-2 border rounded-md"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Semester</label>
+                <select
+                  value={formData.semester}
+                  onChange={(e) => setFormData({...formData, semester: parseInt(e.target.value)})}
+                  className="input w-full px-3 py-2 border rounded-md"
+                >
+                  <option value={1}>First Semester</option>
+                  <option value={2}>Second Semester</option>
+                </select>
+              </div>
+            </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px 24px', marginBottom: 16 }}>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={formData.startDate}
+                  onChange={(e) => setFormData({...formData, startDate: e.target.value})}
+                  className="input w-full px-3 py-2 border rounded-md"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">End Date</label>
+                <input
+                  type="date"
+                  value={formData.endDate}
+                  onChange={(e) => setFormData({...formData, endDate: e.target.value})}
+                  className="input w-full px-3 py-2 border rounded-md"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Position</label>
+              <Select
+                value={positions.find(p => p.positionCode === formData.positionCode) ? {
+                  value: formData.positionCode,
+                  label: `[${formData.positionCode}] ${positions.find(p => p.positionCode === formData.positionCode)?.title} (Grade ${positions.find(p => p.positionCode === formData.positionCode)?.salaryGrade}) - ${positions.find(p => p.positionCode === formData.positionCode)?.assignedClauses?.length || 0} clauses`
+                } : null}
+                onChange={(option) => handlePositionChange(option?.value || '')}
+                options={positions.map(pos => ({
+                  value: pos.positionCode,
+                  label: `[${pos.positionCode}] ${pos.title}${pos.description ? ` - ${pos.description}` : ''} (Grade ${pos.salaryGrade}) - ${pos.assignedClauses?.length || 0} clauses`
+                }))}
+                placeholder="Select Position"
+                isClearable
+                isSearchable
+                className="react-select-container"
+                classNamePrefix="react-select"
+                required
+              />
+            </div>
+
+            {/* Premium Preview Section */}
+            {previewData && (
+              <div className="border-t pt-4">
+                <h5 className="font-semibold mb-3 text-lg">Salary Information</h5>
+
+                {/* ── Salary Summary Grid ── */}
+                <div className="bg-green-50 p-4 rounded-lg mb-4">
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-3">
                     <div>
-                      <p style={{ fontSize: 10, color: D.textMuted, margin: '0 0 4px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>Salary Grade</p>
-                      <p style={{ fontSize: 14, fontWeight: 700, color: D.textPrimary, margin: 0 }}>SG {formData.salaryGrade}</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Salary Grade</p>
+                      <p className="text-base font-semibold">SG {formData.salaryGrade}</p>
                     </div>
                     <div>
-                      <p style={{ fontSize: 10, color: D.textMuted, margin: '0 0 4px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>Basic Salary</p>
-                      <p style={{ fontSize: 14, fontWeight: 700, color: '#4ade80', margin: 0 }}>₱{previewData.basicSalary.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Basic Salary</p>
+                      <p className="text-base font-semibold">
+                        ₱{previewData.basicSalary.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
                     </div>
+
                     {!previewData.isSpecialSalaryGrade && (
                       <>
                         <div>
-                          <p style={{ fontSize: 10, color: D.textMuted, margin: '0 0 4px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>Monthly Salary (Contract)</p>
-                          <p style={{ fontSize: 13, fontWeight: 600, color: D.textPrimary, margin: 0 }}>₱{previewData.monthlySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Monthly Salary (Contract)</p>
+                          <p className="text-base font-semibold">
+                            ₱{previewData.monthlySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                          </p>
                         </div>
                         <div>
-                          <p style={{ fontSize: 10, color: D.textMuted, margin: '0 0 4px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>Daily Salary (Contract)</p>
-                          <p style={{ fontSize: 13, fontWeight: 600, color: D.textPrimary, margin: 0 }}>₱{previewData.dailySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Daily Salary (Contract)</p>
+                          <p className="text-base font-semibold">
+                            ₱{previewData.dailySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                          </p>
                         </div>
                         <div>
-                          <p style={{ fontSize: 10, color: D.textMuted, margin: '0 0 4px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>Monthly Premium</p>
-                          <p style={{ fontSize: 13, fontWeight: 600, color: D.textPrimary, margin: 0 }}>₱{previewData.monthlyPremium.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Monthly Premium</p>
+                          <p className="text-base font-semibold">
+                            ₱{previewData.monthlyPremium.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                          </p>
                         </div>
                         <div>
-                          <p style={{ fontSize: 10, color: D.textMuted, margin: '0 0 4px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>{previewData.bonusType} Premium</p>
-                          <p style={{ fontSize: 15, fontWeight: 800, color: D.green, margin: 0 }}>₱{previewData.totalPremium.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{previewData.bonusType} Premium</p>
+                          <p className="text-base font-semibold text-green-700">
+                            ₱{previewData.totalPremium.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                          </p>
                         </div>
                       </>
                     )}
@@ -1030,64 +996,86 @@ const handleFileUpload = (contractId, event) => {
 
                   {!previewData.isSpecialSalaryGrade && (
                     <>
-                      <div style={{ borderTop: `1px solid ${D.border}`, paddingTop: 16, marginBottom: 16 }}>
-                        <p style={{ fontSize: 10, fontWeight: 700, color: D.textMuted, letterSpacing: '0.09em', textTransform: 'uppercase', margin: '0 0 12px' }}>Premium Calculation Summary</p>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                      {/* ── Summary Counts ── */}
+                      <div className="mt-4 pt-3 border-t border-green-200">
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Premium Calculation Summary</p>
+                        <div className="grid grid-cols-4 gap-3 text-center">
                           {[
-                            { label: 'Total Months', value: previewData.premiumBreakdown.length },
-                            { label: 'Full Months', value: previewData.premiumBreakdown.filter(m => m.isFullMonth).length },
+                            { label: 'Total Months',   value: previewData.premiumBreakdown.length },
+                            { label: 'Full Months',    value: previewData.premiumBreakdown.filter(m => m.isFullMonth).length },
                             { label: 'Partial Months', value: previewData.premiumBreakdown.filter(m => !m.isFullMonth).length },
-                            { label: 'Working Days', value: previewData.workingDays, highlight: true },
+                            { label: 'Working Days',   value: previewData.workingDays, highlight: true }
                           ].map(({ label, value, highlight }) => (
-                            <div key={label} style={{ background: D.card, border: `1px solid ${D.border}`, borderRadius: 8, padding: '12px', textAlign: 'center' }}>
-                              <p style={{ fontSize: 10, color: D.textMuted, margin: '0 0 6px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</p>
-                              <p style={{ fontSize: 22, fontWeight: 700, color: highlight ? D.blue : D.textPrimary, margin: 0 }}>{value}</p>
+                            <div key={label} className="bg-white rounded p-2 shadow-sm">
+                              <p className="text-xs text-gray-500">{label}</p>
+                              <p className={`text-lg font-bold ${highlight ? 'text-blue-600' : ''}`}>{value}</p>
                             </div>
                           ))}
                         </div>
                       </div>
 
-                      <div style={{ borderTop: `1px solid ${D.border}`, paddingTop: 16, marginBottom: 16 }}>
-                        <p style={{ fontSize: 10, fontWeight: 700, color: D.textMuted, letterSpacing: '0.09em', textTransform: 'uppercase', margin: '0 0 12px' }}>Monthly Premium Breakdown</p>
-                        <div style={{ borderRadius: 8, overflow: 'hidden', border: `1px solid ${D.border}` }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      {/* ── Per-Month Breakdown Table ── */}
+                      <div className="mt-4 pt-3 border-t border-green-200">
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Monthly Premium Breakdown</p>
+                        <div className="overflow-x-auto rounded border border-green-200">
+                          <table className="w-full text-sm">
                             <thead>
-                              <tr style={{ background: D.bg }}>
-                                {['Month', 'Type', 'Working Days', 'Daily Rate', 'Premium'].map((h, i) => (
-                                  <th key={h} style={{ padding: '10px 14px', textAlign: i >= 2 ? 'center' : 'left', color: D.textMuted, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: `1px solid ${D.border}` }}>{h}</th>
-                                ))}
+                              <tr className="bg-green-100 text-gray-600 text-xs uppercase tracking-wide">
+                                <th className="text-left px-3 py-2">Month</th>
+                                <th className="text-center px-3 py-2">Type</th>
+                                <th className="text-center px-3 py-2">Working Days<br/><span className="font-normal normal-case">(in month / in range)</span></th>
+                                <th className="text-right px-3 py-2">Daily Rate</th>
+                                <th className="text-right px-3 py-2">Premium</th>
                               </tr>
                             </thead>
                             <tbody>
                               {previewData.premiumBreakdown.map((m, idx) => (
                                 <>
-                                  <tr key={m.monthKey} style={{ background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)', borderBottom: `1px solid ${D.border}` }}>
-                                    <td style={{ padding: '10px 14px', fontWeight: 600, color: D.textPrimary }}>{m.monthName} {m.year}</td>
-                                    <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                                  <tr
+                                    key={m.monthKey}
+                                    className={idx % 2 === 0 ? 'bg-white' : 'bg-green-50'}
+                                  >
+                                    <td className="px-3 py-2 font-medium">{m.monthName} {m.year}</td>
+                                    <td className="px-3 py-2 text-center">
                                       {m.isFullMonth
-                                        ? <span style={{ background: D.greenMuted, border: `1px solid ${D.greenBorder}`, color: D.green, borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>Full</span>
-                                        : <span style={{ background: D.yellowMuted, border: `1px solid ${D.yellowBorder}`, color: D.yellow, borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>Partial</span>
+                                        ? <span className="inline-block px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">Full</span>
+                                        : <span className="inline-block px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 text-xs font-medium">Partial</span>
                                       }
                                     </td>
-                                    <td style={{ padding: '10px 14px', textAlign: 'center', color: D.textSecondary }}>{m.totalWorkingDaysInMonth} / {m.actualWorkingDaysInRange}</td>
-                                    <td style={{ padding: '10px 14px', textAlign: 'right', color: D.textSecondary, fontFamily: 'monospace' }}>₱{m.dailyPremiumRate.toLocaleString('en-PH', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</td>
-                                    <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: D.textPrimary, fontFamily: 'monospace' }}>₱{m.calculatedPremium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    <td className="px-3 py-2 text-center text-gray-700">
+                                      {m.totalWorkingDaysInMonth} / {m.actualWorkingDaysInRange}
+                                    </td>
+                                    <td className="px-3 py-2 text-right text-gray-700">
+                                      ₱{m.dailyPremiumRate.toLocaleString('en-PH', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                                    </td>
+                                    <td className="px-3 py-2 text-right font-semibold">
+                                      ₱{m.calculatedPremium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
                                   </tr>
+                                  {/* Holidays sub-row */}
                                   {m.holidaysInMonth.length > 0 && (
-                                    <tr key={`${m.monthKey}-hols`} style={{ background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)', borderBottom: `1px solid ${D.border}` }}>
-                                      <td colSpan={5} style={{ padding: '6px 14px 10px' }}>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                    <tr key={`${m.monthKey}-hols`} className={idx % 2 === 0 ? 'bg-white' : 'bg-green-50'}>
+                                      <td colSpan={5} className="px-3 pb-2 pt-0">
+                                        <div className="flex flex-wrap gap-1 pl-1">
                                           {m.holidaysInMonth.map(h => {
-                                            const chipStyle = h.type === 'REGULAR'
-                                              ? { bg: D.redMuted, border: 'rgba(239,68,68,0.25)', color: D.red }
-                                              : h.type === 'SPECIAL_NON_WORKING'
-                                              ? { bg: D.orangeMuted, border: 'rgba(251,146,60,0.3)', color: D.orange }
-                                              : { bg: D.blueMuted, border: D.blueBorder, color: D.blue };
-                                            const typeLabel = h.type === 'REGULAR' ? 'Regular' : h.type === 'SPECIAL_NON_WORKING' ? 'Special Non-Working' : 'Special Working';
+                                            const labelColor =
+                                              h.type === 'REGULAR'
+                                                ? 'bg-red-100 text-red-700'
+                                                : h.type === 'SPECIAL_NON_WORKING'
+                                                ? 'bg-orange-100 text-orange-700'
+                                                : 'bg-blue-100 text-blue-700';
+                                            const typeLabel =
+                                              h.type === 'REGULAR' ? 'Regular'
+                                              : h.type === 'SPECIAL_NON_WORKING' ? 'Special Non-Working'
+                                              : 'Special Working';
                                             return (
-                                              <span key={h.date} style={{ background: chipStyle.bg, border: `1px solid ${chipStyle.border}`, color: chipStyle.color, borderRadius: 5, padding: '2px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                              <span
+                                                key={h.date}
+                                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${labelColor}`}
+                                                title={typeLabel}
+                                              >
                                                 🗓️ {new Date(h.date + 'T00:00:00Z').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' })} — {h.name}
-                                                <span style={{ opacity: 0.6 }}>({typeLabel})</span>
+                                                <span className="opacity-60">({typeLabel})</span>
                                               </span>
                                             );
                                           })}
@@ -1099,182 +1087,409 @@ const handleFileUpload = (contractId, event) => {
                               ))}
                             </tbody>
                             <tfoot>
-                              <tr style={{ background: D.bg }}>
-                                <td colSpan={2} style={{ padding: '11px 14px', fontWeight: 700, color: D.textPrimary, fontSize: 12, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Total</td>
-                                <td style={{ padding: '11px 14px', textAlign: 'center', fontWeight: 700, color: D.textPrimary }}>{previewData.workingDays} days</td>
-                                <td />
-                                <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 800, color: D.green, fontSize: 14, fontFamily: 'monospace' }}>₱{previewData.totalPremium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                              <tr className="bg-green-200 font-bold text-sm">
+                                <td className="px-3 py-2" colSpan={2}>TOTAL</td>
+                                <td className="px-3 py-2 text-center">{previewData.workingDays} days</td>
+                                <td className="px-3 py-2"></td>
+                                <td className="px-3 py-2 text-right text-green-800">
+                                  ₱{previewData.totalPremium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
                               </tr>
                             </tfoot>
                           </table>
                         </div>
                       </div>
 
+                      {/* ── Holidays Legend ── */}
                       {previewData.contractHolidays.length > 0 && (
-                        <div style={{ borderTop: `1px solid ${D.border}`, paddingTop: 14, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-                          {[
-                            { color: D.red, label: 'Regular Holiday (excluded)' },
-                            { color: D.orange, label: 'Special Non-Working (excluded)' },
-                            { color: D.blue, label: 'Special Working (counted)' },
-                          ].map(({ color, label }) => (
-                            <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: D.textMuted }}>
-                              <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
-                              {label}
-                            </span>
-                          ))}
+                        <div className="mt-3 pt-3 border-t border-green-200">
+                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                            Holidays in Contract Period ({previewData.contractHolidays.length})
+                          </p>
+                          <div className="flex gap-3 text-xs text-gray-500">
+                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block"></span> Regular Holiday (excluded from working days)</span>
+                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block"></span> Special Non-Working (excluded)</span>
+                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span> Special Working (counted)</span>
+                          </div>
                         </div>
                       )}
-                      <p style={{ fontSize: 11, color: D.textMuted, marginTop: 12, lineHeight: 1.6 }}>ℹ️ Partial-month premium = (Monthly Premium ÷ Total Working Days in Month) × Actual Working Days in Range. Excludes weekends, regular holidays, and special non-working holidays.</p>
+
+                      <div className="mt-3 pt-3 border-t border-green-200">
+                        <p className="text-xs text-gray-500">
+                          ℹ️ Partial-month premium = (Monthly Premium ÷ Total Working Days in Month) × Actual Working Days in Range.
+                          Full-month premium = Monthly Premium Rate. Calculation excludes weekends, regular holidays, and special non-working holidays.
+                        </p>
+                      </div>
                     </>
                   )}
 
                   {previewData.isSpecialSalaryGrade && (
-                    <div style={{ background: D.yellowMuted, border: `1px solid ${D.yellowBorder}`, borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 16 }}>⚠️</span>
-                      <p style={{ fontSize: 13, color: D.yellow, margin: 0 }}>Special Salary Grade: No premium will be calculated for this contract.</p>
+                    <div className="mt-3">
+                      <p className="text-sm text-yellow-800 bg-yellow-100 p-2 rounded">
+                        ⚠️ Special Salary Grade: No premium will be calculated for this contract.
+                      </p>
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Rest of the form continues... */}
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Place of Assignment
+                {currentUserRole === 'FOCAL_PERSON' && <span className="text-red-500 ml-1">*</span>}
+              </label>
+              <select
+                value={formData.placeOfAssignment}
+                onChange={(e) => setFormData({...formData, placeOfAssignment: e.target.value})}
+                className="input w-full px-3 py-2 border rounded-md"
+                required
+                disabled={currentUserRole === 'FOCAL_PERSON'}
+              >
+                <option value="">Select Place of Assignment</option>
+                {PLACE_OF_ASSIGNMENT_OPTIONS.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+              {currentUserRole === 'FOCAL_PERSON' && (
+                <p className="text-xs text-blue-600 mt-1">
+                  ℹ️ Locked to your assigned place: {formData.placeOfAssignment}
+                </p>
               )}
+            </div>
 
-              <div>
-                <label style={lStyle}>
-                  Place of Assignment{currentUserRole === 'FOCAL_PERSON' && <span style={{ color: D.red }}> *</span>}
-                </label>
-                <select value={formData.placeOfAssignment} onChange={(e) => setFormData({...formData, placeOfAssignment: e.target.value})} style={{ ...iStyle, ...(currentUserRole === 'FOCAL_PERSON' ? { opacity: 0.6 } : {}) }} required disabled={currentUserRole === 'FOCAL_PERSON'} onFocus={focusGreen} onBlur={blurBorder}>
-                  <option value="">Select Place of Assignment</option>
-                  {PLACE_OF_ASSIGNMENT_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
-                {currentUserRole === 'FOCAL_PERSON' && <p style={{ fontSize: 11, color: D.blue, marginTop: 6 }}>ℹ️ Locked to your assigned place: {formData.placeOfAssignment}</p>}
-              </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Charging</label>
+              <input
+                type="text"
+                value={formData.charging}
+                onChange={(e) => setFormData({...formData, charging: e.target.value})}
+                className="input w-full px-3 py-2 border rounded-md"
+                required
+                disabled={currentUserRole === 'FOCAL_PERSON'}
+                readOnly={currentUserRole === 'FOCAL_PERSON'}
+              />
+              {currentUserRole === 'FOCAL_PERSON' && (
+                <p className="text-xs text-gray-500 mt-1">
+                  ℹ️ Charging can only be set by Finance Officers or Administrators
+                </p>
+              )}
+            </div>
 
-              <div>
-                <label style={lStyle}>Charging</label>
-                <input type="text" value={formData.charging} onChange={(e) => setFormData({...formData, charging: e.target.value})} style={{ ...iStyle, ...(currentUserRole === 'FOCAL_PERSON' ? { opacity: 0.6 } : {}) }} required disabled={currentUserRole === 'FOCAL_PERSON'} readOnly={currentUserRole === 'FOCAL_PERSON'} onFocus={focusGreen} onBlur={blurBorder} />
-                {currentUserRole === 'FOCAL_PERSON' && <p style={{ fontSize: 11, color: D.textMuted, marginTop: 6 }}>ℹ️ Charging can only be set by Finance Officers or Administrators</p>}
-              </div>
-
-              <div style={{ borderTop: `1px solid ${D.border}`, paddingTop: 20 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: D.textMuted, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 16px' }}>Approver Selection</p>
+            <div className="border-t pt-4">
+              <h5 className="font-semibold mb-3">Approver Selection</h5>
+              <div className="grid grid-cols-1 gap-4">
                 <div>
-                  <label style={lStyle}>Approver Branch</label>
-                  <select value={formData.approverBranch} onChange={(e) => handleApproverBranchChange(e.target.value)} style={iStyle} required onFocus={focusGreen} onBlur={blurBorder}>
+                  <label className="block text-sm font-medium mb-1">Approver Branch</label>
+                  <select
+                    value={formData.approverBranch}
+                    onChange={(e) => handleApproverBranchChange(e.target.value)}
+                    className="input w-full px-3 py-2 border rounded-md"
+                    required
+                  >
                     <option value="MANAGEMENT">Management Services</option>
                     <option value="TECHNICAL">Technical Services</option>
                   </select>
                 </div>
               </div>
+            </div>
 
-              <div style={{ borderTop: `1px solid ${D.border}`, paddingTop: 20 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: D.textMuted, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 16px' }}>Signatories</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-                    <div><label style={lStyle}>First Party Name</label><input type="text" value={formData.signatories.firstParty.name} onChange={(e) => setFormData({...formData, signatories: {...formData.signatories, firstParty: {...formData.signatories.firstParty, name: e.target.value}}})} style={iStyle} onFocus={focusGreen} onBlur={blurBorder} /></div>
-                    <div><label style={lStyle}>Title</label><input type="text" value={formData.signatories.firstParty.title} onChange={(e) => setFormData({...formData, signatories: {...formData.signatories, firstParty: {...formData.signatories.firstParty, title: e.target.value}}})} style={iStyle} onFocus={focusGreen} onBlur={blurBorder} /></div>
-                    <div><label style={lStyle}>Position</label><input type="text" value={formData.signatories.firstParty.position} onChange={(e) => setFormData({...formData, signatories: {...formData.signatories, firstParty: {...formData.signatories.firstParty, position: e.target.value}}})} style={iStyle} onFocus={focusGreen} onBlur={blurBorder} /></div>
+
+            <div className="border-t pt-4">
+              <h5 className="font-semibold mb-3">Signatories</h5>
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">First Party Name</label>
+                    <input
+                      type="text"
+                      value={formData.signatories.firstParty.name}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        signatories: {
+                          ...formData.signatories,
+                          firstParty: {...formData.signatories.firstParty, name: e.target.value}
+                        }
+                      })}
+                      className="input w-full px-3 py-2 border rounded-md"
+                    />
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                    <div><label style={lStyle}>Approver Name</label><input type="text" value={formData.signatories.approver.name} readOnly style={{ ...iStyle, opacity: 0.55 }} /><p style={{ fontSize: 11, color: D.textMuted, marginTop: 4 }}>Auto-filled from Approver Branch</p></div>
-                    <div><label style={lStyle}>Approver Position</label><input type="text" value={formData.signatories.approver.position} readOnly style={{ ...iStyle, opacity: 0.55 }} /><p style={{ fontSize: 11, color: D.textMuted, marginTop: 4 }}>Auto-filled from Approver Branch</p></div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Title</label>
+                    <input
+                      type="text"
+                      value={formData.signatories.firstParty.title}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        signatories: {
+                          ...formData.signatories,
+                          firstParty: {...formData.signatories.firstParty, title: e.target.value}
+                        }
+                      })}
+                      className="input w-full px-3 py-2 border rounded-md"
+                    />
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                    <div><label style={lStyle}>Accountant Name</label><input type="text" value={formData.signatories.accountant.name} onChange={(e) => setFormData({...formData, signatories: {...formData.signatories, accountant: {...formData.signatories.accountant, name: e.target.value}}})} style={iStyle} onFocus={focusGreen} onBlur={blurBorder} /></div>
-                    <div><label style={lStyle}>Accountant Position</label><input type="text" value={formData.signatories.accountant.position} onChange={(e) => setFormData({...formData, signatories: {...formData.signatories, accountant: {...formData.signatories.accountant, position: e.target.value}}})} style={iStyle} onFocus={focusGreen} onBlur={blurBorder} /></div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Position</label>
+                    <input
+                      type="text"
+                      value={formData.signatories.firstParty.position}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        signatories: {
+                          ...formData.signatories,
+                          firstParty: {...formData.signatories.firstParty, position: e.target.value}
+                        }
+                      })}
+                      className="input w-full px-3 py-2 border rounded-md"
+                    />
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                    <div><label style={lStyle}>Finance Chief Name</label><input type="text" value={formData.signatories.financeChief.name} onChange={(e) => setFormData({...formData, signatories: {...formData.signatories, financeChief: {...formData.signatories.financeChief, name: e.target.value}}})} style={iStyle} onFocus={focusGreen} onBlur={blurBorder} /></div>
-                    <div><label style={lStyle}>Finance Chief Position</label><input type="text" value={formData.signatories.financeChief.position} onChange={(e) => setFormData({...formData, signatories: {...formData.signatories, financeChief: {...formData.signatories.financeChief, position: e.target.value}}})} style={iStyle} onFocus={focusGreen} onBlur={blurBorder} /></div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Approver Name</label>
+                    <input
+                      type="text"
+                      value={formData.signatories.approver.name}
+                      className="input w-full px-3 py-2 border rounded-md bg-gray-50"
+                      readOnly
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Auto-filled based on Approver Branch</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Approver Position</label>
+                    <input
+                      type="text"
+                      value={formData.signatories.approver.position}
+                      className="input w-full px-3 py-2 border rounded-md bg-gray-50"
+                      readOnly
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Auto-filled based on Approver Branch</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Accountant Name</label>
+                    <input
+                      type="text"
+                      value={formData.signatories.accountant.name}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        signatories: {
+                          ...formData.signatories,
+                          accountant: {...formData.signatories.accountant, name: e.target.value}
+                        }
+                      })}
+                      className="input w-full px-3 py-2 border rounded-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Accountant Position</label>
+                    <input
+                      type="text"
+                      value={formData.signatories.accountant.position}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        signatories: {
+                          ...formData.signatories,
+                          accountant: {...formData.signatories.accountant, position: e.target.value}
+                        }
+                      })}
+                      className="input w-full px-3 py-2 border rounded-md"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Finance Chief Name</label>
+                    <input
+                      type="text"
+                      value={formData.signatories.financeChief.name}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        signatories: {
+                          ...formData.signatories,
+                          financeChief: {...formData.signatories.financeChief, name: e.target.value}
+                        }
+                      })}
+                      className="input w-full px-3 py-2 border rounded-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Finance Chief Position</label>
+                    <input
+                      type="text"
+                      value={formData.signatories.financeChief.position}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        signatories: {
+                          ...formData.signatories,
+                          financeChief: {...formData.signatories.financeChief, position: e.target.value}
+                        }
+                      })}
+                      className="input w-full px-3 py-2 border rounded-md"
+                    />
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, paddingTop: 8 }}>
-                <button type="button" onClick={() => { setShowForm(false); setPreviewData(null); }} style={{ padding: '10px 20px', background: 'none', border: `1px solid ${D.border}`, borderRadius: 8, color: D.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                  Cancel
-                </button>
-                <button type="submit" disabled={loading} style={{ padding: '10px 24px', background: loading ? 'rgba(46,139,87,0.4)' : D.green, border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  {loading ? <><Spinner size="sm" color="white" />Creating…</> : 'Create Contract'}
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false);
+                  setPreviewData(null);
+                }}
+                className="px-4 py-2 border rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                className="btn btn-primary"
+                disabled={loading}
+              >
+                {loading ? <><Spinner size="sm" color="white" />Creating…</> : 'Create Contract'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
-      {/* ── Contracts Table ── */}
-      <div style={{ background: D.card, border: `1px solid ${D.border}`, borderRadius: 14, overflow: 'hidden' }}>
-        {/* Table Header */}
-        <div style={{ background: D.panel, borderBottom: `1px solid ${D.border}`, padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 3, height: 16, background: D.green, borderRadius: 2 }} />
-            <h4 style={{ fontSize: 14, fontWeight: 700, color: D.textPrimary, margin: 0 }}>Contracts</h4>
-          </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: D.textSecondary, cursor: 'pointer' }}>
-              <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} style={{ accentColor: D.green }} />
-              Show Archived
+      {/* Add export and filter controls above the table */}
+      <div className="card bg-white shadow-lg rounded-lg p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h4 className="text-lg font-semibold">Contracts</h4>
+          <div className="flex space-x-3">
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+                className="rounded"
+              />
+              <span className="text-sm">Show Archived</span>
             </label>
-            <button onClick={exportToCSV} style={{ padding: '8px 16px', background: D.green, border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em' }}>
-              Export CSV
+            <button
+              onClick={exportToCSV}
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
+            >
+              Export to CSV
             </button>
           </div>
         </div>
 
-        {/* Filters */}
-        <div style={{ background: D.cardDeep, borderBottom: `1px solid ${D.border}`, padding: '16px 24px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 12 }}>
-            <div>
-              <label style={lStyle}>Search Name</label>
-              <input type="text" value={filterName} onChange={(e) => setFilterName(e.target.value)} placeholder="Search by name..." style={{ ...iStyle, padding: '8px 12px', fontSize: 12 }} onFocus={focusGreen} onBlur={blurBorder} />
-            </div>
-            <div>
-              <label style={lStyle}>Position</label>
-              <select value={filterPosition} onChange={(e) => setFilterPosition(e.target.value)} style={{ ...iStyle, padding: '8px 12px', fontSize: 12 }} onFocus={focusGreen} onBlur={blurBorder}>
-                <option value="">All Positions</option>
-                {[...new Set(contracts.map(c => c.position))].map(pos => <option key={pos} value={pos}>{pos}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={lStyle}>Status</label>
-              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ ...iStyle, padding: '8px 12px', fontSize: 12 }} onFocus={focusGreen} onBlur={blurBorder}>
-                <option value="">All Statuses</option>
-                {['DRAFT','PENDING','APPROVED','ACTIVE','EXPIRED','TERMINATED','CANCELLED'].map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={lStyle}>Semester</label>
-              <select value={filterSemester} onChange={(e) => setFilterSemester(e.target.value)} style={{ ...iStyle, padding: '8px 12px', fontSize: 12 }} onFocus={focusGreen} onBlur={blurBorder}>
-                <option value="">All Semesters</option>
-                <option value="1">First Semester</option>
-                <option value="2">Second Semester</option>
-              </select>
-            </div>
-            <div>
-              <label style={lStyle}>Assignment</label>
-              <select value={filterAssignment} onChange={(e) => setFilterAssignment(e.target.value)} style={{ ...iStyle, padding: '8px 12px', fontSize: 12 }} onFocus={focusGreen} onBlur={blurBorder}>
-                <option value="">All Assignments</option>
-                {PLACE_OF_ASSIGNMENT_OPTIONS.map(place => <option key={place} value={place}>{place}</option>)}
-              </select>
-            </div>
+        {/* Search and Filter Section */}
+        <div className="grid grid-cols-4 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
+          <div>
+            <label className="block text-sm font-medium mb-1">Search Name</label>
+            <input
+              type="text"
+              value={filterName}
+              onChange={(e) => setFilterName(e.target.value)}
+              placeholder="Search by name..."
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: D.textSecondary, cursor: 'pointer' }}>
-                <input type="checkbox" checked={showDuplicatesOnly} onChange={(e) => setShowDuplicatesOnly(e.target.checked)} style={{ accentColor: D.yellow }} />
-                Show Duplicates Only
-              </label>
-              <button onClick={() => { setFilterName(''); setFilterPosition(''); setFilterStatus(''); setFilterSemester(''); setFilterAssignment(''); setShowDuplicatesOnly(false); }} style={{ padding: '6px 14px', background: 'rgba(255,255,255,0.06)', border: `1px solid ${D.border}`, borderRadius: 7, color: D.textMuted, fontSize: 11, fontWeight: 600, cursor: 'pointer', letterSpacing: '0.04em' }}>
-                Clear Filters
-              </button>
-            </div>
-            <span style={{ fontSize: 11, color: D.textMuted }}>
+          <div>
+            <label className="block text-sm font-medium mb-1">Filter Position</label>
+            <select
+              value={filterPosition}
+              onChange={(e) => setFilterPosition(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            >
+              <option value="">All Positions</option>
+              {[...new Set(contracts.map(c => c.position))].map(pos => (
+                <option key={pos} value={pos}>{pos}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Filter Status</label>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            >
+              <option value="">All Statuses</option>
+              <option value="DRAFT">Draft</option>
+              <option value="PENDING">Pending</option>
+              <option value="APPROVED">Approved</option>
+              <option value="ACTIVE">Active</option>
+              <option value="EXPIRED">Expired</option>
+              <option value="TERMINATED">Terminated</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Filter Semester</label>
+            <select
+              value={filterSemester}
+              onChange={(e) => setFilterSemester(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            >
+              <option value="">All Semesters</option>
+              <option value="1">First Semester</option>
+              <option value="2">Second Semester</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Filter Assignment</label>
+            <select
+              value={filterAssignment}
+              onChange={(e) => setFilterAssignment(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            >
+              <option value="">All Assignments</option>
+              {PLACE_OF_ASSIGNMENT_OPTIONS.map(place => (
+                <option key={place} value={place}>{place}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showDuplicatesOnly}
+                onChange={(e) => setShowDuplicatesOnly(e.target.checked)}
+                className="rounded"
+              />
+              <span className="text-sm font-medium">Show Duplicates Only</span>
+            </label>
+          </div>
+
+          <div className="col-span-4 flex justify-between items-center">
+            <button
+              onClick={() => {
+                setFilterName('');
+                setFilterPosition('');
+                setFilterStatus('');
+                setFilterSemester('');
+                setFilterAssignment('');
+                setShowDuplicatesOnly(false);
+              }}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm"
+            >
+              Clear Filters
+            </button>
+            <span className="text-sm text-gray-600">
               Showing {contracts.filter(c => {
                 const matchArchived = showArchived || !c.isArchived;
-                const matchName = !filterName || `${c.userId?.personalInfo?.firstName} ${c.userId?.personalInfo?.middleName} ${c.userId?.personalInfo?.lastName}`.toLowerCase().includes(filterName.toLowerCase());
+                const matchName = !filterName || 
+                  `${c.userId?.personalInfo?.firstName} ${c.userId?.personalInfo?.middleName} ${c.userId?.personalInfo?.lastName}`
+                    .toLowerCase().includes(filterName.toLowerCase());
                 const matchPosition = !filterPosition || c.position === filterPosition;
                 const matchStatus = !filterStatus || c.status === filterStatus;
                 const matchSemester = !filterSemester || c.semester.toString() === filterSemester;
                 const matchAssignment = !filterAssignment || c.placeOfAssignment === filterAssignment;
+                
                 let matchDuplicate = true;
                 if (showDuplicatesOnly) {
                   const user = c.userId?.personalInfo;
@@ -1283,35 +1498,48 @@ const handleFileUpload = (contractId, event) => {
                     const key = `${fullName}|${c.year}|${c.semester}|${c.status}`;
                     const duplicateData = duplicateNames[key];
                     matchDuplicate = duplicateData && duplicateData.contracts.length > 1;
-                  } else { matchDuplicate = false; }
+                  } else {
+                    matchDuplicate = false;
+                  }
                 }
+                
                 return matchArchived && matchName && matchPosition && matchStatus && matchSemester && matchAssignment && matchDuplicate;
               }).length} of {contracts.length} contracts
             </span>
           </div>
         </div>
 
-        {/* Table */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead>
-              <tr style={{ background: D.bg }}>
-                {['Contract #', 'User', 'Position', 'Period', 'Semester', 'Salary Grade', 'Final Premium', 'Status', 'Signed', 'Actions'].map(h => (
-                  <th key={h} style={{ padding: '11px 14px', textAlign: 'left', color: D.textMuted, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: `1px solid ${D.border}`, whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2 text-left">Contract Number</th>
+                <th className="px-4 py-2 text-left">User</th>
+                <th className="px-4 py-2 text-left">Position</th>
+                <th className="px-4 py-2 text-left">Period</th>
+                <th className="px-4 py-2 text-left">Semester</th>
+                <th className="px-4 py-2 text-left">Salary Grade</th>
+                <th className="px-4 py-2 text-left">Final Premium</th>
+                <th className="px-4 py-2 text-left">Status</th>
+                <th className="px-4 py-2 text-left">Signed</th>
+                <th className="px-4 py-2 text-left">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y">
               {loadingContracts ? (
-                <SkeletonTable rows={8} cols={10} />
+                <SkeletonTable rows={8} cols={8} />
               ) : contracts
                 .filter(c => {
                   const matchArchived = showArchived || !c.isArchived;
-                  const matchName = !filterName || `${c.userId?.personalInfo?.firstName} ${c.userId?.personalInfo?.middleName} ${c.userId?.personalInfo?.lastName}`.toLowerCase().includes(filterName.toLowerCase());
+                  const matchName = !filterName || 
+                    `${c.userId?.personalInfo?.firstName} ${c.userId?.personalInfo?.middleName} ${c.userId?.personalInfo?.lastName}`
+                      .toLowerCase().includes(filterName.toLowerCase());
                   const matchPosition = !filterPosition || c.position === filterPosition;
                   const matchStatus = !filterStatus || c.status === filterStatus;
                   const matchSemester = !filterSemester || c.semester.toString() === filterSemester;
                   const matchAssignment = !filterAssignment || c.placeOfAssignment === filterAssignment;
+
                   let matchDuplicate = true;
                   if (showDuplicatesOnly) {
                     const user = c.userId?.personalInfo;
@@ -1320,194 +1548,271 @@ const handleFileUpload = (contractId, event) => {
                       const key = `${fullName}|${c.year}|${c.semester}|${c.status}`;
                       const duplicateData = duplicateNames[key];
                       matchDuplicate = duplicateData && duplicateData.contracts.length > 1;
-                    } else { matchDuplicate = false; }
+                    } else {
+                      matchDuplicate = false;
+                    }
                   }
-                  return matchArchived && matchName && matchPosition && matchStatus && matchSemester && matchAssignment && matchDuplicate;
+                  
+                  return matchArchived && matchName && matchPosition && matchStatus && matchSemester && matchAssignment && matchDuplicate;  // ✅ ADD && matchDuplicate
                 })
                 .sort((a, b) => {
+                  // Latest contracts first — sort by createdAt descending
                   const aDate = new Date(a.createdAt || 0);
                   const bDate = new Date(b.createdAt || 0);
                   if (bDate - aDate !== 0) return bDate - aDate;
-                  const aL = (a.userId?.personalInfo?.lastName || '').toUpperCase();
-                  const bL = (b.userId?.personalInfo?.lastName || '').toUpperCase();
-                  if (aL !== bL) return aL.localeCompare(bL);
-                  return (a.userId?.personalInfo?.firstName || '').toUpperCase().localeCompare((b.userId?.personalInfo?.firstName || '').toUpperCase());
+
+                  // Tiebreaker: alphabetical by last name then first name
+                  const aLastName = (a.userId?.personalInfo?.lastName || '').toUpperCase();
+                  const bLastName = (b.userId?.personalInfo?.lastName || '').toUpperCase();
+                  if (aLastName !== bLastName) return aLastName.localeCompare(bLastName);
+                  const aFirstName = (a.userId?.personalInfo?.firstName || '').toUpperCase();
+                  const bFirstName = (b.userId?.personalInfo?.firstName || '').toUpperCase();
+                  return aFirstName.localeCompare(bFirstName);
                 })
-                .map(contract => {
-                  const ss = STATUS_STYLE[contract.status] || STATUS_STYLE.DRAFT;
-                  const user = contract.userId?.personalInfo;
-                  let isDuplicate = false;
-                  if (user?.lastName && user?.firstName) {
-                    const fullName = `${user.lastName}, ${user.firstName}${user.middleName ? ' ' + user.middleName : ''}`;
-                    const key = `${fullName}|${contract.year}|${contract.semester}|${contract.status}`;
-                    const duplicateData = duplicateNames[key];
-                    isDuplicate = duplicateData && duplicateData.contracts.length > 1;
-                  }
-                  return (
-                  <tr key={contract._id} style={{ borderBottom: `1px solid ${D.border}`, background: contract.isArchived ? 'rgba(251,146,60,0.04)' : 'transparent', transition: 'background 0.1s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = contract.isArchived ? 'rgba(251,146,60,0.04)' : 'transparent'}
-                  >
-                    <td style={{ padding: '11px 14px', fontFamily: 'monospace', fontSize: 11, color: D.green, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      {contract.contractNumber}
-                      {contract.isArchived && <span style={{ marginLeft: 6, fontSize: 9, color: D.orange, background: D.orangeMuted, border: '1px solid rgba(251,146,60,0.3)', borderRadius: 4, padding: '1px 5px' }}>ARCHIVED</span>}
-                    </td>
-                    <td style={{ padding: '11px 14px', color: D.textPrimary, fontWeight: 500, maxWidth: 180 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 12 }}>
-                          {user?.lastName && user?.firstName
-                            ? `${user.lastName}, ${user.firstName}${user.middleName ? ' ' + user.middleName : ''}`
-                            : user?.lastName || user?.firstName || contract.userId?.username || '-'
-                          }
-                        </span>
-                        {!isUserProfileComplete(contract.userId) && (
-                          <span title="Profile incomplete" style={{ fontSize: 11, color: D.yellow }}>⚠️</span>
-                        )}
-                        {isDuplicate && (() => {
-                          const fullName = `${user.lastName}, ${user.firstName}${user.middleName ? ' ' + user.middleName : ''}`;
-                          const key = `${fullName}|${contract.year}|${contract.semester}|${contract.status}`;
-                          const duplicateData = duplicateNames[key];
+                .map(contract => (
+                <tr key={contract._id} className={contract.isArchived ? 'bg-gray-100' : ''}>
+                  <td className="px-4 py-2 font-medium">
+                    {contract.contractNumber}
+                    {contract.isArchived && (
+                      <span className="ml-2 text-xs text-gray-500">(Archived)</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    {contract.userId?.personalInfo?.lastName && contract.userId?.personalInfo?.firstName
+                      ? `${contract.userId.personalInfo.lastName}, ${contract.userId.personalInfo.firstName}${contract.userId.personalInfo.middleName ? ' ' + contract.userId.personalInfo.middleName : ''}`
+                      : contract.userId?.personalInfo?.lastName || contract.userId?.personalInfo?.firstName || contract.userId?.username || '-'}
+                    {!isUserProfileComplete(contract.userId) && (
+                      <span className="ml-2 text-xs text-red-600" title="Profile incomplete">⚠️</span>
+                    )}
+                    {(() => {
+                      const user = contract.userId?.personalInfo;
+                      if (user?.lastName && user?.firstName) {
+                        const fullName = `${user.lastName}, ${user.firstName}${user.middleName ? ' ' + user.middleName : ''}`;
+                        const key = `${fullName}|${contract.year}|${contract.semester}|${contract.status}`;
+                        const duplicateData = duplicateNames[key];
+                        const isDuplicate = duplicateData && duplicateData.contracts.length > 1;
+                        
+                        if (isDuplicate) {
+                          const semesterText = contract.semester === 1 ? '1st' : '2nd';
                           return (
-                            <span style={{ background: D.yellowMuted, border: `1px solid ${D.yellowBorder}`, color: D.yellow, borderRadius: 4, padding: '1px 6px', fontSize: 9, fontWeight: 700, letterSpacing: '0.04em' }}
-                              title={`${duplicateData.contracts.length} duplicate contracts`}>
-                              ⚠ DUPLICATE ({duplicateData.contracts.length})
+                            <span 
+                              className="ml-2 text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded font-semibold" 
+                              title={`Warning: ${duplicateData.contracts.length} ${contract.status} contracts found with this name in ${contract.year} ${semesterText} Semester`}
+                            >
+                              ⚠️ DUPLICATE ({duplicateData.contracts.length})
                             </span>
                           );
-                        })()}
-                      </div>
-                    </td>
-                    <td style={{ padding: '11px 14px', color: D.textSecondary, fontSize: 11, maxWidth: 140 }}>
-                      <span style={{ whiteSpace: 'normal', lineHeight: 1.4 }}>{contract.position?.toUpperCase()}</span>
-                    </td>
-                    <td style={{ padding: '11px 14px', color: D.textMuted, fontSize: 11, whiteSpace: 'nowrap' }}>
-                      {new Date(contract.startDate).toLocaleDateString()} — {new Date(contract.endDate).toLocaleDateString()}
-                    </td>
-                    <td style={{ padding: '11px 14px' }}>
-                      <span style={{ background: 'rgba(148,163,184,0.12)', border: '1px solid rgba(148,163,184,0.2)', color: '#94a3b8', borderRadius: 5, padding: '2px 8px', fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
-                        {contract.semester === 1 ? '1st' : '2nd'} Sem
+                        }
+                      }
+                      return null;
+                    })()}
+                  </td>
+                  <td className="px-4 py-2">{contract.position?.toUpperCase()}</td>
+                  <td className="px-4 py-2 text-sm">
+                    {new Date(contract.startDate).toLocaleDateString()} - {new Date(contract.endDate).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-2">
+                    <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs">
+                      {contract.semester === 1 ? 'First' : 'Second'} Semester
+                    </span>
+                  </td>
+                  <td className="px-4 py-2">
+                    {contract.isSpecialSalaryGrade ? (
+                      <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
+                        SG {contract.salaryGrade} (Special)
                       </span>
-                    </td>
-                    <td style={{ padding: '11px 14px' }}>
-                      {contract.isSpecialSalaryGrade
-                        ? <span style={{ background: D.yellowMuted, border: `1px solid ${D.yellowBorder}`, color: D.yellow, borderRadius: 5, padding: '2px 8px', fontSize: 10, fontWeight: 600 }}>SG {contract.salaryGrade} ★</span>
-                        : <span style={{ color: D.textSecondary, fontSize: 12 }}>SG {contract.salaryGrade}</span>
-                      }
-                    </td>
-                    <td style={{ padding: '11px 14px', fontFamily: 'monospace', fontWeight: 700 }}>
-                      {contract.isSpecialSalaryGrade
-                        ? <span style={{ color: D.textMuted, fontSize: 11 }}>N/A</span>
-                        : <span style={{ color: '#4ade80', fontSize: 12 }}>₱{contract.finalPremium?.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}</span>
-                      }
-                    </td>
-                    <td style={{ padding: '11px 14px' }}>
-                      <span style={{ background: ss.bg, border: `1px solid ${ss.border}`, color: ss.color, borderRadius: 5, padding: '2px 8px', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ width: 4, height: 4, borderRadius: '50%', background: ss.color, display: 'inline-block' }} />
-                        {contract.status}
+                    ) : (
+                      <span>SG {contract.salaryGrade}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    {contract.isSpecialSalaryGrade ? (
+                      <span className="text-gray-500 text-sm">N/A</span>
+                    ) : (
+                      <span className="font-semibold">
+                        ₱{contract.finalPremium?.toLocaleString('en-PH', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2  // Add this line
+                        }) || '0.00'}
                       </span>
-                    </td>
-                    <td style={{ padding: '11px 14px' }}>
-                      {contract.signedContractFile
-                        ? <button onClick={() => downloadSignedContract(contract._id)} style={{ background: 'none', border: 'none', color: D.green, fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                            Download
-                          </button>
-                        : <span style={{ color: D.textMuted, fontSize: 11 }}>No file</span>
-                      }
-                    </td>
-                    <td style={{ padding: '11px 14px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        <button
-                          onClick={() => {
-                            if (userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId)) {
-                              alert(`⚠️ User profile is incomplete. Please complete the following required fields:\n\n${getMissingFields(contract.userId).join('\n')}`);
-                              return;
-                            }
-                            handleViewContract(contract);
-                          }}
-                          style={{ background: 'none', border: 'none', color: D.green, fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0, textAlign: 'left' }}
-                        >View Details</button>
-                        <button
-                          onClick={() => {
-                            if (userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId)) {
-                              alert(`⚠️ User profile is incomplete.`); return;
-                            }
-                            generatePDF(contract._id);
-                          }}
-                          disabled={loading || (userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId))}
-                          style={{ background: 'none', border: 'none', color: D.blue, fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0, textAlign: 'left', opacity: (userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId)) ? 0.4 : 1 }}
-                        >Generate PDF</button>
-                        {(userRole === 'ADMINISTRATOR' || userRole === 'FOCAL_PERSON') && (
-                          <>
-                            <button onClick={() => { setSelectedContract(contract); setNewStatus(contract.status); setShowStatusModal(true); }} style={{ background: 'none', border: 'none', color: D.purple, fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0, textAlign: 'left' }}>Change Status</button>
-                            {(contract.status === 'APPROVED' || contract.status === 'ACTIVE') && (
-                              <>
-                                <button onClick={() => document.getElementById(`file-input-${contract._id}`).click()} disabled={uploadingFile} style={{ background: 'none', border: 'none', color: '#6ee7b7', fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0, textAlign: 'left' }}>
-                                  {uploadingFile ? 'Uploading…' : 'Upload Signed'}
-                                </button>
-                                <input id={`file-input-${contract._id}`} type="file" accept="application/pdf" onChange={(e) => handleFileUpload(contract._id, e)} style={{ display: 'none' }} disabled={uploadingFile} />
-                              </>
-                            )}
-                            {(contract.status === 'EXPIRED' || contract.status === 'TERMINATED' || contract.status === 'CANCELLED') && !contract.isArchived && (
-                              <button onClick={() => archiveContract(contract._id)} style={{ background: 'none', border: 'none', color: D.orange, fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0, textAlign: 'left' }}>Archive</button>
-                            )}
-                            {contract.isArchived && (
-                              <button onClick={() => unarchiveContract(contract._id)} style={{ background: 'none', border: 'none', color: '#2dd4bf', fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0, textAlign: 'left' }}>Unarchive</button>
-                            )}
-                          </>
-                        )}
-                        {userRole === 'CONTRACTUAL' && (
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      contract.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
+                      contract.status === 'DRAFT' ? 'bg-gray-100 text-gray-800' :
+                      contract.status === 'EXPIRED' ? 'bg-red-100 text-red-800' :
+                      contract.status === 'APPROVED' ? 'bg-blue-100 text-blue-800' :
+                      contract.status === 'CANCELLED' ? 'bg-orange-100 text-orange-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {contract.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2">
+                    {contract.signedContractFile ? (
+                      <button
+                        onClick={() => downloadSignedContract(contract._id)}
+                        className="text-green-600 hover:text-green-800 text-xs"
+                      >
+                        📄 Download
+                      </button>
+                    ) : (
+                      <span className="text-gray-400 text-xs">No file</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <div className="flex flex-col space-y-1">
+                      <button
+                        onClick={() => {
+                          // Only validate for non-admins
+                          if (userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId)) {
+                            const missingFields = getMissingFields(contract.userId);
+                            alert(`⚠️ User profile is incomplete. Please complete the following required fields:\n\n${missingFields.join('\n')}\n\nRequired sections:\n• Account Information (Username, Place of Assignment)\n• Personal Information (All fields)\n• Government IDs (PhilHealth, Pag-IBIG, TIN)`);
+                            return;
+                          }
+                          handleViewContract(contract);
+                        }}
+                        className="text-green-600 hover:text-green-800 text-xs"
+                        title={userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId) ? 'Complete user profile first' : ''}
+                      >
+                        View Details
+                      </button>
+                      <button
+                        onClick={() => {
+                          // Only validate for non-admins
+                          if (userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId)) {
+                            const missingFields = getMissingFields(contract.userId);
+                            alert(`⚠️ User profile is incomplete. Please complete the following required fields:\n\n${missingFields.join('\n')}\n\nRequired sections:\n• Account Information (Username, Place of Assignment)\n• Personal Information (All fields)\n• Government IDs (PhilHealth, Pag-IBIG, TIN)`);
+                            return;
+                          }
+                          generatePDF(contract._id);
+                        }}
+                        disabled={loading || (userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId))}
+                        className="text-blue-600 hover:text-blue-800 text-xs disabled:opacity-50"
+                        title={userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId) ? 'Complete user profile first' : ''}
+                      >
+                        Generate PDF
+                      </button>
+                      
+                      {(userRole === 'ADMINISTRATOR' || userRole === 'FOCAL_PERSON') && (
+                        <>
                           <button
                             onClick={() => {
-                              if (!isUserProfileComplete(contract.userId)) {
-                                alert(`⚠️ Your profile is incomplete. Please complete the following:\n\n${getMissingFields(contract.userId).join('\n')}`); return;
-                              }
-                              generatePDF(contract._id);
+                              setSelectedContract(contract);
+                              setNewStatus(contract.status);
+                              setShowStatusModal(true);
                             }}
-                            disabled={loading || !isUserProfileComplete(contract.userId)}
-                            style={{ background: 'none', border: 'none', color: D.blue, fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0, textAlign: 'left', opacity: !isUserProfileComplete(contract.userId) ? 0.4 : 1 }}
-                          >Download PDF</button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                  );
-                })
-              }
+                            className="text-purple-600 hover:text-purple-800 text-xs"
+                          >
+                            Change Status
+                          </button>
+                          
+                          {(contract.status === 'APPROVED' || contract.status === 'ACTIVE') && (
+                            <>
+                              <button
+                                onClick={() => document.getElementById(`file-input-${contract._id}`).click()}
+                                className="text-indigo-600 hover:text-indigo-800 text-xs"
+                                disabled={uploadingFile}
+                              >
+                                {uploadingFile ? 'Uploading...' : 'Upload Signed'}
+                              </button>
+                              <input
+                                id={`file-input-${contract._id}`}
+                                type="file"
+                                accept="application/pdf"
+                                onChange={(e) => handleFileUpload(contract._id, e)}
+                                className="hidden"
+                                disabled={uploadingFile}
+                              />
+                            </>
+                          )}
+                          
+                          {(contract.status === 'EXPIRED' || contract.status === 'TERMINATED' || contract.status === 'CANCELLED') && !contract.isArchived && (
+                            <button
+                              onClick={() => archiveContract(contract._id)}
+                              className="text-orange-600 hover:text-orange-800 text-xs"
+                            >
+                              Archive
+                            </button>
+                          )}
+                          
+                          {contract.isArchived && (
+                            <button
+                              onClick={() => unarchiveContract(contract._id)}
+                              className="text-teal-600 hover:text-teal-800 text-xs"
+                            >
+                              Unarchive
+                            </button>
+                          )}
+                        </>
+                      )}
+                      
+                      {userRole === 'ADMINISTRATOR' && (
+                        <button
+                          onClick={() => deleteContract(contract._id)}
+                          className="text-red-600 hover:text-red-800 text-xs"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* ── Status Change Modal ── */}
+      {/* Status Change Modal */}
       {showStatusModal && selectedContract && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9000, padding: 16 }}>
-          <div style={{ background: D.card, border: `1px solid ${D.borderStrong}`, borderRadius: 14, padding: '28px 32px', maxWidth: 420, width: '100%' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: D.textPrimary, margin: '0 0 8px' }}>Change Contract Status</h3>
-            <p style={{ fontSize: 12, color: D.textSecondary, margin: '0 0 20px' }}>Contract: <span style={{ fontFamily: 'monospace', color: D.green }}>{selectedContract.contractNumber}</span></p>
-            <div style={{ marginBottom: 24 }}>
-              <label style={lStyle}>New Status</label>
-              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} style={iStyle} onFocus={focusGreen} onBlur={blurBorder}>
-                {['DRAFT','PENDING','APPROVED','ACTIVE','EXPIRED','TERMINATED','CANCELLED'].map(s => <option key={s} value={s}>{s}</option>)}
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Change Contract Status</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Contract: {selectedContract.contractNumber}
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">New Status</label>
+              <select
+                value={newStatus}
+                onChange={(e) => setNewStatus(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md"
+              >
+                <option value="DRAFT">Draft</option>
+                <option value="PENDING">Pending</option>
+                <option value="APPROVED">Approved</option>
+                <option value="ACTIVE">Active</option>
+                <option value="EXPIRED">Expired</option>
+                <option value="TERMINATED">Terminated</option>
+                <option value="CANCELLED">Cancelled</option>
               </select>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <button onClick={() => setShowStatusModal(false)} style={{ padding: '9px 20px', background: 'none', border: `1px solid ${D.border}`, borderRadius: 8, color: D.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => updateContractStatus(selectedContract._id, newStatus)} style={{ padding: '9px 22px', background: D.blue, border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Update Status</button>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowStatusModal(false)}
+                className="px-4 py-2 border rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => updateContractStatus(selectedContract._id, newStatus)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Update Status
+              </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* ── Contract Details Modal ── */}
+      {/* Contract Details Modal - NEW */}
       {selectedContract && !showStatusModal && (
-        <ContractDetailsModal contract={selectedContract} onClose={() => setSelectedContract(null)} />
+        <ContractDetailsModal
+          contract={selectedContract}
+          onClose={() => setSelectedContract(null)}
+        />
       )}
-
-      <style>{`
-        select option { background: #152236; color: #f0f4f8; }
-        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
-        input::placeholder { color: rgba(240,244,248,0.2); }
-      `}</style>
     </div>
   );
 }
