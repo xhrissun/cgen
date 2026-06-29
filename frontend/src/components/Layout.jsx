@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getDocumentUrl } from '../api.js';
+import { PageLoadingOverlay } from './ui.jsx';
 
 function Layout({ user, onLogout, children, fullWidth = false }) {
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -69,6 +70,8 @@ function Layout({ user, onLogout, children, fullWidth = false }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-gray-50 flex flex-col">
+      {/* Global page-load overlay — driven by dispatchPageLoading() from dashboards */}
+      <PageLoadingOverlay />
       {/* Fixed Navigation Bar */}
       <nav className="bg-[#0a1628] shadow-lg border-b border-white/8 fixed top-0 left-0 right-0 z-50 h-16">
         <div className={fullWidth ? "px-4 sm:px-6 lg:px-8" : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"}>

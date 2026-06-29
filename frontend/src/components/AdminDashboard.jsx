@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, Briefcase, FileText, FolderOpen,
   DollarSign, FileCheck, Layers, Calendar, PenTool, ScrollText
 } from 'lucide-react';
-import { TopProgressBar, SkeletonStatCard, SkeletonTable, SectionLoader } from './ui.jsx';
+import { SkeletonStatCard, SkeletonTable, SectionLoader, dispatchPageLoading } from './ui.jsx';
 import UserManagement from './UserManagement';
 import PositionManagement from './PositionManagement';
 import ContractGenerator from './ContractGenerator';
@@ -295,6 +295,7 @@ function AdminDashboard({ user }) {
 
   const fetchStats = async () => {
     setDashLoading(true);
+    dispatchPageLoading(true, 'Loading dashboard data…');
     try {
       const token = localStorage.getItem('token');
       const [usersRes, contractsRes, positionsRes] = await Promise.all([
@@ -332,6 +333,7 @@ function AdminDashboard({ user }) {
       console.error('Error fetching stats:', error);
     } finally {
       setDashLoading(false);
+      dispatchPageLoading(false);
     }
   };
 
@@ -885,7 +887,6 @@ function AdminDashboard({ user }) {
               </div>
 
               {/* KPI Strip */}
-              <TopProgressBar loading={dashLoading} />
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {dashLoading ? (
                   [...Array(4)].map((_, i) => <SkeletonStatCard key={i} />)

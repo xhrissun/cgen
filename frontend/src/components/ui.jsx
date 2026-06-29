@@ -4,7 +4,7 @@
 // Zero logic changes required in any consumer; just import and render.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 // ─── Top Progress Bar ────────────────────────────────────────────────────────
 // Mounts at the very top of the viewport (fixed). Animates from 0→85% while
@@ -326,3 +326,108 @@ export const toast = {
   warning: (msg, dur) => _addToast?.(msg, 'warning',  dur),
   info:    (msg, dur) => _addToast?.(msg, 'info',     dur),
 };
+// ─── Page Loading Overlay ─────────────────────────────────────────────────────
+// A full-viewport modal overlay shown while dashboard data is fetching.
+// Replaces the TopProgressBar-in-content-area antipattern.
+//
+// Usage: dispatch a custom event from any dashboard:
+//   window.dispatchEvent(new CustomEvent('pageLoading', { detail: { loading: true,  label: 'Loading dashboard…' } }))
+//   window.dispatchEvent(new CustomEvent('pageLoading', { detail: { loading: false } }))
+//
+// Layout.jsx listens and renders this automatically — dashboards don't need to
+// import or render it themselves.
+export function PageLoadingOverlay() {
+  const [state, setState] = useState({ visible: false, label: 'Loading…' });
+  const [progress, setProgress] = useState(0);
+  const [exiting, setExiting] = useState(false);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail.loading) {
+        setExiting(false);
+        setProgress(0);
+        setState({ visible: true, label: e.detail.label || 'Loading…' });
+        // Simulate realistic crawl: fast to 40%, slow to 80%
+        timerRef.current = setTimeout(() => setProgress(40), 80);
+        timerRef.current = setTimeout(() => setProgress(80), 600);
+      } else {
+        // Complete to 100% then fade out
+        setProgress(100);
+        setTimeout(() => setExiting(true), 350);
+        setTimeout(() => { setState(s => ({ ...s, visible: false })); setProgress(0); setExiting(false); }, 650);
+      }
+    };
+    window.addEventListener('pageLoading', handler);
+    return () => window.removeEventListener('pageLoading', handler);
+  }, []);
+
+  if (!state.visible) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(10, 22, 40, 0.55)',
+        backdropFilter: 'blur(4px)',
+        opacity: exiting ? 0 : 1,
+        transition: 'opacity 0.3s ease',
+        pointerEvents: exiting ? 'none' : 'all',
+      }}
+      aria-live="polite"
+      aria-label={state.label}
+    >
+      <div style={{
+        background: '#ffffff',
+        borderRadius: 16,
+        padding: '32px 40px',
+        minWidth: 280,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+        transform: exiting ? 'scale(0.97)' : 'scale(1)',
+        transition: 'transform 0.3s ease',
+      }}>
+        {/* Spinner */}
+        <div style={{ position: 'relative', width: 48, height: 48 }}>
+          <svg style={{ width: 48, height: 48, animation: 'spin 0.85s linear infinite' }} viewBox="0 0 48 48" fill="none">
+            <circle cx="24" cy="24" r="20" stroke="#e5e7eb" strokeWidth="4" />
+            <path d="M4 24a20 20 0 0120-20" stroke="#2563eb" strokeWidth="4" strokeLinecap="round" />
+          </svg>
+        </div>
+
+        {/* Label */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 4 }}>
+            {state.label}
+          </div>
+          <div style={{ fontSize: 12, color: '#9ca3af' }}>Please wait a moment</div>
+        </div>
+
+        {/* Real progress bar — tied to actual fetch lifecycle */}
+        <div style={{
+          width: '100%', height: 4,
+          background: '#f3f4f6', borderRadius: 99, overflow: 'hidden',
+        }}>
+          <div style={{
+            height: '100%', borderRadius: 99,
+            background: 'linear-gradient(90deg, #2563eb, #6366f1)',
+            width: `${progress}%`,
+            transition: progress === 0 ? 'none' : progress === 100
+              ? 'width 0.3s ease-out'
+              : 'width 0.6s cubic-bezier(0.1, 0.4, 0.2, 1)',
+          }} />
+        </div>
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// Helper — call from any dashboard instead of setLoading(true/false)
+// dispatch({ loading: true, label: 'Loading dashboard…' })
+// dispatch({ loading: false })
+export function dispatchPageLoading(loading, label) {
+  window.dispatchEvent(new CustomEvent('pageLoading', { detail: { loading, label } }));
+}

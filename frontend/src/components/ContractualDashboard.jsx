@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SectionLoader, EmptyState, Spinner, TopProgressBar, SkeletonTable } from './ui.jsx';
+import { SectionLoader, EmptyState, Spinner, SkeletonTable, dispatchPageLoading } from './ui.jsx';
 import api, { openDocument, getDocumentUrl, API_BASE } from '../api.js';
 import ContractGenerator from './ContractGenerator';
 import DocumentViewerModal from './DocumentViewerModal';
@@ -239,6 +239,7 @@ function ContractualDashboard({ user }) {
     const userId = user?.id || user?._id;
     if (!userId) return;
     setLoadingDocuments(true);
+    dispatchPageLoading(true, 'Loading your documents…');
     try {
       const token = localStorage.getItem('token');
       if (!token) throw new Error("No token available");
@@ -258,6 +259,7 @@ function ContractualDashboard({ user }) {
       console.error("Error fetching documents:", error);
     } finally {
       setLoadingDocuments(false);
+      dispatchPageLoading(false);
     }
   };
 
@@ -498,7 +500,6 @@ function ContractualDashboard({ user }) {
 
   return (
     <div className="space-y-6">
-      <TopProgressBar loading={loadingDocuments} />
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-semibold text-gray-900">Contractual Dashboard</h2>
       </div>
