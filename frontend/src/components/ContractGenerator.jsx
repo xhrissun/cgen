@@ -1556,29 +1556,18 @@ const handleFileUpload = (contractId, event) => {
                   return matchArchived && matchName && matchPosition && matchStatus && matchSemester && matchAssignment && matchDuplicate;  // ✅ ADD && matchDuplicate
                 })
                 .sort((a, b) => {
-                  // Sort alphabetically by last name, then first name
+                  // Latest contracts first — sort by createdAt descending
+                  const aDate = new Date(a.createdAt || 0);
+                  const bDate = new Date(b.createdAt || 0);
+                  if (bDate - aDate !== 0) return bDate - aDate;
+
+                  // Tiebreaker: alphabetical by last name then first name
                   const aLastName = (a.userId?.personalInfo?.lastName || '').toUpperCase();
                   const bLastName = (b.userId?.personalInfo?.lastName || '').toUpperCase();
+                  if (aLastName !== bLastName) return aLastName.localeCompare(bLastName);
                   const aFirstName = (a.userId?.personalInfo?.firstName || '').toUpperCase();
                   const bFirstName = (b.userId?.personalInfo?.firstName || '').toUpperCase();
-                  
-                  // If both have last names, compare them
-                  if (aLastName && bLastName) {
-                    if (aLastName !== bLastName) {
-                      return aLastName.localeCompare(bLastName);
-                    }
-                    // If last names are the same, compare first names
-                    return aFirstName.localeCompare(bFirstName);
-                  }
-                  
-                  // If one doesn't have a last name, put it at the end
-                  if (!aLastName && bLastName) return 1;
-                  if (aLastName && !bLastName) return -1;
-                  
-                  // If neither has a last name, sort by username
-                  const aUsername = a.userId?.username || '';
-                  const bUsername = b.userId?.username || '';
-                  return aUsername.localeCompare(bUsername);
+                  return aFirstName.localeCompare(bFirstName);
                 })
                 .map(contract => (
                 <tr key={contract._id} className={contract.isArchived ? 'bg-gray-100' : ''}>
