@@ -23,8 +23,17 @@ function AdminDashboard({ user }) {
     totalUsers: 0,
     totalContracts: 0,
     activeContracts: 0,
-    pendingUsers: 0
+    pendingUsers: 0,
+    expiredContracts: 0,
+    draftContracts: 0,
+    pendingContracts: 0,
+    totalPositions: 0,
+    totalSalaryGrades: 0,
+    totalClauses: 0,
   });
+  const [recentContracts, setRecentContracts] = useState([]);
+  const [expiringContracts, setExpiringContracts] = useState([]);
+  const [dashLoading, setDashLoading] = useState(true);
   const [salaryGrades, setSalaryGrades] = useState([]);
   const [salaryPeriods, setSalaryPeriods] = useState([]); // list of distinct periods
   const [activePeriodStart, setActivePeriodStart] = useState(null); // currently viewed period
@@ -284,21 +293,44 @@ function AdminDashboard({ user }) {
   };
 
   const fetchStats = async () => {
+    setDashLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const [usersRes, contractsRes] = await Promise.all([
+      const [usersRes, contractsRes, positionsRes] = await Promise.all([
         api.get('/api/users', { headers: { Authorization: `Bearer ${token}` } }),
-        api.get('/api/contracts', { headers: { Authorization: `Bearer ${token}` } })
+        api.get('/api/contracts', { headers: { Authorization: `Bearer ${token}` } }),
+        api.get('/api/positions', { headers: { Authorization: `Bearer ${token}` } })
       ]);
-      
+
+      const contracts = contractsRes.data;
+      const now = new Date();
+      const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      const expiring = contracts
+        .filter(c => c.status === 'ACTIVE' && c.endDate && new Date(c.endDate) <= thirtyDaysFromNow && new Date(c.endDate) >= now)
+        .sort((a, b) => new Date(a.endDate) - new Date(b.endDate))
+        .slice(0, 5);
+
+      const recent = contracts
+        .sort((a, b) => new Date(b.createdAt || b._id) - new Date(a.createdAt || a._id))
+        .slice(0, 6);
+
       setStats({
         totalUsers: usersRes.data.length,
-        totalContracts: contractsRes.data.length,
-        activeContracts: contractsRes.data.filter(c => c.status === 'ACTIVE').length,
-        pendingUsers: usersRes.data.filter(u => u.status === 'PENDING').length
+        totalContracts: contracts.length,
+        activeContracts: contracts.filter(c => c.status === 'ACTIVE').length,
+        pendingUsers: usersRes.data.filter(u => u.status === 'PENDING').length,
+        expiredContracts: contracts.filter(c => c.status === 'EXPIRED').length,
+        draftContracts: contracts.filter(c => c.status === 'DRAFT').length,
+        pendingContracts: contracts.filter(c => c.status === 'PENDING').length,
+        totalPositions: positionsRes.data.length,
       });
+      setRecentContracts(recent);
+      setExpiringContracts(expiring);
     } catch (error) {
       console.error('Error fetching stats:', error);
+    } finally {
+      setDashLoading(false);
     }
   };
 
@@ -685,23 +717,23 @@ function AdminDashboard({ user }) {
   };
 
   return (
-  <div className="flex h-screen bg-gray-50 overflow-hidden">
+  <div className="flex h-screen overflow-hidden" style={{ background: "#f0f4f8" }}>
     {/* FIXED SIDEBAR - stops before footer */}
-    <div className="w-72 bg-white border-r border-gray-200 shadow-sm flex-shrink-0 flex flex-col fixed left-0 top-16 bottom-12 z-30">
+    <div className="w-72 flex-shrink-0 flex flex-col fixed left-0 top-16 bottom-12 z-30" style={{ background: "#0f1e35", borderRight: "1px solid rgba(255,255,255,0.06)" }}>
       {/* Header */}
-      <div className="p-6 border-b border-gray-200 flex-shrink-0">
-        <h2 className="text-2xl font-bold text-gray-900">Admin Panel</h2>
-        <p className="text-sm text-gray-500 mt-1">System Management</p>
+      <div className="p-6 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+        <h2 className="text-lg font-bold text-white tracking-tight">Admin Panel</h2>
+        <p className="text-xs text-green-400 mt-1 tracking-widest uppercase font-medium">System Management</p>
       </div>
 
       {/* Notifications */}
-      <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0">
+      <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
         <div className="relative">
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+            className="w-full flex items-center justify-between p-3 rounded-lg transition-colors" style={{ background: "rgba(255,255,255,0.05)" }} onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.09)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.05)"}
           >
-            <span className="flex items-center gap-3 text-gray-700">
+            <span className="flex items-center gap-3 text-white/80">
               <span className="text-2xl">🔔</span>
               <span className="font-medium">Notifications</span>
             </span>
@@ -715,10 +747,10 @@ function AdminDashboard({ user }) {
           {showNotifications && (
             <div
               ref={notificationsRef}
-              className="absolute left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl z-50 max-h-[80vh] overflow-y-auto border border-gray-200"
+              className="absolute left-0 right-0 mt-2 rounded-xl shadow-2xl z-50 max-h-[80vh] overflow-y-auto border" style={{ background: "#162236", borderColor: "rgba(255,255,255,0.1)" }}
             >
-              <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-                <h3 className="font-semibold text-gray-800">Notifications</h3>
+              <div className="p-4 flex justify-between items-center" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
+                <h3 className="font-semibold text-white text-sm">Notifications</h3>
                 {unreadCount > 0 && (
                   <button
                     onClick={markAllAsRead}
@@ -776,7 +808,7 @@ function AdminDashboard({ user }) {
             <div key={group.id}>
               <button
                 onClick={() => setExpandedGroup(isExpanded ? null : group.id)}
-                className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold text-gray-600 hover:text-gray-900 transition-colors rounded-lg hover:bg-gray-100"
+                className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors rounded-lg" style={{ color: "rgba(255,255,255,0.35)" }}
               >
                 <span className="uppercase tracking-wider">{group.name}</span>
                 <span className="text-xl font-bold text-gray-400">
@@ -829,40 +861,293 @@ function AdminDashboard({ user }) {
     {/* MAIN CONTENT - with bottom padding for footer */}
     <div className="flex-1 ml-72 flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto pb-14">
-        <div className="p-6 md:p-8 lg:p-10">
+        <div className="p-6 md:p-8 lg:p-10" style={{ minHeight: "100%" }}>
           {/* OVERVIEW */}
           {activeTab === 'overview' && (
             <div className="space-y-8">
-              <div className="flex items-center gap-4 pb-4 border-b">
-                <LayoutDashboard className="w-10 h-10 text-blue-600" />
-                <div>
-                  <h1 className="text-3xl font-bold text-gray-900">Administrator Dashboard</h1>
-                  <p className="text-gray-600 mt-1">System overview & key metrics</p>
+              {/* Page Header */}
+              <div className="flex items-center justify-between pb-6 border-b border-gray-200">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-600 to-green-700 flex items-center justify-center shadow-md">
+                    <LayoutDashboard className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Administrator Dashboard</h1>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
+                {dashLoading && (
+                  <div className="flex items-center gap-2 text-sm text-gray-400">
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                    </svg>
+                    Loading data…
+                  </div>
+                )}
+              </div>
+
+              {/* KPI Strip */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  {
+                    label: 'Total Contracts',
+                    value: stats.totalContracts,
+                    sub: `${stats.activeContracts} active`,
+                    color: '#2563eb',
+                    bg: '#eff6ff',
+                    icon: (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z"/>
+                      </svg>
+                    )
+                  },
+                  {
+                    label: 'System Users',
+                    value: stats.totalUsers,
+                    sub: stats.pendingUsers > 0 ? `${stats.pendingUsers} pending approval` : 'All approved',
+                    color: '#7c3aed',
+                    bg: '#f5f3ff',
+                    icon: (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                      </svg>
+                    )
+                  },
+                  {
+                    label: 'Active Contracts',
+                    value: stats.activeContracts,
+                    sub: `${stats.totalContracts > 0 ? Math.round((stats.activeContracts / stats.totalContracts) * 100) : 0}% of total`,
+                    color: '#059669',
+                    bg: '#ecfdf5',
+                    icon: (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                      </svg>
+                    )
+                  },
+                  {
+                    label: 'Expiring in 30 Days',
+                    value: expiringContracts.length,
+                    sub: expiringContracts.length > 0 ? 'Requires attention' : 'All clear',
+                    color: expiringContracts.length > 0 ? '#d97706' : '#059669',
+                    bg: expiringContracts.length > 0 ? '#fffbeb' : '#ecfdf5',
+                    icon: (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                      </svg>
+                    )
+                  }
+                ].map((kpi, i) => (
+                  <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{kpi.label}</span>
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: kpi.bg, color: kpi.color }}>
+                        {kpi.icon}
+                      </div>
+                    </div>
+                    <div className="text-3xl font-bold tracking-tight" style={{ color: kpi.color }}>{kpi.value}</div>
+                    <div className="text-xs text-gray-400 mt-1.5 font-medium">{kpi.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Middle Row: Contract Status Breakdown + Quick Nav */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Contract Status Breakdown */}
+                <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-5">Contract Status Breakdown</h3>
+                  <div className="space-y-4">
+                    {[
+                      { label: 'Active', count: stats.activeContracts, color: '#059669', bg: '#ecfdf5', barColor: '#059669' },
+                      { label: 'Draft', count: stats.draftContracts, color: '#2563eb', bg: '#eff6ff', barColor: '#3b82f6' },
+                      { label: 'Pending', count: stats.pendingContracts, color: '#d97706', bg: '#fffbeb', barColor: '#f59e0b' },
+                      { label: 'Expired', count: stats.expiredContracts, color: '#dc2626', bg: '#fef2f2', barColor: '#ef4444' },
+                    ].map((item) => {
+                      const pct = stats.totalContracts > 0 ? (item.count / stats.totalContracts) * 100 : 0;
+                      return (
+                        <div key={item.label}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: item.barColor }} />
+                              <span className="text-sm font-medium text-gray-700">{item.label}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs text-gray-400">{pct.toFixed(1)}%</span>
+                              <span className="text-sm font-bold" style={{ color: item.color, minWidth: '2ch', textAlign: 'right' }}>{item.count}</span>
+                            </div>
+                          </div>
+                          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-700"
+                              style={{ width: `${pct}%`, background: item.barColor }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Summary row */}
+                  <div className="mt-6 pt-5 border-t border-gray-100 grid grid-cols-3 gap-4 text-center">
+                    {[
+                      { label: 'Positions Defined', value: stats.totalPositions },
+                      { label: 'Total Records', value: stats.totalContracts },
+                      { label: 'Pending Users', value: stats.pendingUsers },
+                    ].map((s, i) => (
+                      <div key={i}>
+                        <div className="text-xl font-bold text-gray-800">{s.value}</div>
+                        <div className="text-xs text-gray-400 mt-0.5">{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Quick Navigation */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-5">Quick Access</h3>
+                  <div className="space-y-2">
+                    {[
+                      { label: 'Manage Users', tab: 'users', icon: '👥', desc: 'Approve & configure accounts' },
+                      { label: 'Generate Contract', tab: 'contracts', icon: '📄', desc: 'Create new contract' },
+                      { label: 'View Documents', tab: 'documents', icon: '📁', desc: 'Browse document repository' },
+                      { label: 'Salary Grades', tab: 'salaryGrades', icon: '💰', desc: 'Update grade schedule' },
+                      { label: 'Activity Log', tab: 'activityLog', icon: '📋', desc: 'Review system activity' },
+                    ].map((item) => (
+                      <button
+                        key={item.tab}
+                        onClick={() => setActiveTab(item.tab)}
+                        className="w-full flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 transition-colors group text-left border border-transparent hover:border-gray-200"
+                      >
+                        <span className="text-lg flex-shrink-0">{item.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-gray-800 group-hover:text-green-700 transition-colors truncate">{item.label}</div>
+                          <div className="text-xs text-gray-400 truncate">{item.desc}</div>
+                        </div>
+                        <svg className="w-4 h-4 text-gray-300 group-hover:text-green-600 transition-colors flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+                        </svg>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Total Users</h3>
-                  <p className="text-4xl font-bold text-blue-600">{stats.totalUsers}</p>
+              {/* Bottom Row: Expiring Contracts + Recent Contracts */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Expiring Soon */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-amber-500">⏰</span>
+                      <h3 className="text-sm font-semibold text-gray-700">Expiring Within 30 Days</h3>
+                    </div>
+                    {expiringContracts.length > 0 && (
+                      <span className="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">
+                        {expiringContracts.length} contract{expiringContracts.length > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {expiringContracts.length === 0 ? (
+                      <div className="px-6 py-10 text-center">
+                        <div className="text-3xl mb-2">✅</div>
+                        <div className="text-sm font-medium text-gray-600">No contracts expiring soon</div>
+                        <div className="text-xs text-gray-400 mt-1">All active contracts are within safe date range</div>
+                      </div>
+                    ) : (
+                      expiringContracts.map((c) => {
+                        const daysLeft = Math.ceil((new Date(c.endDate) - new Date()) / (1000 * 60 * 60 * 24));
+                        const urgent = daysLeft <= 7;
+                        return (
+                          <div key={c._id} className="px-6 py-3.5 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                            <div className="flex-1 min-w-0 mr-4">
+                              <div className="text-sm font-medium text-gray-800 truncate">
+                                {c.contractualInfo?.firstName} {c.contractualInfo?.lastName}
+                              </div>
+                              <div className="text-xs text-gray-400 truncate mt-0.5">{c.position || 'N/A'}</div>
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <div className={`text-xs font-bold px-2.5 py-1 rounded-full ${urgent ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                                {daysLeft}d left
+                              </div>
+                              <div className="text-xs text-gray-400 mt-1">
+                                {new Date(c.endDate).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Total Contracts</h3>
-                  <p className="text-4xl font-bold text-blue-600">{stats.totalContracts}</p>
+
+                {/* Recent Contracts */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span>🕐</span>
+                      <h3 className="text-sm font-semibold text-gray-700">Recently Added Contracts</h3>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('contracts')}
+                      className="text-xs text-green-600 hover:text-green-800 font-medium transition-colors"
+                    >
+                      View all →
+                    </button>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {recentContracts.length === 0 ? (
+                      <div className="px-6 py-10 text-center">
+                        <div className="text-3xl mb-2">📋</div>
+                        <div className="text-sm font-medium text-gray-600">No contracts yet</div>
+                        <div className="text-xs text-gray-400 mt-1">Generated contracts will appear here</div>
+                      </div>
+                    ) : (
+                      recentContracts.map((c) => {
+                        const statusColors = {
+                          ACTIVE: 'bg-green-100 text-green-700',
+                          DRAFT: 'bg-blue-100 text-blue-700',
+                          PENDING: 'bg-amber-100 text-amber-700',
+                          EXPIRED: 'bg-red-100 text-red-700',
+                        };
+                        return (
+                          <div key={c._id} className="px-6 py-3.5 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                            <div className="flex-1 min-w-0 mr-4">
+                              <div className="text-sm font-medium text-gray-800 truncate">
+                                {c.contractualInfo?.firstName} {c.contractualInfo?.lastName}
+                              </div>
+                              <div className="text-xs text-gray-400 truncate mt-0.5">{c.position || c.positionTitle || 'N/A'}</div>
+                            </div>
+                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${statusColors[c.status] || 'bg-gray-100 text-gray-600'}`}>
+                              {c.status}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Active Contracts</h3>
-                  <p className="text-4xl font-bold text-green-600">{stats.activeContracts}</p>
+              </div>
+
+              {/* System Health Footer */}
+              <div className="bg-gradient-to-r from-green-900 to-green-800 rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <div className="text-xs font-semibold text-green-300 uppercase tracking-widest mb-1">System Status</div>
+                  <div className="text-white font-semibold text-sm flex items-center gap-2">
+                    <span className="w-2 h-2 bg-green-400 rounded-full inline-block animate-pulse" />
+                    CGEN is operational — all services running normally
+                  </div>
                 </div>
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Pending Users</h3>
-                  <p className="text-4xl font-bold text-yellow-600">{stats.pendingUsers}</p>
+                <div className="text-xs text-green-400 font-medium flex-shrink-0">
+                  DENR IV-A CALABARZON · v2.0 Special Edition
                 </div>
               </div>
             </div>
           )}
 
-          {/* SALARY GRADES */}
+          {/* SALARY GRADES */}          {/* SALARY GRADES */}
           {activeTab === 'salaryGrades' && (
             <div className="space-y-6">
               {/* Sticky Header */}
@@ -1596,8 +1881,8 @@ function AdminDashboard({ user }) {
     </div>
 
     {/* FIXED FOOTER */}
-    <footer className="fixed bottom-0 left-0 right-0 h-12 bg-white border-t border-gray-200 shadow-lg z-40 flex items-center justify-center">
-      <p className="text-sm text-gray-600">
+    <footer className="fixed bottom-0 left-0 right-0 h-12 z-40 flex items-center justify-center" style={{ background: "#0a1628", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+      <p className="text-xs text-white/25 tracking-wide">
         © {new Date().getFullYear()} DENR CALABARZON Contract Management System — All rights reserved.
       </p>
     </footer>

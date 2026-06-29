@@ -70,7 +70,7 @@ function Layout({ user, onLogout, children, fullWidth = false }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-gray-50 flex flex-col">
       {/* Fixed Navigation Bar */}
-      <nav className="bg-white/80 backdrop-blur-md shadow-lg border-b border-gray-200 fixed top-0 left-0 right-0 z-50 h-16">
+      <nav className="bg-[#0a1628] shadow-lg border-b border-white/8 fixed top-0 left-0 right-0 z-50 h-16">
         <div className={fullWidth ? "px-4 sm:px-6 lg:px-8" : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"}>
           <div className="flex justify-between items-center h-16">
             {/* Logo Section */}
@@ -84,10 +84,10 @@ function Layout({ user, onLogout, children, fullWidth = false }) {
                   />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                  <h1 className="text-lg font-bold text-white tracking-tight">
                     Contract Management
                   </h1>
-                  <p className="text-xs text-gray-500 font-medium">
+                  <p className="text-xs text-green-400 font-medium tracking-wide">
                     DENR CALABARZON
                   </p>
                 </div>
@@ -97,9 +97,9 @@ function Layout({ user, onLogout, children, fullWidth = false }) {
             {/* User Section */}
             <div className="flex items-center space-x-4">
               {/* User Info Card */}
-              <div className="hidden md:flex items-center space-x-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg px-4 py-2 border border-gray-200">
+              <div className="hidden md:flex items-center space-x-3 bg-white/5 rounded-lg px-4 py-2 border border-white/10">
                 <div className="text-right">
-                  <p className="text-sm font-semibold text-gray-900">
+                  <p className="text-sm font-semibold text-white">
                     {user.personalInfo?.firstName || user.username}
                   </p>
                   <div className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r ${getRoleBadgeColor(user.role)} text-white`}>
@@ -111,7 +111,7 @@ function Layout({ user, onLogout, children, fullWidth = false }) {
               {/* About Button */}
               <button
                 onClick={() => setShowCreatorModal(true)}
-                className="hidden md:flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium text-sm"
+                className="hidden md:flex items-center space-x-2 px-4 py-2 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors duration-200 font-medium text-sm"
                 title="About the Developer"
               >
                 <span>ℹ️</span>
@@ -209,8 +209,8 @@ function Layout({ user, onLogout, children, fullWidth = false }) {
 
       {/* Fixed Footer - ONLY for non-admin users */}
       {!fullWidth && (
-        <footer className="fixed bottom-0 left-0 right-0 h-12 bg-white border-t border-gray-200 shadow-lg z-40 flex items-center justify-center">
-          <p className="text-sm text-gray-600">
+        <footer className="fixed bottom-0 left-0 right-0 h-12 bg-[#0a1628] border-t border-white/8 z-40 flex items-center justify-center">
+          <p className="text-xs text-white/30 tracking-wide">
             © {new Date().getFullYear()} DENR CALABARZON Contract Management System — All rights reserved.
           </p>
         </footer>

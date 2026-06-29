@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { API_BASE } from '../api.js';
 
 function LoginForm({ onLogin }) {
@@ -7,30 +7,24 @@ function LoginForm({ onLogin }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setTimeout(() => setMounted(true), 50);
+  }, []);
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          username,
-          password
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
-      }
-
+      if (!response.ok) throw new Error(data.message || 'Login failed');
       onLogin(data.user, data.token);
     } catch (err) {
       setError(err.message || 'Login failed. Please try again.');
@@ -39,119 +33,300 @@ function LoginForm({ onLogin }) {
     }
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleSubmit(e);
-    }
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 via-purple-600 to-blue-800 p-4">
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-white opacity-10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-white opacity-10 rounded-full blur-3xl animate-pulse"></div>
-      </div>
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      background: '#0a1628',
+      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+      overflow: 'hidden',
+      position: 'relative'
+    }}>
+      {/* ── Left Panel – Visual Identity ── */}
+      <div style={{
+        flex: '1 1 55%',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+        padding: '64px 72px',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Background texture rings */}
+        <div style={{
+          position: 'absolute', top: '-160px', left: '-160px',
+          width: '640px', height: '640px', borderRadius: '50%',
+          border: '1px solid rgba(46,139,87,0.12)', pointerEvents: 'none'
+        }} />
+        <div style={{
+          position: 'absolute', top: '-80px', left: '-80px',
+          width: '480px', height: '480px', borderRadius: '50%',
+          border: '1px solid rgba(46,139,87,0.18)', pointerEvents: 'none'
+        }} />
+        <div style={{
+          position: 'absolute', bottom: '-200px', right: '-200px',
+          width: '700px', height: '700px', borderRadius: '50%',
+          border: '1px solid rgba(59,130,246,0.08)', pointerEvents: 'none'
+        }} />
+        {/* Green accent line */}
+        <div style={{
+          position: 'absolute', left: 0, top: '15%', bottom: '15%',
+          width: '3px',
+          background: 'linear-gradient(180deg, transparent, #2e8b57 30%, #2e8b57 70%, transparent)',
+          borderRadius: '2px'
+        }} />
 
-      <div className="w-full max-w-md relative z-10">
-        {/* Login Card */}
-        <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/20">
-          {/* Logo Section */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center mb-4">
-              <img 
-                src="/denr-logo.png" 
-                alt="DENR Logo" 
-                className="h-20 w-20 object-contain"
-              />
+        <div style={{
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateY(0)' : 'translateY(24px)',
+          transition: 'opacity 0.6s ease, transform 0.6s ease',
+        }}>
+          {/* Logo + Agency */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '56px' }}>
+            <div style={{
+              width: '52px', height: '52px',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '12px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '6px', flexShrink: 0
+            }}>
+              <img src="/denr-logo.png" alt="DENR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-              WELCOME!
-            </h1>
-            <p className="text-gray-600 font-medium">DENR CALABARZON's</p>
-            <p className="text-sm text-gray-500 mt-1">Contract Management System</p>
+            <div>
+              <div style={{ fontSize: '11px', letterSpacing: '0.15em', color: '#2e8b57', fontWeight: 600, textTransform: 'uppercase' }}>
+                DENR IV-A CALABARZON
+              </div>
+              <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.45)', marginTop: '2px', fontWeight: 400 }}>
+                Department of Environment and Natural Resources
+              </div>
+            </div>
           </div>
 
-          {/* Login Form */}
-          <div className="space-y-6" onKeyPress={handleKeyPress}>
-            {/* Error Alert */}
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 animate-slideDown">
-                <div className="flex items-center space-x-2">
-                  <span className="text-xl">⚠️</span>
-                  <span className="text-sm font-medium text-red-800">{error}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Username Field */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center space-x-2">
-                <span>👤</span>
-                <span>Username</span>
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none"
-                placeholder="Enter your username"
-                required
-                autoFocus
-              />
+          {/* Main headline */}
+          <div style={{ marginBottom: '40px' }}>
+            <div style={{
+              fontSize: '11px', letterSpacing: '0.2em', color: '#2e8b57',
+              fontWeight: 700, textTransform: 'uppercase', marginBottom: '16px',
+              display: 'flex', alignItems: 'center', gap: '8px'
+            }}>
+              <span style={{ display: 'inline-block', width: '24px', height: '1px', background: '#2e8b57', flexShrink: 0 }} />
+              Special Edition v2.0
             </div>
+            <h1 style={{
+              fontSize: 'clamp(32px, 4vw, 54px)',
+              fontWeight: 800,
+              lineHeight: 1.1,
+              color: '#ffffff',
+              margin: 0,
+              letterSpacing: '-0.02em'
+            }}>
+              Contract<br />
+              <span style={{ color: '#2e8b57' }}>Management</span><br />
+              System
+            </h1>
+          </div>
 
-            {/* Password Field */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center space-x-2">
-                <span>🔒</span>
-                <span>Password</span>
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none"
-                  placeholder="Enter your password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  {showPassword ? '👁️' : '👁️‍🗨️'}
-                </button>
+          {/* Feature chips */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '64px' }}>
+            {[
+              { icon: '⚡', label: 'Automated contract generation with dynamic clauses' },
+              { icon: '🔒', label: 'Role-based access with audit trail' },
+              { icon: '📊', label: 'Real-time workforce analytics dashboard' }
+            ].map((f, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: '12px',
+                opacity: mounted ? 1 : 0,
+                transform: mounted ? 'translateX(0)' : 'translateX(-16px)',
+                transition: `opacity 0.5s ease ${0.2 + i * 0.1}s, transform 0.5s ease ${0.2 + i * 0.1}s`
+              }}>
+                <span style={{ fontSize: '14px' }}>{f.icon}</span>
+                <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>{f.label}</span>
               </div>
-            </div>
+            ))}
+          </div>
 
-            {/* Login Button */}
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 text-lg font-semibold rounded-lg shadow-lg hover:shadow-xl hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center space-x-2">
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Logging in...</span>
-                </span>
-              ) : (
-                'Login to Dashboard'
-              )}
-            </button>
+          {/* Footer badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              fontSize: '10px', letterSpacing: '0.08em',
+              color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase'
+            }}>
+              Secure · Compliant · Philippine Government System
+            </div>
           </div>
         </div>
-
-        {/* Footer Text */}
-        <p className="text-center text-sm text-white/80 mt-6">
-          Secure • Reliable • Efficient
-        </p>
       </div>
+
+      {/* ── Right Panel – Login Form ── */}
+      <div style={{
+        flex: '0 0 420px',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        padding: '64px 48px',
+        background: 'rgba(255,255,255,0.03)',
+        borderLeft: '1px solid rgba(255,255,255,0.06)',
+        backdropFilter: 'blur(4px)',
+      }}>
+        <div style={{
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+          transition: 'opacity 0.5s ease 0.15s, transform 0.5s ease 0.15s'
+        }}>
+          <div style={{ marginBottom: '40px' }}>
+            <h2 style={{
+              fontSize: '24px', fontWeight: 700, color: '#ffffff',
+              margin: '0 0 8px 0', letterSpacing: '-0.01em'
+            }}>
+              Sign in to continue
+            </h2>
+            <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.38)', margin: 0 }}>
+              Use your assigned CGEN credentials
+            </p>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div style={{
+              background: 'rgba(220,38,38,0.12)',
+              border: '1px solid rgba(220,38,38,0.3)',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              marginBottom: '24px',
+              display: 'flex', alignItems: 'center', gap: '10px'
+            }}>
+              <span style={{ fontSize: '16px', flexShrink: 0 }}>⚠️</span>
+              <span style={{ fontSize: '13px', color: '#fca5a5', fontWeight: 500 }}>{error}</span>
+            </div>
+          )}
+
+          {/* Username */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{
+              display: 'block', fontSize: '11px', fontWeight: 600,
+              color: 'rgba(255,255,255,0.45)', letterSpacing: '0.1em',
+              textTransform: 'uppercase', marginBottom: '8px'
+            }}>Username</label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
+              autoFocus
+              placeholder="Enter your username"
+              style={{
+                width: '100%',
+                padding: '13px 16px',
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '10px',
+                color: '#ffffff',
+                fontSize: '14px',
+                outline: 'none',
+                boxSizing: 'border-box',
+                transition: 'border-color 0.2s',
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#2e8b57'}
+              onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+            />
+          </div>
+
+          {/* Password */}
+          <div style={{ marginBottom: '32px' }}>
+            <label style={{
+              display: 'block', fontSize: '11px', fontWeight: 600,
+              color: 'rgba(255,255,255,0.45)', letterSpacing: '0.1em',
+              textTransform: 'uppercase', marginBottom: '8px'
+            }}>Password</label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
+                placeholder="Enter your password"
+                style={{
+                  width: '100%',
+                  padding: '13px 48px 13px 16px',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '10px',
+                  color: '#ffffff',
+                  fontSize: '14px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  transition: 'border-color 0.2s',
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#2e8b57'}
+                onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute', right: '14px', top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'rgba(255,255,255,0.35)', fontSize: '16px',
+                  padding: '4px', lineHeight: 1
+                }}
+              >
+                {showPassword ? '👁️' : '👁️‍🗨️'}
+              </button>
+            </div>
+          </div>
+
+          {/* Submit Button */}
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '14px',
+              background: loading ? 'rgba(46,139,87,0.5)' : '#2e8b57',
+              border: 'none',
+              borderRadius: '10px',
+              color: '#ffffff',
+              fontSize: '14px',
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'background 0.2s, transform 0.1s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              textTransform: 'uppercase',
+            }}
+            onMouseEnter={(e) => !loading && (e.target.style.background = '#236e45')}
+            onMouseLeave={(e) => !loading && (e.target.style.background = '#2e8b57')}
+          >
+            {loading ? (
+              <>
+                <svg style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} viewBox="0 0 24 24">
+                  <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="white" strokeWidth="4" fill="none" />
+                  <path style={{ opacity: 0.75 }} fill="white" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Authenticating...
+              </>
+            ) : 'Sign In'}
+          </button>
+
+          <p style={{
+            marginTop: '32px', fontSize: '11px',
+            color: 'rgba(255,255,255,0.2)', textAlign: 'center', lineHeight: 1.6
+          }}>
+            Authorized personnel only. Unauthorized access is prohibited<br />and subject to applicable Philippine laws.
+          </p>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        input::placeholder { color: rgba(255,255,255,0.2); }
+        @media (max-width: 768px) {
+          .login-left { display: none !important; }
+        }
+      `}</style>
     </div>
   );
 }
