@@ -6,161 +6,136 @@ import DocumentViewerModal from './DocumentViewerModal';
 import EnhancedImageCropper from './EnhancedImageCropper';
 import EODBGenerator from './EODBGenerator';
 
+
+// Use the centralized getDocumentUrl from api.js (always uses correct backend BASE_URL)
 const getProfilePhotoUrl = (photoValue, userId, token) => getDocumentUrl(photoValue, userId, token);
 
+
 const formatPhilHealth = (value) => {
-  const n = value.replace(/\D/g, '');
-  if (!n.length) return '';
-  if (n.length <= 2) return n;
-  if (n.length <= 11) return n.slice(0,2)+'-'+n.slice(2);
-  return n.slice(0,2)+'-'+n.slice(2,11)+'-'+n.slice(11,12);
+  const numbers = value.replace(/\D/g, '');
+  if (numbers.length === 0) return '';
+  
+  let formatted = '';
+  if (numbers.length <= 2) {
+    formatted = numbers;
+  } else if (numbers.length <= 11) {
+    formatted = numbers.slice(0, 2) + '-' + numbers.slice(2);
+  } else {
+    formatted = numbers.slice(0, 2) + '-' + numbers.slice(2, 11) + '-' + numbers.slice(11, 12);
+  }
+  return formatted;
 };
+
 const formatPagIbig = (value) => {
-  const n = value.replace(/\D/g, '');
-  if (!n.length) return '';
-  if (n.length <= 4) return n;
-  if (n.length <= 8) return n.slice(0,4)+'-'+n.slice(4);
-  return n.slice(0,4)+'-'+n.slice(4,8)+'-'+n.slice(8,12);
+  const numbers = value.replace(/\D/g, '');
+  if (numbers.length === 0) return '';
+  
+  let formatted = '';
+  if (numbers.length <= 4) {
+    formatted = numbers;
+  } else if (numbers.length <= 8) {
+    formatted = numbers.slice(0, 4) + '-' + numbers.slice(4);
+  } else {
+    formatted = numbers.slice(0, 4) + '-' + numbers.slice(4, 8) + '-' + numbers.slice(8, 12);
+  }
+  return formatted;
 };
+
 const formatTIN = (value) => {
-  const n = value.replace(/\D/g, '');
-  if (!n.length) return '';
-  if (n.length <= 3) return n;
-  if (n.length <= 6) return n.slice(0,3)+'-'+n.slice(3);
-  if (n.length <= 9) return n.slice(0,3)+'-'+n.slice(3,6)+'-'+n.slice(6);
-  return n.slice(0,3)+'-'+n.slice(3,6)+'-'+n.slice(6,9)+'-'+n.slice(9,12);
+  const numbers = value.replace(/\D/g, '');
+  if (numbers.length === 0) return '';
+  
+  let formatted = '';
+  if (numbers.length <= 3) {
+    formatted = numbers;
+  } else if (numbers.length <= 6) {
+    formatted = numbers.slice(0, 3) + '-' + numbers.slice(3);
+  } else if (numbers.length <= 9) {
+    formatted = numbers.slice(0, 3) + '-' + numbers.slice(3, 6) + '-' + numbers.slice(6);
+  } else {
+    formatted = numbers.slice(0, 3) + '-' + numbers.slice(3, 6) + '-' + numbers.slice(6, 9) + '-' + numbers.slice(9, 12);
+  }
+  return formatted;
 };
+
 const formatPhoneNumber = (value) => {
-  const n = value.replace(/\D/g, '');
-  if (!n.length) return '';
-  let d = n.startsWith('0') ? '63'+n.slice(1) : n.startsWith('63') ? n : '63'+n;
-  let f = '+';
-  if (d.length <= 2) f += d;
-  else if (d.length <= 5) f += d.slice(0,2)+'-'+d.slice(2);
-  else if (d.length <= 8) f += d.slice(0,2)+'-'+d.slice(2,5)+'-'+d.slice(5);
-  else f += d.slice(0,2)+'-'+d.slice(2,5)+'-'+d.slice(5,8)+'-'+d.slice(8,12);
-  return f;
+  const numbers = value.replace(/\D/g, '');
+  if (numbers.length === 0) return '';
+  
+  let digitsToFormat = numbers;
+  
+  if (numbers.startsWith('0')) {
+    digitsToFormat = '63' + numbers.slice(1);
+  } else if (numbers.startsWith('63')) {
+    digitsToFormat = numbers;
+  } else {
+    digitsToFormat = '63' + numbers;
+  }
+  
+  let formatted = '+';
+  if (digitsToFormat.length <= 2) {
+    formatted += digitsToFormat;
+  } else if (digitsToFormat.length <= 5) {
+    formatted += digitsToFormat.slice(0, 2) + '-' + digitsToFormat.slice(2);
+  } else if (digitsToFormat.length <= 8) {
+    formatted += digitsToFormat.slice(0, 2) + '-' + digitsToFormat.slice(2, 5) + '-' + digitsToFormat.slice(5);
+  } else {
+    formatted += digitsToFormat.slice(0, 2) + '-' + digitsToFormat.slice(2, 5) + '-' + digitsToFormat.slice(5, 8) + '-' + digitsToFormat.slice(8, 12);
+  }
+  
+  return formatted;
 };
+
 const validateFormats = (personalInfo) => {
   const errors = [];
-  if (personalInfo.philhealth && personalInfo.philhealth.replace(/\D/g,'').length !== 12) errors.push('PhilHealth must be 12 digits');
-  if (personalInfo.pagibig && personalInfo.pagibig.replace(/\D/g,'').length !== 12) errors.push('Pag-IBIG must be 12 digits');
-  if (personalInfo.tin && personalInfo.tin.replace(/\D/g,'').length !== 12) errors.push('TIN must be 12 digits');
-  if (personalInfo.phoneNumber && personalInfo.phoneNumber.replace(/\D/g,'').length !== 12) errors.push('Phone Number must be 10 digits after +63');
+  
+  if (personalInfo.philhealth) {
+    const numbers = personalInfo.philhealth.replace(/\D/g, '');
+    if (numbers.length > 0 && numbers.length !== 12) {
+      errors.push('PhilHealth must be 12 digits (XX-XXXXXXXXX-X)');
+    }
+  }
+  
+  if (personalInfo.pagibig) {
+    const numbers = personalInfo.pagibig.replace(/\D/g, '');
+    if (numbers.length > 0 && numbers.length !== 12) {
+      errors.push('Pag-IBIG must be 12 digits (XXXX-XXXX-XXXX)');
+    }
+  }
+  
+  if (personalInfo.tin) {
+    const numbers = personalInfo.tin.replace(/\D/g, '');
+    if (numbers.length > 0 && numbers.length !== 12) {
+      errors.push('TIN must be 12 digits (XXX-XXX-XXX-XXX)');
+    }
+  }
+  
+  if (personalInfo.phoneNumber) {
+    const numbers = personalInfo.phoneNumber.replace(/\D/g, '');
+    if (numbers.length > 0 && numbers.length !== 12) {
+      errors.push('Phone Number must be 10 digits after +63 (+63-XXX-XXX-XXXX)');
+    }
+  }
+  
   return errors;
 };
 
-// ── Design tokens ──────────────────────────────────────
-const C = {
-  bg: '#f0f4f8',
-  card: '#ffffff',
-  dark: '#0a1628',
-  navy: '#0f1e35',
-  green: '#2e8b57',
-  greenLight: '#ecfdf5',
-  greenMid: '#4ade80',
-  border: '#e5e7eb',
-  text: '#111827',
-  muted: '#6b7280',
-  faint: '#9ca3af',
-};
-
-const inputStyle = {
-  width: '100%', padding: '10px 14px',
-  border: `1px solid ${C.border}`, borderRadius: '8px',
-  fontSize: '14px', color: C.text,
-  background: '#fff', outline: 'none',
-  boxSizing: 'border-box', transition: 'border-color 0.15s',
-};
-const labelStyle = {
-  display: 'block', fontSize: '11px', fontWeight: 600,
-  color: C.muted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px',
-};
-const sectionCard = {
-  background: C.card, borderRadius: '14px',
-  border: `1px solid ${C.border}`, padding: '28px 32px',
-  boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-};
-const sectionHeader = {
-  display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px',
-};
-const sectionTitle = {
-  fontSize: '16px', fontWeight: 700, color: C.text, margin: 0,
-};
-const sectionSub = {
-  fontSize: '13px', color: C.muted, marginTop: '3px',
-};
-const btnPrimary = {
-  padding: '10px 20px', background: C.green, color: '#fff',
-  border: 'none', borderRadius: '8px', fontSize: '13px',
-  fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s',
-};
-const btnSecondary = {
-  padding: '10px 20px', background: '#fff', color: C.text,
-  border: `1px solid ${C.border}`, borderRadius: '8px', fontSize: '13px',
-  fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s',
-};
-const tabNavStyle = {
-  display: 'flex', gap: '4px',
-  background: 'rgba(0,0,0,0.04)', borderRadius: '10px',
-  padding: '4px', marginBottom: '28px',
-};
-
-function TabBtn({ active, onClick, icon, label }) {
-  return (
-    <button onClick={onClick} style={{
-      flex: 1, padding: '9px 12px',
-      background: active ? '#fff' : 'transparent',
-      border: 'none', borderRadius: '8px',
-      color: active ? C.green : C.muted,
-      fontSize: '13px', fontWeight: active ? 700 : 500,
-      cursor: 'pointer', transition: 'all 0.15s',
-      boxShadow: active ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-      whiteSpace: 'nowrap',
-    }}>
-      <span>{icon}</span>
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function InfoField({ label, value, span = 1 }) {
-  return (
-    <div style={{ gridColumn: span > 1 ? `span ${span}` : undefined }}>
-      <div style={labelStyle}>{label}</div>
-      <div style={{ fontSize: '14px', color: value ? C.text : C.faint, fontWeight: value ? 500 : 400 }}>
-        {value || '—'}
-      </div>
-    </div>
-  );
-}
-
-function FormInput({ label, type='text', value, onChange, placeholder, readOnly, children }) {
-  return (
-    <div>
-      <label style={labelStyle}>{label}</label>
-      {children || (
-        <input type={type} value={value} onChange={onChange}
-          placeholder={placeholder} readOnly={readOnly}
-          style={inputStyle}
-          onFocus={e => e.target.style.borderColor = C.green}
-          onBlur={e => e.target.style.borderColor = C.border}
-        />
-      )}
-    </div>
-  );
-}
-
 function ContractualDashboard({ user }) {
-  if (!user || typeof user !== 'object' || (!user._id && !user.id)) {
+  if (!user || typeof user !== 'object' || !user._id && !user.id) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.bg }}>
-        <div style={{ ...sectionCard, textAlign: 'center', maxWidth: '380px' }}>
-          <div style={{ fontSize: '32px', marginBottom: '16px' }}>⚠️</div>
-          <h2 style={{ fontSize: '18px', fontWeight: 700, color: C.text, margin: '0 0 8px' }}>Session Error</h2>
-          <p style={{ fontSize: '14px', color: C.muted, marginBottom: '20px' }}>Your session appears invalid. Please log in again.</p>
-          <button style={btnPrimary} onClick={() => { localStorage.clear(); window.location.href = '/login'; }}>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md bg-white p-8 rounded-lg shadow border border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900 mb-3">Session Error</h2>
+          <p className="text-gray-600 text-sm mb-6">
+            User information is missing or corrupted. Please log in again.
+          </p>
+          <button
+            onClick={() => {
+              localStorage.clear();
+              window.location.href = '/login';
+            }}
+            className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition"
+          >
             Return to Login
           </button>
         </div>
@@ -175,9 +150,18 @@ function ContractualDashboard({ user }) {
   const [documents, setDocuments] = useState([]);
   const [loadingDocuments, setLoadingDocuments] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [uploadForm, setUploadForm] = useState({ type: 'SIGNED_CONTRACT', description: '', file: null });
+  const [uploadForm, setUploadForm] = useState({
+    type: 'SIGNED_CONTRACT',
+    description: '',
+    file: null
+  });
   const [viewingDocument, setViewingDocument] = useState(null);
-  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+
   const [showCropModal, setShowCropModal] = useState(false);
   const [imageToCrop, setImageToCrop] = useState(null);
   const [currentCropType, setCurrentCropType] = useState('passport');
@@ -185,291 +169,486 @@ function ContractualDashboard({ user }) {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const tabs = [
-    { id: 'profile', icon: '👤', label: 'Profile' },
-    { id: 'contracts', icon: '📄', label: 'My Contracts' },
-    { id: 'documents', icon: '📁', label: 'Documents' },
-    { id: 'eodb', icon: '🪪', label: 'EODB ID' },
-    { id: 'password', icon: '🔒', label: 'Security' },
+    { id: 'profile', name: 'Personal Information' },
+    { id: 'contracts', name: 'My Contracts' },
+    { id: 'documents', name: 'Documents' },
+    { id: 'eodb', name: 'EODB ID' },
+    { id: 'password', name: 'Change Password' }
   ];
 
   useEffect(() => {
     if (!user?.id && !user?._id) return;
-    fetchDocuments();
-    loadProfilePhoto();
+    const initialize = async () => {
+      try {
+        await fetchDocuments();
+        loadProfilePhoto();
+      } catch (err) {
+        console.error("Dashboard initialization failed:", err);
+      }
+    };
+    initialize();
   }, [user?.id, user?._id, user?.personalInfo?.profilePhoto]);
 
   useEffect(() => {
-    const handler = () => {
-      const u = JSON.parse(localStorage.getItem('user'));
-      if (u?.personalInfo?.profilePhoto) {
-        const uid = u.id || u._id;
+    const handleStorageChange = () => {
+      const updatedUser = JSON.parse(localStorage.getItem('user'));
+      if (updatedUser?.personalInfo?.profilePhoto) {
+        const userId = updatedUser.id || updatedUser._id;
         const token = localStorage.getItem('token');
-        setProfilePhotoUrl(getProfilePhotoUrl(u.personalInfo.profilePhoto, uid, token));
-        setPersonalInfo(u.personalInfo);
-        setOriginalPersonalInfo(u.personalInfo);
+        const timestamp = Date.now();
+        const randomStr = Math.random().toString(36).substring(2, 12);
+        setProfilePhotoUrl(getProfilePhotoUrl(updatedUser.personalInfo.profilePhoto, userId, token));
+        setPersonalInfo(updatedUser.personalInfo);
+        setOriginalPersonalInfo(updatedUser.personalInfo);
       }
     };
-    window.addEventListener('storage', handler);
-    window.addEventListener('userUpdated', handler);
-    window.addEventListener('profilePhotoUpdated', handler);
-    return () => { window.removeEventListener('storage', handler); window.removeEventListener('userUpdated', handler); window.removeEventListener('profilePhotoUpdated', handler); };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('userUpdated', handleStorageChange);
+    window.addEventListener('profilePhotoUpdated', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('userUpdated', handleStorageChange);
+      window.removeEventListener('profilePhotoUpdated', handleStorageChange);
+    };
   }, []);
 
-  useEffect(() => { if (refreshTrigger > 0) fetchDocuments(); }, [refreshTrigger]);
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      fetchDocuments();
+    }
+  }, [refreshTrigger]);
 
   const loadProfilePhoto = () => {
-    const uid = user?.id || user?._id;
-    if (!uid || !user.personalInfo?.profilePhoto) return;
+    const userId = user?.id || user?._id;
+    if (!userId || !user.personalInfo?.profilePhoto) return;
     const token = localStorage.getItem('token');
     if (!token) return;
-    setProfilePhotoUrl(getProfilePhotoUrl(user.personalInfo.profilePhoto, uid, token));
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 12);
+    setProfilePhotoUrl(getProfilePhotoUrl(user.personalInfo.profilePhoto, userId, token));
   };
-  const handleDocumentUploaded = () => { setRefreshTrigger(p => p+1); fetchDocuments(); };
+
+  const handleDocumentUploaded = () => {
+    setRefreshTrigger(prev => prev + 1);
+    fetchDocuments();
+  };
 
   const fetchDocuments = async () => {
-    const uid = user?.id || user?._id;
-    if (!uid) return;
+    const userId = user?.id || user?._id;
+    if (!userId) return;
     setLoadingDocuments(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await api.get(`/api/users/${uid}`, { headers: { Authorization: `Bearer ${token}` } });
-      setDocuments(res.data.documents || []);
-      if (res.data.personalInfo?.profilePhoto) {
-        setProfilePhotoUrl(getProfilePhotoUrl(res.data.personalInfo.profilePhoto, uid, token));
+      if (!token) throw new Error("No token available");
+
+      const response = await api.get(`/api/users/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setDocuments(response.data.documents || []);
+
+      if (response.data.personalInfo?.profilePhoto) {
+        const timestamp = Date.now();
+        const randomStr = Math.random().toString(36).substring(2, 12);
+        setProfilePhotoUrl(getProfilePhotoUrl(response.data.personalInfo.profilePhoto, userId, token));
       }
-    } catch (err) { console.error(err); } finally { setLoadingDocuments(false); }
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
+  const handleEditProfile = () => {
+    setIsEditingProfile(true);
+  };
+
+  const handleCancelEdit = () => {
+    setPersonalInfo(originalPersonalInfo);
+    setIsEditingProfile(false);
   };
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
+    
     const errors = validateFormats(personalInfo);
-    if (errors.length) { alert('Please fix:\n' + errors.join('\n')); return; }
+    if (errors.length > 0) {
+      alert('Please fix the following errors:\n\n' + errors.join('\n'));
+      return;
+    }
+    
     try {
-      const uid = user.id || user._id;
+      const userId = user.id || user._id;
       const token = localStorage.getItem('token');
-      await api.put(`/api/users/${uid}`, { personalInfo }, { headers: { Authorization: `Bearer ${token}` } });
+      
+      await api.put(`/api/users/${userId}`, 
+        { personalInfo },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
       alert('Profile updated successfully!');
-      const updated = { ...user, personalInfo };
-      localStorage.setItem('user', JSON.stringify(updated));
+      
+      const updatedUser = { ...user, personalInfo };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      
       setOriginalPersonalInfo(personalInfo);
       setIsEditingProfile(false);
+      
       window.dispatchEvent(new Event('userUpdated'));
-    } catch (err) { alert('Error: ' + (err.response?.data?.message || err.message)); }
+      
+    } catch (error) {
+      console.error('Profile update error:', error);
+      alert('Error updating profile: ' + (error.response?.data?.message || error.message));
+    }
   };
 
   const handleFileUpload = async (e) => {
     e.preventDefault();
-    if (!uploadForm.file) { alert('Please select a file'); return; }
+    if (!uploadForm.file) {
+      alert('Please select a file');
+      return;
+    }
+
     if (uploadForm.type === 'PHOTO') {
       const reader = new FileReader();
-      reader.onload = (e) => { setImageToCrop(e.target.result); setShowCropModal(true); };
+      reader.onload = (e) => {
+        setImageToCrop(e.target.result);
+        setShowCropModal(true);
+      };
       reader.readAsDataURL(uploadForm.file);
       return;
     }
+
     await uploadDocument();
   };
 
   const uploadDocument = async (croppedBlob = null, cropType = 'passport') => {
-    const uid = user.id || user._id;
-    if (!uid) { alert('Session invalid. Please log in again.'); return; }
+    if (!user || typeof user !== 'object' || (!user.id && !user._id)) {
+      setUploading(false);
+      alert("Cannot upload: Your session appears to be invalid. Please log out and log in again.");
+      window.location.href = '/login';
+      return;
+    }
+
+    const userId = user.id || user._id;
     setUploading(true);
+
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error("No authentication token found. Please log in again.");
+      }
+
       const formData = new FormData();
+
       if (croppedBlob) {
-        const fname = cropType === 'profile' ? 'cropped-profile-round.jpg' : 'cropped-eodb-passport.jpg';
-        const docType = cropType === 'profile' ? 'PHOTO' : 'PASSPORT_PHOTO';
-        formData.append('file', new File([croppedBlob], fname, { type: 'image/jpeg' }));
-        formData.append('type', docType);
-        formData.append('description', cropType === 'profile' ? 'Profile Photo' : 'EODB ID Photo');
-        formData.append('isProfilePhoto', cropType === 'profile' ? 'true' : 'false');
+        const filename = cropType === 'profile' ? 'cropped-profile-round.jpg' : 'cropped-eodb-passport.jpg';
+        const description = cropType === 'profile' ? 'Profile Photo (Round)' : 'EODB ID Photo (Passport)';
+        const isProfilePhoto = cropType === 'profile' ? 'true' : 'false';
+        const documentType = cropType === 'profile' ? 'PHOTO' : 'PASSPORT_PHOTO';
+
+        const file = new File([croppedBlob], filename, { type: 'image/jpeg' });
+        formData.append('file', file);
+        formData.append('type', documentType);
+        formData.append('description', description);
+        formData.append('isProfilePhoto', isProfilePhoto);
       } else {
+        if (!uploadForm.file) throw new Error("No file selected");
         formData.append('file', uploadForm.file);
         formData.append('type', uploadForm.type);
         formData.append('description', uploadForm.description || '');
         formData.append('isProfilePhoto', uploadForm.type === 'PHOTO' ? 'true' : 'false');
       }
-      const res = await api.post(`/api/users/${uid}/documents`, formData, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+
+      const response = await api.post(`/api/users/${userId}/documents`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
       });
-      if (croppedBlob && cropType === 'profile' && res.data?.personalInfo?.profilePhoto) {
-        setShowCropModal(false); setImageToCrop(null); setCurrentCropType('passport');
-        setUploadForm({ type: 'SIGNED_CONTRACT', description: '', file: null });
-        const fresh = await api.get(`/api/users/${uid}`, { headers: { Authorization: `Bearer ${token}` } });
-        localStorage.setItem('user', JSON.stringify(fresh.data));
-        setPersonalInfo(fresh.data.personalInfo); setOriginalPersonalInfo(fresh.data.personalInfo);
-        setProfilePhotoUrl(getProfilePhotoUrl(fresh.data.personalInfo.profilePhoto, uid, token));
-        window.dispatchEvent(new CustomEvent('profilePhotoUpdated', { detail: { userId: uid, profilePhoto: fresh.data.personalInfo.profilePhoto } }));
-        window.dispatchEvent(new Event('userUpdated'));
-        alert('Profile photo updated!');
-        await fetchDocuments();
-        setTimeout(() => window.location.reload(), 800);
+
+      if (croppedBlob && cropType === 'profile' && response.data?.personalInfo?.profilePhoto) {
+        try {
+          setShowCropModal(false);
+          setImageToCrop(null);
+          setCurrentCropType('passport');
+          setUploadForm({ type: 'SIGNED_CONTRACT', description: '', file: null });
+
+          const freshResponse = await api.get(`/api/users/${userId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+
+          const freshUser = freshResponse.data;
+          localStorage.setItem('user', JSON.stringify(freshUser));
+          setPersonalInfo(freshUser.personalInfo);
+          setOriginalPersonalInfo(freshUser.personalInfo);
+
+          const ts = Date.now();
+          const randomStr = Math.random().toString(36).substring(2, 12);
+          const freshUrl = getProfilePhotoUrl(freshUser.personalInfo.profilePhoto, userId, token);
+          setProfilePhotoUrl(freshUrl);
+
+          window.dispatchEvent(new CustomEvent('profilePhotoUpdated', {
+            detail: {
+              userId: userId,
+              profilePhoto: freshUser.personalInfo.profilePhoto,
+              timestamp: ts
+            }
+          }));
+
+          window.dispatchEvent(new Event('userUpdated'));
+          alert('Profile photo updated successfully!');
+          await fetchDocuments();
+          setTimeout(() => window.location.reload(), 800);
+
+        } catch (refreshErr) {
+          console.error("Failed to refresh user after photo upload:", refreshErr);
+          alert("Photo uploaded but preview might be delayed. Please refresh the page.");
+        }
       } else if (croppedBlob && cropType === 'passport') {
-        setShowCropModal(false); setImageToCrop(null); setCurrentCropType('passport');
-        alert('EODB photo uploaded!'); await fetchDocuments();
+        setShowCropModal(false);
+        setImageToCrop(null);
+        setCurrentCropType('passport');
+        alert('EODB photo uploaded successfully! You can now generate your ID.');
+        await fetchDocuments();
         window.dispatchEvent(new Event('eodbPhotoUpdated'));
       } else {
-        alert('Document uploaded!'); setUploadForm({ type: 'SIGNED_CONTRACT', description: '', file: null }); await fetchDocuments();
+        alert('Document uploaded successfully!');
+        setUploadForm({ type: 'SIGNED_CONTRACT', description: '', file: null });
+        await fetchDocuments();
       }
-    } catch (err) { alert('Upload error: ' + (err.response?.data?.message || err.message)); }
-    finally { setUploading(false); }
+    } catch (error) {
+      console.error('Upload error:', error);
+      const errorMsg = error.response?.data?.message 
+        || error.message 
+        || "Unknown error during upload";
+      alert(`Error uploading document: ${errorMsg}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDownloadDocument = (filename) => {
+    const userId = user.id || user._id;
+    const token = localStorage.getItem('token');
+    openDocument(filename, userId, token);
+  };
+
+  const handleViewDocument = (filename) => {
+    setViewingDocument(filename);
   };
 
   const handleDeleteDocument = async (filename) => {
-    if (!confirm('Delete this document?')) return;
+    if (!confirm('Are you sure you want to delete this document?')) return;
+
     try {
-      const uid = user.id || user._id;
+      const userId = user.id || user._id;
       const token = localStorage.getItem('token');
-      const docKey = filename.startsWith('http') ? filename.split('/').pop().split('?')[0] : filename;
-      await api.delete(`/api/users/${uid}/documents/${docKey}`, { headers: { Authorization: `Bearer ${token}` } });
-      alert('Deleted!'); fetchDocuments();
-    } catch (err) { alert('Error: ' + (err.response?.data?.message || err.message)); }
+      // Use just the filename part for the API key (strip R2 URL if needed)
+      const docKey = filename.startsWith('http')
+        ? filename.split('/').pop().split('?')[0]
+        : filename;
+      await api.delete(`/api/users/${userId}/documents/${docKey}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('Document deleted successfully!');
+      fetchDocuments();
+    } catch (error) {
+      alert('Error deleting document: ' + (error.response?.data?.message || error.message));
+    }
   };
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) { alert('Passwords do not match'); return; }
+    
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      alert('New passwords do not match');
+      return;
+    }
+
     try {
       const token = localStorage.getItem('token');
-      await api.post('/api/auth/change-password', { currentPassword: passwordForm.currentPassword, newPassword: passwordForm.newPassword }, { headers: { Authorization: `Bearer ${token}` } });
-      alert('Password changed!'); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    } catch (err) { alert('Error: ' + (err.response?.data?.message || err.message)); }
+      await api.post('/api/auth/change-password', {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      alert('Password changed successfully!');
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error) {
+      alert('Error changing password: ' + (error.response?.data?.message || error.message));
+    }
   };
 
-  const getInitials = () => {
-    const f = personalInfo.firstName || user.username || 'U';
-    const l = personalInfo.lastName || '';
-    return l ? f[0].toUpperCase() + l[0].toUpperCase() : f[0].toUpperCase();
+  const updatePersonalInfo = (field, value) => {
+    setPersonalInfo({ ...personalInfo, [field]: value });
   };
 
-  const getFileIcon = (fn) => {
-    const ext = fn.split('.').pop().toLowerCase();
-    if (ext === 'pdf') return '📄';
-    if (['jpg','jpeg','png','gif'].includes(ext)) return '🖼️';
-    if (['doc','docx'].includes(ext)) return '📝';
+  const getFileIcon = (filename) => {
+    const ext = filename.split('.').pop().toLowerCase();
+    if (['pdf'].includes(ext)) return '📄';
+    if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) return '🖼️';
+    if (['doc', 'docx'].includes(ext)) return '📝';
     return '📎';
   };
 
-  const fullName = [personalInfo.firstName, personalInfo.middleName, personalInfo.lastName].filter(Boolean).join(' ') || user.username;
-
   return (
-    <div style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
-
-      {/* ── Profile Header Banner ── */}
-      <div style={{
-        background: `linear-gradient(135deg, ${C.dark} 0%, ${C.navy} 100%)`,
-        borderRadius: '16px', padding: '28px 32px',
-        marginBottom: '28px', position: 'relative', overflow: 'hidden',
-      }}>
-        {/* Decorative ring */}
-        <div style={{ position: 'absolute', right: '-60px', top: '-60px', width: '240px', height: '240px', borderRadius: '50%', border: '1px solid rgba(46,139,87,0.2)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', right: '-20px', top: '-20px', width: '160px', height: '160px', borderRadius: '50%', border: '1px solid rgba(46,139,87,0.12)', pointerEvents: 'none' }} />
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', position: 'relative' }}>
-          {/* Avatar */}
-          <div style={{
-            width: '72px', height: '72px', borderRadius: '50%',
-            background: C.green, border: '3px solid rgba(255,255,255,0.15)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '24px', fontWeight: 700, color: '#fff',
-            overflow: 'hidden', flexShrink: 0,
-          }}>
-            {profilePhotoUrl
-              ? <img key={profilePhotoUrl} src={profilePhotoUrl} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : getInitials()
-            }
-          </div>
-          <div>
-            <div style={{ fontSize: '11px', letterSpacing: '0.15em', color: C.greenMid, fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
-              Contractual Employee
-            </div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: '#fff', letterSpacing: '-0.01em' }}>{fullName}</div>
-            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', marginTop: '3px' }}>
-              {user.placeOfAssignment || 'Place of Assignment not set'} · @{user.username}
-            </div>
-          </div>
-        </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-semibold text-gray-900">Contractual Dashboard</h2>
       </div>
 
-      {/* ── Tab Navigation ── */}
-      <div style={tabNavStyle}>
-        {tabs.map(t => <TabBtn key={t.id} active={activeTab === t.id} onClick={() => setActiveTab(t.id)} icon={t.icon} label={t.label} />)}
+      <div className="border-b border-gray-200">
+        <nav className="flex space-x-8">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition ${
+                activeTab === tab.id
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {tab.name}
+            </button>
+          ))}
+        </nav>
       </div>
 
-      {/* ── PROFILE TAB ── */}
       {activeTab === 'profile' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-          {/* Photo Section */}
-          <div style={sectionCard}>
-            <div style={sectionHeader}>
+        <div className="space-y-6">
+          {/* Profile Photo Section */}
+          <div className="card">
+            <div className="flex items-start justify-between mb-6">
               <div>
-                <div style={sectionTitle}>Profile Photo</div>
-                <div style={sectionSub}>Displayed on your account and documents</div>
+                <h3 className="text-lg font-semibold text-gray-900">Profile Photo</h3>
+                <p className="text-sm text-gray-500 mt-1">This will be displayed on your profile</p>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-              <div style={{ width: '88px', height: '88px', borderRadius: '50%', background: `${C.green}22`, border: `2px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 700, color: C.green, overflow: 'hidden', flexShrink: 0 }}>
-                {profilePhotoUrl ? <img key={profilePhotoUrl} src={profilePhotoUrl} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : getInitials()}
+            <div className="flex items-center space-x-6">
+              <div className="relative">
+                <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center text-gray-600 text-2xl font-semibold border border-gray-300">
+                  {profilePhotoUrl ? (
+                    <img 
+                      key={profilePhotoUrl}
+                      src={profilePhotoUrl}
+                      alt="Profile"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span>{personalInfo.firstName?.charAt(0) || user.username?.charAt(0)?.toUpperCase() || 'U'}</span>
+                  )}
+                </div>
               </div>
               <div>
-                <label style={{ ...btnSecondary, display: 'inline-block', cursor: 'pointer' }}>
-                  Upload Photo
-                  <input type="file" accept="image/*" onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                      setUploadForm({ type: 'PHOTO', description: 'Profile Photo', file });
-                      const r = new FileReader();
-                      r.onload = (e) => { setImageToCrop(e.target.result); setCurrentCropType('profile'); setShowCropModal(true); };
-                      r.readAsDataURL(file);
-                    }
-                  }} style={{ display: 'none' }} />
+                <label className="btn btn-secondary cursor-pointer inline-block text-sm">
+                  Upload New Photo
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        setUploadForm({ type: 'PHOTO', description: 'Profile Photo', file });
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                          setImageToCrop(e.target.result);
+                          setCurrentCropType('profile');
+                          setShowCropModal(true);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="hidden"
+                  />
                 </label>
-                <div style={{ fontSize: '12px', color: C.faint, marginTop: '8px' }}>JPG, PNG or GIF. Max 5MB.</div>
-              </div>
-              <div style={{ marginLeft: '16px', paddingLeft: '16px', borderLeft: `1px solid ${C.border}` }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: C.muted, marginBottom: '8px' }}>EODB ID Photo</div>
-                <label style={{ ...btnSecondary, display: 'inline-block', cursor: 'pointer', fontSize: '12px', padding: '8px 14px' }}>
-                  Upload EODB Photo
-                  <input type="file" accept="image/*" onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                      setUploadForm({ type: 'PASSPORT_PHOTO', description: 'EODB Photo', file });
-                      const r = new FileReader();
-                      r.onload = (e) => { setImageToCrop(e.target.result); setCurrentCropType('passport'); setShowCropModal(true); };
-                      r.readAsDataURL(file);
-                    }
-                  }} style={{ display: 'none' }} />
-                </label>
-                <div style={{ fontSize: '11px', color: C.faint, marginTop: '6px' }}>2:3 passport-style</div>
+                <p className="text-xs text-gray-500 mt-2">JPG, PNG or GIF. Max 5MB</p>
               </div>
             </div>
           </div>
 
-          {/* Personal Info */}
-          <div style={sectionCard}>
-            <div style={sectionHeader}>
+          {/* EODB Photo Upload */}
+          <div className="card bg-blue-50 border border-blue-200">
+            <div className="flex items-start space-x-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-gray-900 mb-1">EODB ID Photo</h4>
+                <p className="text-sm text-gray-600 mb-3">Upload a passport-style photo (2:3 ratio) for your EODB ID. This is separate from your profile photo.</p>
+                <label className="btn btn-sm bg-blue-600 text-white hover:bg-blue-700 cursor-pointer inline-block">
+                  Upload EODB Photo
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        setUploadForm({ type: 'PASSPORT_PHOTO', description: 'EODB Photo', file });
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                          setImageToCrop(e.target.result);
+                          setCurrentCropType('passport');
+                          setShowCropModal(true);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Personal Information */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-6">
               <div>
-                <div style={sectionTitle}>Personal Information</div>
-                <div style={sectionSub}>Your official details used in contract generation</div>
+                <h3 className="text-lg font-semibold text-gray-900">Personal Information</h3>
+                <p className="text-sm text-gray-500 mt-1">Manage your personal details</p>
               </div>
               {!isEditingProfile ? (
-                <button style={btnSecondary} onClick={() => setIsEditingProfile(true)}>Edit Profile</button>
+                <button
+                  onClick={handleEditProfile}
+                  className="btn btn-secondary"
+                >
+                  Edit
+                </button>
               ) : (
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button style={btnSecondary} onClick={() => { setPersonalInfo(originalPersonalInfo); setIsEditingProfile(false); }}>Cancel</button>
-                  <button style={btnPrimary} onClick={handleUpdateProfile}>Save Changes</button>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleCancelEdit}
+                    className="btn btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleUpdateProfile}
+                    className="btn btn-primary"
+                  >
+                    Save Changes
+                  </button>
                 </div>
               )}
             </div>
 
             {!isEditingProfile ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+              // View Mode
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <InfoField label="Last Name" value={personalInfo.lastName} />
                 <InfoField label="First Name" value={personalInfo.firstName} />
                 <InfoField label="Middle Name" value={personalInfo.middleName} />
                 <InfoField label="Sex" value={personalInfo.sex} />
-                <InfoField label="Birthday" value={personalInfo.birthday ? new Date(personalInfo.birthday).toLocaleDateString('en-PH') : null} />
+                <InfoField label="Birthday" value={personalInfo.birthday ? new Date(personalInfo.birthday).toLocaleDateString() : 'N/A'} />
                 <InfoField label="Place of Birth" value={personalInfo.placeOfBirth} />
                 <InfoField label="Phone Number" value={personalInfo.phoneNumber} />
                 <InfoField label="Email" value={personalInfo.email} span={2} />
@@ -481,32 +660,96 @@ function ContractualDashboard({ user }) {
                 <InfoField label="Bachelor's Degree" value={personalInfo.bachelorsDegree} span={2} />
               </div>
             ) : (
+              // Edit Mode
               <form onSubmit={handleUpdateProfile}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-                  <FormInput label="Last Name" value={personalInfo.lastName||''} onChange={e=>setPersonalInfo({...personalInfo,lastName:e.target.value.toUpperCase()})} />
-                  <FormInput label="First Name" value={personalInfo.firstName||''} onChange={e=>setPersonalInfo({...personalInfo,firstName:e.target.value.toUpperCase()})} />
-                  <FormInput label="Middle Name" value={personalInfo.middleName||''} onChange={e=>setPersonalInfo({...personalInfo,middleName:e.target.value.toUpperCase()})} />
-                  <FormInput label="Sex">
-                    <select value={personalInfo.sex||'MALE'} onChange={e=>setPersonalInfo({...personalInfo,sex:e.target.value})} style={inputStyle} onFocus={e=>e.target.style.borderColor=C.green} onBlur={e=>e.target.style.borderColor=C.border}>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <FormField
+                    label="Last Name"
+                    value={personalInfo.lastName || ''}
+                    onChange={(e) => updatePersonalInfo('lastName', e.target.value.toUpperCase())}
+                  />
+                  <FormField
+                    label="First Name"
+                    value={personalInfo.firstName || ''}
+                    onChange={(e) => updatePersonalInfo('firstName', e.target.value.toUpperCase())}
+                  />
+                  <FormField
+                    label="Middle Name"
+                    value={personalInfo.middleName || ''}
+                    onChange={(e) => updatePersonalInfo('middleName', e.target.value.toUpperCase())}
+                  />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Sex</label>
+                    <select
+                      value={personalInfo.sex || 'MALE'}
+                      onChange={(e) => updatePersonalInfo('sex', e.target.value.toUpperCase())}
+                      className="input"
+                    >
                       <option value="MALE">Male</option>
                       <option value="FEMALE">Female</option>
                     </select>
-                  </FormInput>
-                  <FormInput label="Birthday" type="date" value={personalInfo.birthday?personalInfo.birthday.split('T')[0]:''} onChange={e=>setPersonalInfo({...personalInfo,birthday:e.target.value})} />
-                  <FormInput label="Place of Birth" value={personalInfo.placeOfBirth||''} onChange={e=>setPersonalInfo({...personalInfo,placeOfBirth:e.target.value.toUpperCase()})} />
-                  <FormInput label="Phone Number" value={personalInfo.phoneNumber||''} onChange={e=>setPersonalInfo({...personalInfo,phoneNumber:formatPhoneNumber(e.target.value)})} placeholder="+63-XXX-XXX-XXXX" />
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <FormInput label="Email" type="email" value={personalInfo.email||''} onChange={e=>setPersonalInfo({...personalInfo,email:e.target.value.toLowerCase()})} />
                   </div>
-                  <div style={{ gridColumn: 'span 3' }}>
-                    <FormInput label="Address" value={personalInfo.address||''} onChange={e=>setPersonalInfo({...personalInfo,address:e.target.value.toUpperCase()})} />
+                  <FormField
+                    label="Birthday"
+                    type="date"
+                    value={personalInfo.birthday ? personalInfo.birthday.split('T')[0] : ''}
+                    onChange={(e) => updatePersonalInfo('birthday', e.target.value)}
+                  />
+                  <FormField
+                    label="Place of Birth"
+                    value={personalInfo.placeOfBirth || ''}
+                    onChange={(e) => updatePersonalInfo('placeOfBirth', e.target.value.toUpperCase())}
+                  />
+                  <FormField
+                    label="Phone Number"
+                    value={personalInfo.phoneNumber || ''}
+                    onChange={(e) => updatePersonalInfo('phoneNumber', formatPhoneNumber(e.target.value))}
+                    placeholder="+63-XXX-XXX-XXXX"
+                  />
+                  <div className="md:col-span-2">
+                    <FormField
+                      label="Email"
+                      type="email"
+                      value={personalInfo.email || ''}
+                      onChange={(e) => updatePersonalInfo('email', e.target.value.toLowerCase())}
+                    />
                   </div>
-                  <FormInput label="PhilHealth" value={personalInfo.philhealth||''} onChange={e=>setPersonalInfo({...personalInfo,philhealth:formatPhilHealth(e.target.value)})} placeholder="XX-XXXXXXXXX-X" />
-                  <FormInput label="Pag-IBIG" value={personalInfo.pagibig||''} onChange={e=>setPersonalInfo({...personalInfo,pagibig:formatPagIbig(e.target.value)})} placeholder="XXXX-XXXX-XXXX" />
-                  <FormInput label="TIN" value={personalInfo.tin||''} onChange={e=>setPersonalInfo({...personalInfo,tin:formatTIN(e.target.value)})} placeholder="XXX-XXX-XXX-XXX" />
-                  <FormInput label="Highest Education" value={personalInfo.highestEducation||''} onChange={e=>setPersonalInfo({...personalInfo,highestEducation:e.target.value.toUpperCase()})} />
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <FormInput label="Bachelor's Degree" value={personalInfo.bachelorsDegree||''} onChange={e=>setPersonalInfo({...personalInfo,bachelorsDegree:e.target.value.toUpperCase()})} />
+                  <div className="md:col-span-3">
+                    <FormField
+                      label="Address"
+                      value={personalInfo.address || ''}
+                      onChange={(e) => updatePersonalInfo('address', e.target.value.toUpperCase())}
+                    />
+                  </div>
+                  <FormField
+                    label="PhilHealth"
+                    value={personalInfo.philhealth || ''}
+                    onChange={(e) => updatePersonalInfo('philhealth', formatPhilHealth(e.target.value))}
+                    placeholder="XX-XXXXXXXXX-X"
+                  />
+                  <FormField
+                    label="Pag-IBIG"
+                    value={personalInfo.pagibig || ''}
+                    onChange={(e) => updatePersonalInfo('pagibig', formatPagIbig(e.target.value))}
+                    placeholder="XXXX-XXXX-XXXX"
+                  />
+                  <FormField
+                    label="TIN"
+                    value={personalInfo.tin || ''}
+                    onChange={(e) => updatePersonalInfo('tin', formatTIN(e.target.value))}
+                    placeholder="XXX-XXX-XXX-XXX"
+                  />
+                  <FormField
+                    label="Highest Education"
+                    value={personalInfo.highestEducation || ''}
+                    onChange={(e) => updatePersonalInfo('highestEducation', e.target.value.toUpperCase())}
+                  />
+                  <div className="md:col-span-2">
+                    <FormField
+                      label="Bachelor's Degree"
+                      value={personalInfo.bachelorsDegree || ''}
+                      onChange={(e) => updatePersonalInfo('bachelorsDegree', e.target.value.toUpperCase())}
+                    />
                   </div>
                 </div>
               </form>
@@ -515,121 +758,221 @@ function ContractualDashboard({ user }) {
         </div>
       )}
 
-      {/* ── CONTRACTS TAB ── */}
       {activeTab === 'contracts' && (
-        <div style={sectionCard}>
-          <ContractGenerator userRole="CONTRACTUAL" userId={user.id || user._id} viewOnly={true} />
-        </div>
+        <ContractGenerator userRole="CONTRACTUAL" userId={user.id || user._id} viewOnly={true} />
       )}
 
-      {/* ── DOCUMENTS TAB ── */}
       {activeTab === 'documents' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* Upload */}
-          <div style={sectionCard}>
-            <div style={sectionTitle}>Upload Document</div>
-            <div style={sectionSub, { marginBottom: '20px', marginTop: '4px', fontSize: '13px', color: C.muted }}>Attach signed contracts or supporting documents to your record</div>
-            <form onSubmit={handleFileUpload}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-                <FormInput label="Document Type">
-                  <select value={uploadForm.type} onChange={e=>setUploadForm({...uploadForm,type:e.target.value})} style={inputStyle}>
+        <div className="space-y-6">
+          <div className="card">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Document</h3>
+            <form onSubmit={handleFileUpload} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Document Type</label>
+                  <select
+                    value={uploadForm.type}
+                    onChange={(e) => setUploadForm({...uploadForm, type: e.target.value})}
+                    className="input"
+                  >
                     <option value="SIGNED_CONTRACT">Signed Contract</option>
                     <option value="PHOTO">Photo</option>
                     <option value="OTHERS">Others</option>
                   </select>
-                </FormInput>
-                <FormInput label="Description (optional)">
-                  <input style={inputStyle} value={uploadForm.description} onChange={e=>setUploadForm({...uploadForm,description:e.target.value})} placeholder="e.g. Contract for 1st Sem 2025" onFocus={e=>e.target.style.borderColor=C.green} onBlur={e=>e.target.style.borderColor=C.border} />
-                </FormInput>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <input
+                    type="text"
+                    value={uploadForm.description}
+                    onChange={(e) => setUploadForm({...uploadForm, description: e.target.value})}
+                    className="input"
+                    placeholder="Optional description"
+                  />
+                </div>
               </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={labelStyle}>File</label>
-                <input type="file" onChange={e=>setUploadForm({...uploadForm,file:e.target.files[0]})} required style={{ ...inputStyle, padding: '8px 14px' }} />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">File</label>
+                <input
+                  type="file"
+                  onChange={(e) => setUploadForm({...uploadForm, file: e.target.files[0]})}
+                  className="input"
+                  required
+                />
               </div>
-              <button type="submit" disabled={uploading} style={{ ...btnPrimary, opacity: uploading ? 0.6 : 1 }}>
-                {uploading ? 'Uploading…' : 'Upload Document'}
+              <button 
+                type="submit" 
+                className="btn btn-primary"
+                disabled={uploading}
+              >
+                {uploading ? <><Spinner size="sm" color="white" />Uploading…</> : 'Upload Document'}
               </button>
             </form>
           </div>
 
-          {/* List */}
-          <div style={sectionCard}>
-            <div style={{ ...sectionHeader, marginBottom: '16px' }}>
-              <div style={sectionTitle}>My Documents</div>
-              <div style={{ fontSize: '13px', color: C.muted }}>{documents.length} file{documents.length !== 1 ? 's' : ''}</div>
-            </div>
+          <div className="card">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">My Documents</h3>
             {loadingDocuments ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: C.muted }}>Loading…</div>
+              <SectionLoader message="Loading documents…" />
             ) : documents.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '48px' }}>
-                <div style={{ fontSize: '36px', marginBottom: '12px' }}>📄</div>
-                <div style={{ fontWeight: 600, color: C.text, marginBottom: '4px' }}>No documents yet</div>
-                <div style={{ fontSize: '13px', color: C.faint }}>Upload your first document above</div>
-              </div>
+              <EmptyState icon="📄" title="No documents yet" description="Upload your first document above." />
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                {documents.map((doc, i) => {
-                  const fname = doc.filename?.startsWith('http') ? doc.filename.split('/').pop().split('?')[0] : doc.filename;
-                  return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '14px 16px', background: i % 2 === 0 ? '#fafafa' : '#fff', borderRadius: '8px', border: `1px solid ${C.border}` }}>
-                      <span style={{ fontSize: '22px', flexShrink: 0 }}>{getFileIcon(doc.filename||'')}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fname}</div>
-                        <div style={{ fontSize: '12px', color: C.muted, marginTop: '2px' }}>
-                          {doc.type?.replace('_',' ')} · {doc.description || 'No description'} · {new Date(doc.uploadDate).toLocaleDateString('en-PH')}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                        <button onClick={() => setViewingDocument(doc.url||doc.filename||doc.key)} style={{ padding: '6px 14px', border: `1px solid ${C.border}`, borderRadius: '6px', background: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#2563eb' }}>View</button>
-                        <button onClick={() => { const uid=user.id||user._id; const token=localStorage.getItem('token'); openDocument(doc.url||doc.filename||doc.key,uid,token); }} style={{ padding: '6px 14px', border: `1px solid ${C.border}`, borderRadius: '6px', background: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: C.green }}>Download</button>
-                        <button onClick={() => handleDeleteDocument(doc.key||doc.filename)} style={{ padding: '6px 14px', border: '1px solid #fecaca', borderRadius: '6px', background: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#dc2626' }}>Delete</button>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Filename</th>
+                      <th>Description</th>
+                      <th>Upload Date</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {documents.map((doc, index) => (
+                      <tr key={index}>
+                        <td>
+                          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">
+                            {doc.type.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="flex items-center text-sm">
+                            <span className="mr-2">{getFileIcon(doc.filename)}</span>
+                            {doc.filename?.startsWith('http') ? doc.filename.split('/').pop().split('?')[0] : doc.filename}
+                          </div>
+                        </td>
+                        <td className="text-sm text-gray-600">{doc.description || '-'}</td>
+                        <td className="text-sm text-gray-600">{new Date(doc.uploadDate).toLocaleDateString()}</td>
+                        <td>
+                          <div className="flex space-x-3 text-sm">
+                            <button
+                              onClick={() => handleViewDocument(doc.url || doc.filename || doc.key)}
+                              className="text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                              View
+                            </button>
+                            <button
+                              onClick={() => handleDownloadDocument(doc.url || doc.filename || doc.key)}
+                              className="text-green-600 hover:text-green-800 font-medium"
+                            >
+                              Download
+                            </button>
+                            <button
+                              onClick={() => handleDeleteDocument(doc.key || doc.filename)}
+                              className="text-red-600 hover:text-red-800 font-medium"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ── EODB TAB ── */}
       {activeTab === 'eodb' && (
-        <div style={sectionCard}>
-          <EODBGenerator userId={user.id || user._id} onDocumentUploaded={handleDocumentUploaded} />
-        </div>
+        <EODBGenerator
+          userId={user.id || user._id}
+          onDocumentUploaded={handleDocumentUploaded}
+        />
       )}
 
-      {/* ── SECURITY TAB ── */}
       {activeTab === 'password' && (
-        <div style={{ maxWidth: '480px' }}>
-          <div style={sectionCard}>
-            <div style={{ ...sectionTitle, marginBottom: '6px' }}>Change Password</div>
-            <div style={{ ...sectionSub, marginBottom: '24px' }}>Use a strong password you don't use elsewhere</div>
-            <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {[
-                { label: 'Current Password', key: 'currentPassword' },
-                { label: 'New Password', key: 'newPassword' },
-                { label: 'Confirm New Password', key: 'confirmPassword' },
-              ].map(f => (
-                <FormInput key={f.key} label={f.label} type="password" value={passwordForm[f.key]} onChange={e=>setPasswordForm({...passwordForm,[f.key]:e.target.value})} />
-              ))}
-              <button type="submit" style={btnPrimary}>Update Password</button>
+        <div className="max-w-xl">
+          <div className="card">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h3>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                <input
+                  type="password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                  className="input"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                  className="input"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                <input
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                  className="input"
+                  required
+                />
+              </div>
+              <button type="submit" className="btn btn-primary">
+                Update Password
+              </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* ── Modals ── */}
       {viewingDocument && (
-        <DocumentViewerModal userId={user.id||user._id} filename={viewingDocument} onClose={()=>setViewingDocument(null)} />
-      )}
-      {showCropModal && imageToCrop && (
-        <EnhancedImageCropper
-          imageSrc={imageToCrop} onConfirm={uploadDocument} uploading={uploading} cropType={currentCropType}
-          onCancel={() => { setShowCropModal(false); setImageToCrop(null); setCurrentCropType('passport'); setUploadForm({type:'SIGNED_CONTRACT',description:'',file:null}); }}
+        <DocumentViewerModal
+          userId={user.id || user._id}
+          filename={viewingDocument}
+          onClose={() => setViewingDocument(null)}
         />
       )}
+
+      {showCropModal && imageToCrop && (
+        <EnhancedImageCropper
+          imageSrc={imageToCrop}
+          onConfirm={uploadDocument}
+          onCancel={() => {
+            setShowCropModal(false);
+            setImageToCrop(null);
+            setCurrentCropType('passport');
+            setUploadForm({ type: 'SIGNED_CONTRACT', description: '', file: null });
+          }}
+          uploading={uploading}
+          cropType={currentCropType}
+        />
+      )}
+    </div>
+  );
+}
+
+// Helper Components
+function InfoField({ label, value, span = 1 }) {
+  return (
+    <div className={span > 1 ? `md:col-span-${span}` : ''}>
+      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">{label}</dt>
+      <dd className="text-sm text-gray-900">{value || 'Not specified'}</dd>
+    </div>
+  );
+}
+
+function FormField({ label, type = 'text', value, onChange, placeholder, ...props }) {
+  return (
+    <div {...props}>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className="input"
+      />
     </div>
   );
 }
