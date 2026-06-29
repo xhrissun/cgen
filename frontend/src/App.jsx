@@ -6,7 +6,7 @@ import AdminDashboard from './components/AdminDashboard';
 import ContractualDashboard from './components/ContractualDashboard';
 import FocalPersonDashboard from './components/FocalPersonDashboard';
 import FinanceOfficerDashboard from './components/FinanceOfficerDashboard';
-import { ToastProvider, TopProgressBar, AppBootSkeleton } from './components/ui.jsx';
+import { ToastProvider } from './components/ui.jsx';
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -14,17 +14,8 @@ function App() {
     const userData = localStorage.getItem('user');
     return userData ? JSON.parse(userData) : null;
   });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userData = localStorage.getItem('user');
-    
-    if (token && userData) {
-      setUser(JSON.parse(userData));
-    }
-    setLoading(false);
-  }, []);
+  // No async loading needed — localStorage is synchronous.
+  // user is already initialised from localStorage in the useState above.
 
   // Listen for user updates (like profile photo changes)
   useEffect(() => {
@@ -67,15 +58,6 @@ function App() {
     localStorage.removeItem('user');
     setUser(null);
   };
-
-  if (loading) {
-    return (
-      <>
-        <TopProgressBar loading={true} />
-        <AppBootSkeleton />
-      </>
-    );
-  }
 
   return (
   <ToastProvider>

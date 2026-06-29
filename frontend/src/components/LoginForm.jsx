@@ -1,35 +1,195 @@
 import { useState, useEffect } from 'react';
 import { API_BASE } from '../api.js';
 
+// ── Auth Loading Modal ────────────────────────────────────────────────────────
+// Overlays the login page during the actual fetch. Shows three discrete states:
+//   'authenticating' → waiting for POST /api/auth/login
+//   'success'        → 200 OK; about to redirect
+//   'error'          → non-OK response or network failure
+function AuthLoadingModal({ stage, message }) {
+  if (!stage) return null;
+
+  const stageConfig = {
+    authenticating: {
+      icon: (
+        <svg
+          style={{ width: 40, height: 40, animation: 'spin 0.9s linear infinite' }}
+          viewBox="0 0 24 24"
+          fill="none"
+        >
+          <circle cx="12" cy="12" r="10" stroke="rgba(46,139,87,0.25)" strokeWidth="3" />
+          <path d="M4 12a8 8 0 018-8" stroke="#2e8b57" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+      ),
+      label: 'Verifying credentials…',
+      sub: 'Checking your account with the server',
+      color: '#2e8b57',
+    },
+    success: {
+      icon: (
+        <svg style={{ width: 40, height: 40 }} viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" fill="rgba(46,139,87,0.15)" stroke="#2e8b57" strokeWidth="2" />
+          <path d="M8 12l3 3 5-5" stroke="#2e8b57" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ),
+      label: 'Authenticated',
+      sub: 'Redirecting to your dashboard…',
+      color: '#2e8b57',
+    },
+    error: {
+      icon: (
+        <svg style={{ width: 40, height: 40 }} viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" fill="rgba(220,38,38,0.12)" stroke="#dc2626" strokeWidth="2" />
+          <path d="M12 8v4m0 4h.01" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" />
+        </svg>
+      ),
+      label: 'Authentication Failed',
+      sub: message || 'Please check your credentials and try again.',
+      color: '#dc2626',
+    },
+  };
+
+  const cfg = stageConfig[stage];
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(10,22,40,0.72)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          animation: 'fadeIn 0.18s ease',
+        }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Authentication status"
+      >
+        {/* Card */}
+        <div
+          style={{
+            background: '#0f1e35',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 20,
+            padding: '40px 48px',
+            minWidth: 300,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
+            boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+            animation: 'slideUp 0.22s cubic-bezier(0.34,1.2,0.64,1)',
+          }}
+        >
+          {cfg.icon}
+
+          <div style={{ textAlign: 'center', marginTop: 4 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: cfg.color, marginBottom: 6 }}>
+              {cfg.label}
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', lineHeight: 1.5, maxWidth: 240 }}>
+              {cfg.sub}
+            </div>
+          </div>
+
+          {/* Progress track — only shown while authenticating */}
+          {stage === 'authenticating' && (
+            <div
+              style={{
+                width: '100%', height: 3, background: 'rgba(255,255,255,0.08)',
+                borderRadius: 99, overflow: 'hidden', marginTop: 8,
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  background: '#2e8b57',
+                  borderRadius: 99,
+                  animation: 'indeterminate 1.4s ease-in-out infinite',
+                }}
+              />
+            </div>
+          )}
+
+          {/* Dismiss button — only on error */}
+          {stage === 'error' && (
+            <button
+              onClick={() => {/* parent clears modal via setAuthStage(null) – signal via custom event */
+                window.dispatchEvent(new CustomEvent('authModalDismiss'));
+              }}
+              style={{
+                marginTop: 8,
+                padding: '9px 28px',
+                background: 'rgba(220,38,38,0.15)',
+                border: '1px solid rgba(220,38,38,0.35)',
+                borderRadius: 8,
+                color: '#fca5a5',
+                fontSize: 13, fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Try Again
+            </button>
+          )}
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes fadeIn   { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes slideUp  { from { opacity: 0; transform: translateY(16px) scale(0.97) }
+                              to   { opacity: 1; transform: translateY(0)     scale(1)    } }
+        @keyframes indeterminate {
+          0%   { width: 0%;   margin-left: 0% }
+          50%  { width: 60%;  margin-left: 20% }
+          100% { width: 0%;   margin-left: 100% }
+        }
+      `}</style>
+    </>
+  );
+}
+
+// ── Login Form ────────────────────────────────────────────────────────────────
 function LoginForm({ onLogin }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  // authStage drives the modal: null | 'authenticating' | 'success' | 'error'
+  const [authStage, setAuthStage] = useState(null);
+
   useEffect(() => {
     setTimeout(() => setMounted(true), 50);
+
+    // Listen for the modal's own "Try Again" button
+    const dismiss = () => { setAuthStage(null); setError(''); };
+    window.addEventListener('authModalDismiss', dismiss);
+    return () => window.removeEventListener('authModalDismiss', dismiss);
   }, []);
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
+    if (!username.trim() || !password) return;
+
     setError('');
-    setLoading(true);
+    setAuthStage('authenticating');   // ← open modal, show real network request
+
     try {
       const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password }),
       });
       const data = await response.json();
+
       if (!response.ok) throw new Error(data.message || 'Login failed');
-      onLogin(data.user, data.token);
+
+      // Show brief success state so users see it resolved
+      setAuthStage('success');
+      setTimeout(() => onLogin(data.user, data.token), 700);
     } catch (err) {
-      setError(err.message || 'Login failed. Please try again.');
-    } finally {
-      setLoading(false);
+      const msg = err.message || 'Login failed. Please try again.';
+      setError(msg);
+      setAuthStage('error');          // ← modal switches to error state; no auto-dismiss
     }
   };
 
@@ -42,6 +202,9 @@ function LoginForm({ onLogin }) {
       overflow: 'hidden',
       position: 'relative'
     }}>
+      {/* ── Auth modal (overlays everything) ── */}
+      <AuthLoadingModal stage={authStage} message={error} />
+
       {/* ── Left Panel – Visual Identity ── */}
       <div style={{
         flex: '1 1 55%',
@@ -187,21 +350,6 @@ function LoginForm({ onLogin }) {
             </p>
           </div>
 
-          {/* Error */}
-          {error && (
-            <div style={{
-              background: 'rgba(220,38,38,0.12)',
-              border: '1px solid rgba(220,38,38,0.3)',
-              borderRadius: '10px',
-              padding: '12px 16px',
-              marginBottom: '24px',
-              display: 'flex', alignItems: 'center', gap: '10px'
-            }}>
-              <span style={{ fontSize: '16px', flexShrink: 0 }}>⚠️</span>
-              <span style={{ fontSize: '13px', color: '#fca5a5', fontWeight: 500 }}>{error}</span>
-            </div>
-          )}
-
           {/* Username */}
           <div style={{ marginBottom: '20px' }}>
             <label style={{
@@ -216,6 +364,7 @@ function LoginForm({ onLogin }) {
               onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
               autoFocus
               placeholder="Enter your username"
+              disabled={!!authStage}
               style={{
                 width: '100%',
                 padding: '13px 16px',
@@ -247,6 +396,7 @@ function LoginForm({ onLogin }) {
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
                 placeholder="Enter your password"
+                disabled={!!authStage}
                 style={{
                   width: '100%',
                   padding: '13px 48px 13px 16px',
@@ -281,34 +431,27 @@ function LoginForm({ onLogin }) {
           {/* Submit Button */}
           <button
             onClick={handleSubmit}
-            disabled={loading}
+            disabled={!!authStage || !username.trim() || !password}
             style={{
               width: '100%',
               padding: '14px',
-              background: loading ? 'rgba(46,139,87,0.5)' : '#2e8b57',
+              background: (authStage || !username.trim() || !password)
+                ? 'rgba(46,139,87,0.4)'
+                : '#2e8b57',
               border: 'none',
               borderRadius: '10px',
               color: '#ffffff',
               fontSize: '14px',
               fontWeight: 700,
               letterSpacing: '0.04em',
-              cursor: loading ? 'not-allowed' : 'pointer',
+              cursor: (authStage || !username.trim() || !password) ? 'not-allowed' : 'pointer',
               transition: 'background 0.2s, transform 0.1s',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
               textTransform: 'uppercase',
             }}
-            onMouseEnter={(e) => !loading && (e.target.style.background = '#236e45')}
-            onMouseLeave={(e) => !loading && (e.target.style.background = '#2e8b57')}
+            onMouseEnter={(e) => !authStage && e.target.style.setProperty('background', '#236e45')}
+            onMouseLeave={(e) => !authStage && e.target.style.setProperty('background', '#2e8b57')}
           >
-            {loading ? (
-              <>
-                <svg style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} viewBox="0 0 24 24">
-                  <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="white" strokeWidth="4" fill="none" />
-                  <path style={{ opacity: 0.75 }} fill="white" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Authenticating...
-              </>
-            ) : 'Sign In'}
+            Sign In
           </button>
 
           <p style={{
