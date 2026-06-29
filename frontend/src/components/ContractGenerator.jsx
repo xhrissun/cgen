@@ -390,6 +390,83 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
      }
    };
 
+  // ─── Premium Preview helpers (mirrors backend salaryCalculator.js) ────────────
+
+  const buildWorkingDaysBreakdown = (startDate, endDate, holidayList) => {
+    const start = new Date(startDate);
+    const end   = new Date(endDate);
+
+    // Build a map: dateStr → holiday object (for names/types)
+    const holidayMap = {};
+    holidayList.forEach(h => {
+      const d = new Date(h.date);
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+      holidayMap[key] = h;
+    });
+
+    const breakdown = {};
+
+    // Initialise one entry per calendar month spanning the contract
+    const startMonth = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    const endMonth   = new Date(Date.UTC(end.getUTCFullYear(),   end.getUTCMonth(),   1));
+    let cur = new Date(startMonth);
+
+    while (cur <= endMonth) {
+      const year  = cur.getUTCFullYear();
+      const month = cur.getUTCMonth();
+      const key   = `${year}-${String(month+1).padStart(2,'0')}`;
+
+      breakdown[key] = {
+        year, month: month+1,
+        monthName: new Date(Date.UTC(year, month, 15)).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }),
+        totalWorkingDaysInMonth: 0,
+        actualWorkingDaysInRange: 0,
+        contractStartDay: null,
+        contractEndDay: null,
+        holidaysInMonth: []   // { date, name, type }
+      };
+
+      // Count total working days for the ENTIRE month
+      const firstDay = new Date(Date.UTC(year, month, 1));
+      const lastDay  = new Date(Date.UTC(year, month+1, 0));
+      let d = new Date(firstDay);
+      while (d <= lastDay) {
+        const dow     = d.getUTCDay();
+        const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+        const isWknd  = dow === 0 || dow === 6;
+        const hol     = holidayMap[dateStr];
+        // Only REGULAR and SPECIAL_NON_WORKING remove a working day
+        const isNonWorkingHol = hol && hol.type !== 'SPECIAL_WORKING';
+        if (!isWknd && !isNonWorkingHol) breakdown[key].totalWorkingDaysInMonth++;
+        if (hol) breakdown[key].holidaysInMonth.push({ date: dateStr, name: hol.name, type: hol.type });
+        d.setUTCDate(d.getUTCDate() + 1);
+      }
+
+      cur.setUTCMonth(cur.getUTCMonth() + 1);
+    }
+
+    // Count ACTUAL working days within the contract range
+    let cd = new Date(start);
+    while (cd <= end) {
+      const year  = cd.getUTCFullYear();
+      const month = cd.getUTCMonth();
+      const key   = `${year}-${String(month+1).padStart(2,'0')}`;
+      const dow     = cd.getUTCDay();
+      const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(cd.getUTCDate()).padStart(2,'0')}`;
+      const isWknd  = dow === 0 || dow === 6;
+      const hol     = holidayMap[dateStr];
+      const isNonWorkingHol = hol && hol.type !== 'SPECIAL_WORKING';
+      if (!isWknd && !isNonWorkingHol) breakdown[key].actualWorkingDaysInRange++;
+      if (cd.toISOString().split('T')[0] === start.toISOString().split('T')[0])
+        breakdown[key].contractStartDay = cd.getUTCDate();
+      if (cd.toISOString().split('T')[0] === end.toISOString().split('T')[0])
+        breakdown[key].contractEndDay = cd.getUTCDate();
+      cd.setUTCDate(cd.getUTCDate() + 1);
+    }
+
+    return breakdown;
+  };
+
   // Calculate premium preview when dates change
   const calculatePremiumPreview = async () => {
     if (!formData.startDate || !formData.endDate || !formData.salaryGrade) {
@@ -399,7 +476,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
 
     try {
       const token = localStorage.getItem('token');
-      
+
       // Get salary grade data using the contract START DATE so that advance-drafted
       // contracts (e.g. drafted today for a July 2 start) correctly resolve the
       // salary grade period that is effective on the contract's start date.
@@ -407,35 +484,42 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
         headers: { Authorization: `Bearer ${token}` },
         params: { contractDate: formData.startDate }
       });
-      
+
       const salaryGrade = sgResponse.data;
-      
+
       // Filter holidays within contract period
       const contractHolidays = holidays.filter(h => {
-        const holidayDate = new Date(h.date);
-        return holidayDate >= new Date(formData.startDate) && holidayDate <= new Date(formData.endDate);
+        const hd = new Date(h.date);
+        return hd >= new Date(formData.startDate) && hd <= new Date(formData.endDate);
       });
 
-      // Simple working days calculation for preview
-      const start = new Date(formData.startDate);
-      const end = new Date(formData.endDate);
-      const holidaySet = new Set(contractHolidays.map(h => new Date(h.date).toISOString().split('T')[0]));
-      
-      let workingDays = 0;
-      let currentDate = new Date(start);
-      
-      while (currentDate <= end) {
-        const dayOfWeek = currentDate.getDay();
-        const dateStr = currentDate.toISOString().split('T')[0];
-        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-        const isHoliday = holidaySet.has(dateStr);
-        
-        if (!isWeekend && !isHoliday) {
-          workingDays++;
-        }
-        
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
+      // Build per-month working-days + holiday breakdown
+      const workingDaysBreakdown = buildWorkingDaysBreakdown(
+        formData.startDate, formData.endDate, contractHolidays
+      );
+
+      // Calculate premium per month (mirrors backend calculatePremiumBreakdown)
+      const monthlyPremiumRate = salaryGrade.monthlyPremium;
+      let totalPremium = 0;
+      let totalWorkingDays = 0;
+
+      const premiumBreakdown = Object.keys(workingDaysBreakdown).map(key => {
+        const m = workingDaysBreakdown[key];
+        const { totalWorkingDaysInMonth, actualWorkingDaysInRange } = m;
+        const dailyRate   = totalWorkingDaysInMonth > 0 ? monthlyPremiumRate / totalWorkingDaysInMonth : 0;
+        const isFullMonth = actualWorkingDaysInRange === totalWorkingDaysInMonth;
+        const monthPremium = isFullMonth ? monthlyPremiumRate : dailyRate * actualWorkingDaysInRange;
+        totalPremium    += monthPremium;
+        totalWorkingDays += actualWorkingDaysInRange;
+        return {
+          ...m,
+          monthKey: key,
+          monthlyPremiumRate,
+          dailyPremiumRate: dailyRate,
+          calculatedPremium: monthPremium,
+          isFullMonth
+        };
+      });
 
       setPreviewData({
         basicSalary: salaryGrade.basicSalary,
@@ -443,10 +527,13 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
         deductions: salaryGrade.deductions,
         monthlySalaryAsPerContract: salaryGrade.monthlySalaryAsPerContract,
         dailySalaryAsPerContract: salaryGrade.dailySalaryAsPerContract,
-        monthlyPremium: salaryGrade.monthlyPremium,
-        workingDays,
+        monthlyPremium: monthlyPremiumRate,
+        totalPremium,
+        workingDays: totalWorkingDays,
         bonusType: formData.semester === 1 ? 'Mid-Year' : 'Year-End',
-        isSpecialSalaryGrade: salaryGrade.isSpecialSalaryGrade
+        isSpecialSalaryGrade: salaryGrade.isSpecialSalaryGrade,
+        premiumBreakdown,
+        contractHolidays
       });
     } catch (error) {
       console.error('Error calculating preview:', error);
@@ -861,69 +948,181 @@ const handleFileUpload = (contractId, event) => {
             {/* Premium Preview Section */}
             {previewData && (
               <div className="border-t pt-4">
-                <h5 className="font-semibold mb-3 text-lg">Salary & Premium Preview</h5>
-                <div className="bg-blue-50 p-4 rounded-lg space-y-3">
-                  <div className="grid grid-cols-2 gap-4">
+                <h5 className="font-semibold mb-3 text-lg">Salary Information</h5>
+
+                {/* ── Salary Summary Grid ── */}
+                <div className="bg-green-50 p-4 rounded-lg mb-4">
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-3">
                     <div>
-                      <p className="text-sm text-gray-600">Basic Salary</p>
-                      <p className="text-lg font-semibold">
-                        ₱{previewData.basicSalary.toLocaleString('en-PH', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2
-                        })}
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Salary Grade</p>
+                      <p className="text-base font-semibold">SG {formData.salaryGrade}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Basic Salary</p>
+                      <p className="text-base font-semibold">
+                        ₱{previewData.basicSalary.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </p>
                     </div>
+
                     {!previewData.isSpecialSalaryGrade && (
                       <>
                         <div>
-                          <p className="text-sm text-gray-600">Gross Premium (15%)</p>
-                          <p className="text-lg font-semibold">
-                            ₱{previewData.grossPremium.toLocaleString('en-PH', {minimumFractionDigits: 2})}
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Monthly Salary (Contract)</p>
+                          <p className="text-base font-semibold">
+                            ₱{previewData.monthlySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                           </p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-600">Total Deductions</p>
-                          <p className="text-lg font-semibold">
-                            ₱{(previewData.deductions.sss + previewData.deductions.pagibig + previewData.deductions.philhealth).toLocaleString('en-PH', {minimumFractionDigits: 2})}
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Daily Salary (Contract)</p>
+                          <p className="text-base font-semibold">
+                            ₱{previewData.dailySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                           </p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-600">Monthly Salary as per Contract</p>
-                          <p className="text-lg font-semibold">
-                            ₱{previewData.monthlySalaryAsPerContract.toLocaleString('en-PH', {minimumFractionDigits: 2})}
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Monthly Premium</p>
+                          <p className="text-base font-semibold">
+                            ₱{previewData.monthlyPremium.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                           </p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-600">Daily Salary as per Contract</p>
-                          <p className="text-lg font-semibold">
-                            ₱{previewData.dailySalaryAsPerContract.toLocaleString('en-PH', {minimumFractionDigits: 2})}
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{previewData.bonusType} Premium</p>
+                          <p className="text-base font-semibold text-green-700">
+                            ₱{previewData.totalPremium.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                           </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Monthly Premium</p>
-                          <p className="text-lg font-semibold">
-                            ₱{previewData.monthlyPremium.toLocaleString('en-PH', {minimumFractionDigits: 2})}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Working Days in Period</p>
-                          <p className="text-lg font-semibold">{previewData.workingDays} days</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Bonus Type</p>
-                          <p className="text-lg font-semibold">{previewData.bonusType}</p>
                         </div>
                       </>
                     )}
                   </div>
+
                   {!previewData.isSpecialSalaryGrade && (
-                    <div className="mt-3 pt-3 border-t border-blue-200">
-                      <p className="text-xs text-gray-600">
-                        ℹ️ Final premium will be calculated based on actual working days per month (excluding weekends and holidays). 
-                        This preview shows the working days count for the entire contract period.
-                      </p>
-                    </div>
+                    <>
+                      {/* ── Summary Counts ── */}
+                      <div className="mt-4 pt-3 border-t border-green-200">
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Premium Calculation Summary</p>
+                        <div className="grid grid-cols-4 gap-3 text-center">
+                          {[
+                            { label: 'Total Months',   value: previewData.premiumBreakdown.length },
+                            { label: 'Full Months',    value: previewData.premiumBreakdown.filter(m => m.isFullMonth).length },
+                            { label: 'Partial Months', value: previewData.premiumBreakdown.filter(m => !m.isFullMonth).length },
+                            { label: 'Working Days',   value: previewData.workingDays, highlight: true }
+                          ].map(({ label, value, highlight }) => (
+                            <div key={label} className="bg-white rounded p-2 shadow-sm">
+                              <p className="text-xs text-gray-500">{label}</p>
+                              <p className={`text-lg font-bold ${highlight ? 'text-blue-600' : ''}`}>{value}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* ── Per-Month Breakdown Table ── */}
+                      <div className="mt-4 pt-3 border-t border-green-200">
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Monthly Premium Breakdown</p>
+                        <div className="overflow-x-auto rounded border border-green-200">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="bg-green-100 text-gray-600 text-xs uppercase tracking-wide">
+                                <th className="text-left px-3 py-2">Month</th>
+                                <th className="text-center px-3 py-2">Type</th>
+                                <th className="text-center px-3 py-2">Working Days<br/><span className="font-normal normal-case">(in month / in range)</span></th>
+                                <th className="text-right px-3 py-2">Daily Rate</th>
+                                <th className="text-right px-3 py-2">Premium</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {previewData.premiumBreakdown.map((m, idx) => (
+                                <>
+                                  <tr
+                                    key={m.monthKey}
+                                    className={idx % 2 === 0 ? 'bg-white' : 'bg-green-50'}
+                                  >
+                                    <td className="px-3 py-2 font-medium">{m.monthName} {m.year}</td>
+                                    <td className="px-3 py-2 text-center">
+                                      {m.isFullMonth
+                                        ? <span className="inline-block px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">Full</span>
+                                        : <span className="inline-block px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 text-xs font-medium">Partial</span>
+                                      }
+                                    </td>
+                                    <td className="px-3 py-2 text-center text-gray-700">
+                                      {m.totalWorkingDaysInMonth} / {m.actualWorkingDaysInRange}
+                                    </td>
+                                    <td className="px-3 py-2 text-right text-gray-700">
+                                      ₱{m.dailyPremiumRate.toLocaleString('en-PH', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                                    </td>
+                                    <td className="px-3 py-2 text-right font-semibold">
+                                      ₱{m.calculatedPremium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                  {/* Holidays sub-row */}
+                                  {m.holidaysInMonth.length > 0 && (
+                                    <tr key={`${m.monthKey}-hols`} className={idx % 2 === 0 ? 'bg-white' : 'bg-green-50'}>
+                                      <td colSpan={5} className="px-3 pb-2 pt-0">
+                                        <div className="flex flex-wrap gap-1 pl-1">
+                                          {m.holidaysInMonth.map(h => {
+                                            const labelColor =
+                                              h.type === 'REGULAR'
+                                                ? 'bg-red-100 text-red-700'
+                                                : h.type === 'SPECIAL_NON_WORKING'
+                                                ? 'bg-orange-100 text-orange-700'
+                                                : 'bg-blue-100 text-blue-700';
+                                            const typeLabel =
+                                              h.type === 'REGULAR' ? 'Regular'
+                                              : h.type === 'SPECIAL_NON_WORKING' ? 'Special Non-Working'
+                                              : 'Special Working';
+                                            return (
+                                              <span
+                                                key={h.date}
+                                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${labelColor}`}
+                                                title={typeLabel}
+                                              >
+                                                🗓️ {new Date(h.date + 'T00:00:00Z').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' })} — {h.name}
+                                                <span className="opacity-60">({typeLabel})</span>
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-green-200 font-bold text-sm">
+                                <td className="px-3 py-2" colSpan={2}>TOTAL</td>
+                                <td className="px-3 py-2 text-center">{previewData.workingDays} days</td>
+                                <td className="px-3 py-2"></td>
+                                <td className="px-3 py-2 text-right text-green-800">
+                                  ₱{previewData.totalPremium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* ── Holidays Legend ── */}
+                      {previewData.contractHolidays.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-green-200">
+                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                            Holidays in Contract Period ({previewData.contractHolidays.length})
+                          </p>
+                          <div className="flex gap-3 text-xs text-gray-500">
+                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block"></span> Regular Holiday (excluded from working days)</span>
+                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block"></span> Special Non-Working (excluded)</span>
+                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span> Special Working (counted)</span>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-3 pt-3 border-t border-green-200">
+                        <p className="text-xs text-gray-500">
+                          ℹ️ Partial-month premium = (Monthly Premium ÷ Total Working Days in Month) × Actual Working Days in Range.
+                          Full-month premium = Monthly Premium Rate. Calculation excludes weekends, regular holidays, and special non-working holidays.
+                        </p>
+                      </div>
+                    </>
                   )}
+
                   {previewData.isSpecialSalaryGrade && (
                     <div className="mt-3">
                       <p className="text-sm text-yellow-800 bg-yellow-100 p-2 rounded">
