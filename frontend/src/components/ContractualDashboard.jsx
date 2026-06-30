@@ -602,6 +602,15 @@ function ContractualDashboard({ user, embedded = false }) {
           </div>
         </div>
       </div>
+
+      {/* FIXED FOOTER — fills the gap the sidebar's bottom-12 offset leaves.
+          Layout.jsx's own footer is suppressed when fullWidth=true (same as
+          Admin), so this dashboard renders its own, matching AdminDashboard. */}
+      <footer className="fixed bottom-0 left-0 right-0 h-12 z-40 flex items-center justify-center" style={{ background: "#0a1628", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <p className="text-xs text-white/25 tracking-wide">
+          © {new Date().getFullYear()} DENR CALABARZON Contract Management System — All rights reserved.
+        </p>
+      </footer>
     </div>
   );
 

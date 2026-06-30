@@ -223,7 +223,21 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
       const response = await api.get('/api/contracts', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setContracts(response.data);
+
+      // viewOnly + userId means "show just this one person's own contracts"
+      // (used by the "My Contracts" tab in a personal profile view). The
+      // backend can't distinguish this from a Focal Person's management
+      // view — both hit GET /api/contracts as role FOCAL_PERSON and get
+      // back every contract for the whole assignment — so we narrow it
+      // down to the specific user here, on the client, before it ever
+      // renders. This never affects the actual Management > Contracts tab,
+      // which calls this same component without viewOnly/userId and
+      // correctly still sees everyone in the assignment.
+      const scoped = (viewOnly && userId)
+        ? response.data.filter(c => (c.userId?._id || c.userId) === userId)
+        : response.data;
+
+      setContracts(scoped);
     } catch (error) {
       console.error('Error fetching contracts:', error);
     } finally {

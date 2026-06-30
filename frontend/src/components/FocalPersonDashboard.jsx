@@ -4,9 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../api.js';
 import {
   LayoutDashboard, Users, Briefcase, FileText, FolderOpen,
-  IdCard, UserCircle
+  IdCard, UserCircle, DollarSign
 } from 'lucide-react';
 import { SkeletonStatCard, dispatchPageLoading } from './ui.jsx';
+import SalaryGradeViewer from './SalaryGradeViewer';
 import UserManagement from './UserManagement';
 import PositionManagement from './PositionManagement';
 import ContractGenerator from './ContractGenerator';
@@ -78,6 +79,13 @@ function FocalPersonDashboard({ user }) {
       icon: FolderOpen,
       group: 'management',
       description: 'Document repository'
+    },
+    {
+      id: 'salaryGrades',
+      name: 'Salary Grades',
+      icon: DollarSign,
+      group: 'management',
+      description: 'Reference schedule — view only'
     },
     {
       id: 'eodb',
@@ -452,6 +460,9 @@ function FocalPersonDashboard({ user }) {
             {/* DOCUMENTS */}
             {activeTab === 'documents' && <DocumentViewer userRole="FOCAL_PERSON" />}
 
+            {/* SALARY GRADES — strictly view-only, no admin controls */}
+            {activeTab === 'salaryGrades' && <SalaryGradeViewer />}
+
             {/* EODB */}
             {activeTab === 'eodb' && (
               <EODBGenerator
@@ -465,6 +476,15 @@ function FocalPersonDashboard({ user }) {
           </div>
         </div>
       </div>
+
+      {/* FIXED FOOTER — fills the gap the sidebar's bottom-12 offset leaves.
+          Layout.jsx's own footer is suppressed when fullWidth=true (same as
+          Admin), so this dashboard renders its own, matching AdminDashboard. */}
+      <footer className="fixed bottom-0 left-0 right-0 h-12 z-40 flex items-center justify-center" style={{ background: "#0a1628", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <p className="text-xs text-white/25 tracking-wide">
+          © {new Date().getFullYear()} DENR CALABARZON Contract Management System — All rights reserved.
+        </p>
+      </footer>
     </div>
   );
 }
