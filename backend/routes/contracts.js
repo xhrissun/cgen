@@ -300,6 +300,28 @@ router.post('/', verifyToken, async (req, res) => {
       approverBranch,
       signatories
     } = req.body;
+
+    // PREVENT DUPLICATE CONTRACTS
+    // A "duplicate" is the same employee + position + contract period
+    // (year + semester) that already has a non-cancelled record. This is
+    // the same key used by the stale-draft auto-resolution job and the
+    // CSV export's duplicate grouping, so creation, automation, and
+    // reporting all agree on what counts as a duplicate.
+    const duplicateContract = await Contract.findOne({
+      userId,
+      position,
+      year,
+      semester: parseInt(semester),
+      status: { $ne: 'CANCELLED' },
+      isArchived: false
+    }).select('_id contractNumber status').lean();
+
+    if (duplicateContract) {
+      return res.status(409).json({
+        message: `A contract already exists for this employee, position, and period (${duplicateContract.contractNumber}, status: ${duplicateContract.status}). Cancel or update the existing contract before creating a new one.`,
+        existingContract: duplicateContract
+      });
+    }
     
     // VALIDATE USER PROFILE COMPLETENESS (BACKEND VALIDATION)
     const user = await User.findById(userId);
@@ -557,6 +579,17 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
    
     if (!contract) {
       return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    // EXPIRED contracts can no longer be previewed or have their PDF
+    // (re)generated — the period they cover is over, so the generated
+    // document is no longer valid for signing. Uploading an already
+    // signed/approved contract file (upload-signed route) is unaffected
+    // and remains allowed regardless of status.
+    if (contract.status === 'EXPIRED') {
+      return res.status(403).json({
+        message: 'This contract has expired. Preview and PDF generation are disabled. You may still upload the signed/approved contract document.'
+      });
     }
    
     console.log(`📄 Generating PDF for contract ${contract.contractNumber}`);

@@ -129,7 +129,22 @@ function ContractDetailsModal({ contract: initialContract, onClose }) {
       const blob = new Blob([response.data], { type: 'application/pdf' });
       setPdfBlob(URL.createObjectURL(blob));
     } catch (error) {
-      alert('Error generating preview: ' + (error.response?.data?.message || error.message));
+      let message = error.message;
+      // axios with responseType: 'blob' puts JSON error bodies into a Blob
+      // instead of parsing them — read it back out as text so messages like
+      // the EXPIRED-contract block actually show up instead of '[object Blob]'.
+      if (error.response?.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text();
+          const parsed = JSON.parse(text);
+          message = parsed.message || message;
+        } catch {
+          // fall back to generic error.message
+        }
+      } else if (error.response?.data?.message) {
+        message = error.response.data.message;
+      }
+      alert('Error generating preview: ' + message);
       setPreviewingPDF(false);
     } finally {
       setLoadingPreview(false);

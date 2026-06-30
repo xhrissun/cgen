@@ -1744,7 +1744,7 @@ const handleFileUpload = (contractId, event) => {
                             Change Status
                           </button>
                           
-                          {(contract.status === 'APPROVED' || contract.status === 'ACTIVE') && (
+                          {(contract.status === 'APPROVED' || contract.status === 'ACTIVE' || contract.status === 'EXPIRED') && (
                             <>
                               <button
                                 onClick={() => document.getElementById(`file-input-${contract._id}`).click()}
