@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SkeletonTable, SectionLoader } from './ui.jsx';
+import { SkeletonTable, SectionLoader, dispatchPageLoading } from './ui.jsx';
 import api from '../api.js';
 import UserDetailsModal from './UserDetailsModal';
 
@@ -218,6 +218,7 @@ function UserManagement() {
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
+    dispatchPageLoading(true, 'Loading users…');
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/users', {
@@ -228,6 +229,7 @@ function UserManagement() {
       console.error('Error fetching users:', error);
     } finally {
       setLoadingUsers(false);
+      dispatchPageLoading(false);
     }
   };
 

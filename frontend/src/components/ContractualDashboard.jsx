@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { UserCircle, FileText, FolderOpen, IdCard, KeyRound } from 'lucide-react';
 import { SectionLoader, EmptyState, Spinner, SkeletonTable, dispatchPageLoading } from './ui.jsx';
 import api, { openDocument, getDocumentUrl, API_BASE } from '../api.js';
 import ContractGenerator from './ContractGenerator';
@@ -120,7 +121,7 @@ const validateFormats = (personalInfo) => {
   return errors;
 };
 
-function ContractualDashboard({ user }) {
+function ContractualDashboard({ user, embedded = false }) {
   if (!user || typeof user !== 'object' || !user._id && !user.id) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -167,13 +168,19 @@ function ContractualDashboard({ user }) {
   const [currentCropType, setCurrentCropType] = useState('passport');
   const [profilePhotoUrl, setProfilePhotoUrl] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [expandedGroup, setExpandedGroup] = useState('main');
 
   const tabs = [
-    { id: 'profile', name: 'Personal Information' },
-    { id: 'contracts', name: 'My Contracts' },
-    { id: 'documents', name: 'Documents' },
-    { id: 'eodb', name: 'EODB ID' },
-    { id: 'password', name: 'Change Password' }
+    { id: 'profile', name: 'Personal Information', icon: UserCircle, group: 'main', description: 'Your profile and details' },
+    { id: 'contracts', name: 'My Contracts', icon: FileText, group: 'main', description: 'View your contract history' },
+    { id: 'documents', name: 'Documents', icon: FolderOpen, group: 'main', description: 'Upload and manage documents' },
+    { id: 'eodb', name: 'EODB ID', icon: IdCard, group: 'settings', description: 'Generate EODB identification' },
+    { id: 'password', name: 'Change Password', icon: KeyRound, group: 'settings', description: 'Update your password' }
+  ];
+
+  const tabGroups = [
+    { id: 'main', name: 'My Account' },
+    { id: 'settings', name: 'Settings' },
   ];
 
   useEffect(() => {
@@ -498,29 +505,111 @@ function ContractualDashboard({ user }) {
     return '📎';
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold text-gray-900">Contractual Dashboard</h2>
+  // When embedded inside FocalPersonDashboard's "My Profile" tab, skip the
+  // full-page sidebar chrome (that page already has its own sidebar) and
+  // just render a simple tab strip instead — same content, lighter shell.
+  if (embedded) {
+    return (
+      <div className="space-y-6">
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-8">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition ${
+                  activeTab === tab.id
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {tab.name}
+              </button>
+            ))}
+          </nav>
+        </div>
+        <DashboardContent />
       </div>
+    );
+  }
 
-      <div className="border-b border-gray-200">
-        <nav className="flex space-x-8">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition ${
-                activeTab === tab.id
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              {tab.name}
-            </button>
-          ))}
+  return (
+    <div className="flex h-screen overflow-hidden" style={{ background: "#f0f4f8" }}>
+      {/* FIXED SIDEBAR — same pattern as AdminDashboard */}
+      <div className="w-72 flex-shrink-0 flex flex-col fixed left-0 top-16 bottom-12 z-30" style={{ background: "#0f1e35", borderRight: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="p-6 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+          <h2 className="text-lg font-bold text-white tracking-tight">My Account</h2>
+          <p className="text-xs text-green-400 mt-1 tracking-widest uppercase font-medium truncate" title={user.placeOfAssignment}>
+            {user.placeOfAssignment || 'Not Assigned'}
+          </p>
+        </div>
+
+        <nav className="p-4 space-y-1 flex-1 overflow-y-auto">
+          {tabGroups.map((group) => {
+            const groupTabs = tabs.filter((t) => t.group === group.id);
+            const isActiveGroup = groupTabs.some((t) => t.id === activeTab);
+            const isExpanded = expandedGroup === group.id || isActiveGroup;
+
+            return (
+              <div key={group.id}>
+                <button
+                  onClick={() => setExpandedGroup(isExpanded ? null : group.id)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors rounded-lg"
+                  style={{ color: "rgba(255,255,255,0.35)" }}
+                >
+                  <span className="uppercase tracking-wider">{group.name}</span>
+                  <span className="text-xl font-bold text-gray-400">{isExpanded ? '−' : '+'}</span>
+                </button>
+
+                {isExpanded && (
+                  <div className="mt-1 space-y-0.5 pl-1">
+                    {groupTabs.map((tab) => {
+                      const isActive = activeTab === tab.id;
+                      const Icon = tab.icon;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => setActiveTab(tab.id)}
+                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 text-left ${
+                            isActive
+                              ? 'bg-gradient-to-r from-blue-500/20 to-blue-500/10 text-blue-300 shadow-sm border-l-4 border-blue-500 font-medium'
+                              : 'text-white/70 hover:bg-white/5 border-l-4 border-transparent hover:border-white/20'
+                          }`}
+                        >
+                          {Icon && <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-blue-400' : 'text-white/40'}`} />}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm truncate">{tab.name}</div>
+                            {isActive && tab.description && (
+                              <div className="text-xs text-blue-300/80 mt-0.5 truncate">{tab.description}</div>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
       </div>
+
+      {/* MAIN CONTENT */}
+      <div className="flex-1 ml-72 flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto pb-14">
+          <div className="p-6 md:p-8 lg:p-10" style={{ minHeight: "100%" }}>
+            <DashboardContent />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Shared content renderer — used by both the embedded tab-strip layout
+  // and the full sidebar layout above, so the tab bodies are never duplicated.
+  function DashboardContent() {
+    return (
+    <div className="space-y-6">
 
       {activeTab === 'profile' && (
         <div className="space-y-6">
@@ -651,6 +740,7 @@ function ContractualDashboard({ user }) {
             {!isEditingProfile ? (
               // View Mode
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <InfoField label="Place of Assignment" value={user.placeOfAssignment} span={3} />
                 <InfoField label="Last Name" value={personalInfo.lastName} />
                 <InfoField label="First Name" value={personalInfo.firstName} />
                 <InfoField label="Middle Name" value={personalInfo.middleName} />
@@ -670,6 +760,16 @@ function ContractualDashboard({ user }) {
               // Edit Mode
               <form onSubmit={handleUpdateProfile}>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Place of Assignment is admin/focal-managed, not self-editable here */}
+                  <div className="md:col-span-3 bg-gray-50 rounded-lg px-4 py-3 border border-gray-200">
+                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                      Place of Assignment
+                    </label>
+                    <p className="text-sm text-gray-700">
+                      {user.placeOfAssignment || 'Not Assigned'}
+                      <span className="text-xs text-gray-400 ml-2">(managed by your Focal Person or Administrator)</span>
+                    </p>
+                  </div>
                   <FormField
                     label="Last Name"
                     value={personalInfo.lastName || ''}
@@ -956,7 +1056,8 @@ function ContractualDashboard({ user }) {
         />
       )}
     </div>
-  );
+    );
+  }
 }
 
 // Helper Components

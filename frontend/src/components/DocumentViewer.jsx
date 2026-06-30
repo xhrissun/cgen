@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import api, { getDocumentUrl, openDocument } from '../api.js';
 import DocumentViewerModal from './DocumentViewerModal';
+import { dispatchPageLoading } from './ui.jsx';
 
 function DocumentViewer({ userRole }) {
   const [users, setUsers] = useState([]);
@@ -16,6 +17,7 @@ function DocumentViewer({ userRole }) {
   }, []);
 
   const fetchUsers = async () => {
+    dispatchPageLoading(true, 'Loading employee list…');
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/users?role=CONTRACTUAL', {
@@ -24,11 +26,14 @@ function DocumentViewer({ userRole }) {
       setUsers(response.data);
     } catch (error) {
       console.error('Error fetching users:', error);
+    } finally {
+      dispatchPageLoading(false);
     }
   };
 
   const fetchUserDocuments = async (userId) => {
     setLoading(true);
+    dispatchPageLoading(true, 'Loading documents…');
     try {
       const token = localStorage.getItem('token');
       const response = await api.get(`/api/users/${userId}`, {
@@ -40,6 +45,7 @@ function DocumentViewer({ userRole }) {
       alert('Error fetching documents: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoading(false);
+      dispatchPageLoading(false);
     }
   };
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../api.js';
 import PositionDetailsModal from './PositionDetailsModal';
-import { SkeletonTable, EmptyState, Spinner } from './ui.jsx';
+import { SkeletonTable, EmptyState, Spinner, dispatchPageLoading } from './ui.jsx';
 
 // Place of Assignment options
 const PLACE_OF_ASSIGNMENT_OPTIONS = [
@@ -121,6 +121,7 @@ function PositionManagement() {
 
   const fetchPositions = async () => {
     setLoadingPositions(true);
+    dispatchPageLoading(true, 'Loading positions…');
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/positions', {
@@ -132,6 +133,7 @@ function PositionManagement() {
       console.error('Error fetching positions:', error);
     } finally {
       setLoadingPositions(false);
+      dispatchPageLoading(false);
     }
   };
 

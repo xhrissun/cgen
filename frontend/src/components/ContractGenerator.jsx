@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SkeletonTable, SectionLoader, EmptyState, Spinner } from './ui.jsx';
+import { SkeletonTable, SectionLoader, EmptyState, Spinner, dispatchPageLoading } from './ui.jsx';
 import api from '../api.js';
 import ContractDetailsModal from './ContractDetailsModal';
 import Select from 'react-select';
@@ -217,6 +217,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
 
   const fetchContracts = async () => {
     setLoadingContracts(true);
+    dispatchPageLoading(true, 'Loading contracts…');
     try {
       const token = localStorage.getItem('token');
       const response = await api.get('/api/contracts', {
@@ -227,6 +228,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
       console.error('Error fetching contracts:', error);
     } finally {
       setLoadingContracts(false);
+      dispatchPageLoading(false);
     }
   };
 
