@@ -16,11 +16,13 @@ import { DollarSign } from 'lucide-react';
 import api from '../api.js';
 import { SkeletonTable, dispatchPageLoading } from './ui.jsx';
 import SalaryGradeDetailsModal from './SalaryGradeDetailsModal';
+import { findPreviousPeriod, buildPreviousGradeMap, TrendBadge, NewGradeBadge } from './salaryGradeTrend.jsx';
 
 function SalaryGradeViewer() {
   const [salaryGrades, setSalaryGrades] = useState([]);
   const [salaryPeriods, setSalaryPeriods] = useState([]);
   const [activePeriodStart, setActivePeriodStart] = useState(null);
+  const [previousGradeMap, setPreviousGradeMap] = useState(new Map());
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSalaryGrade, setSelectedSalaryGrade] = useState(null);
@@ -43,11 +45,23 @@ function SalaryGradeViewer() {
       const response = await api.get(`/api/positions/salary-grades/all${params}`, { headers });
       setSalaryGrades(response.data || []);
 
+      const resolvedActiveStart = periodStart || periodsRes.data?.[0]?.periodStartDate || null;
       if (periodStart) {
         setActivePeriodStart(periodStart);
       } else if (periodsRes.data?.length) {
         // Default view shows the most recent period — mirror that here
-        setActivePeriodStart(periodsRes.data[0]?.periodStartDate || null);
+        setActivePeriodStart(resolvedActiveStart);
+      }
+
+      // Fetch the immediately-preceding salary set (if one exists) so the
+      // table can show ▲/▼/no-change badges against each figure.
+      const previousPeriod = findPreviousPeriod(periodsRes.data || [], resolvedActiveStart);
+      if (previousPeriod) {
+        const prevParams = `?periodStart=${new Date(previousPeriod.periodStartDate).toISOString().split('T')[0]}`;
+        const prevRes = await api.get(`/api/positions/salary-grades/all${prevParams}`, { headers });
+        setPreviousGradeMap(buildPreviousGradeMap(prevRes.data));
+      } else {
+        setPreviousGradeMap(new Map());
       }
     } catch (error) {
       console.error('Error fetching salary grades:', error);
@@ -168,15 +182,42 @@ function SalaryGradeViewer() {
                   const daily = sg.dailySalaryAsPerContract || 0;
                   const premium = sg.monthlyPremium || 0;
 
+                  const prev = previousGradeMap.get(String(sg.grade));
+                  const isNewGrade = previousGradeMap.size > 0 && !prev;
+                  const prevDed = prev?.deductions
+                    ? (prev.deductions.sss || 0) + (prev.deductions.pagibig || 0) + (prev.deductions.philhealth || 0)
+                    : undefined;
+
                   return (
                     <tr key={sg._id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{sg.grade}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">₱{basic.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">₱{gross.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">₱{totalDed.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="px-6 py-4 whitespace-nowrap font-medium">₱{monthly.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">₱{daily.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">₱{premium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                        {sg.grade}
+                        {isNewGrade && <NewGradeBadge />}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        ₱{basic.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {!isNewGrade && <TrendBadge current={basic} previous={prev?.basicSalary} />}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        ₱{gross.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {!isNewGrade && <TrendBadge current={gross} previous={prev?.grossPremium} />}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        ₱{totalDed.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {!isNewGrade && <TrendBadge current={totalDed} previous={prevDed} />}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap font-medium">
+                        ₱{monthly.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {!isNewGrade && <TrendBadge current={monthly} previous={prev?.monthlySalaryAsPerContract} />}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        ₱{daily.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {!isNewGrade && <TrendBadge current={daily} previous={prev?.dailySalaryAsPerContract} />}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        ₱{premium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {!isNewGrade && <TrendBadge current={premium} previous={prev?.monthlyPremium} />}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {sg.isSpecialSalaryGrade ? (
                           <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">

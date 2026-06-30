@@ -14,6 +14,7 @@ import HolidayManagement from './HolidayManagement';
 import SignatoryManagement from './SignatoryManagement';
 import ClauseGroupManagement from './ClauseGroupManagement';
 import SalaryGradeDetailsModal from './SalaryGradeDetailsModal';
+import { findPreviousPeriod, buildPreviousGradeMap, TrendBadge, NewGradeBadge } from './salaryGradeTrend.jsx';
 import DocumentViewer from './DocumentViewer';
 import ActivityLog from './ActivityLog';
 
@@ -38,6 +39,7 @@ function AdminDashboard({ user }) {
   const [salaryGrades, setSalaryGrades] = useState([]);
   const [salaryPeriods, setSalaryPeriods] = useState([]); // list of distinct periods
   const [activePeriodStart, setActivePeriodStart] = useState(null); // currently viewed period
+  const [previousGradeMap, setPreviousGradeMap] = useState(new Map()); // grade -> previous-period doc, for ▲/▼ comparison
   const [clauses, setClauses] = useState([]);
   const [clauseDragIdx, setClauseDragIdx] = useState(null);
   const [clauseReordering, setClauseReordering] = useState(false);
@@ -368,8 +370,22 @@ function AdminDashboard({ user }) {
       setSalaryGrades(sorted);
 
       // Set activePeriodStart to the most recent period in the fetched set
-      if (sorted.length) {
-        setActivePeriodStart(sorted[0].periodStartDate);
+      const resolvedActiveStart = periodStart || sorted[0]?.periodStartDate || null;
+      if (resolvedActiveStart) {
+        setActivePeriodStart(resolvedActiveStart);
+      }
+
+      // Fetch the immediately-preceding salary set (if one exists) so the
+      // table can show ▲/▼/no-change badges against each figure.
+      const previousPeriod = findPreviousPeriod(periodsRes.data || [], resolvedActiveStart);
+      if (previousPeriod) {
+        const prevParams = `?periodStart=${new Date(previousPeriod.periodStartDate).toISOString().split('T')[0]}`;
+        const prevRes = await api.get(`/api/positions/salary-grades/all${prevParams}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setPreviousGradeMap(buildPreviousGradeMap(prevRes.data));
+      } else {
+        setPreviousGradeMap(new Map());
       }
     } catch (error) {
       console.error('Error fetching salary grades:', error);
@@ -1550,15 +1566,42 @@ function AdminDashboard({ user }) {
                           const daily = sg.dailySalaryAsPerContract || 0;
                           const premium = sg.monthlyPremium || 0;
 
+                          const prev = previousGradeMap.get(String(sg.grade));
+                          const isNewGrade = previousGradeMap.size > 0 && !prev;
+                          const prevDed = prev?.deductions
+                            ? (prev.deductions.sss || 0) + (prev.deductions.pagibig || 0) + (prev.deductions.philhealth || 0)
+                            : undefined;
+
                           return (
                             <tr key={sg._id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{sg.grade}</td>
-                              <td className="px-6 py-4 whitespace-nowrap">₱{basic.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                              <td className="px-6 py-4 whitespace-nowrap">₱{gross.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                              <td className="px-6 py-4 whitespace-nowrap">₱{totalDed.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                              <td className="px-6 py-4 whitespace-nowrap font-medium">₱{monthly.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                              <td className="px-6 py-4 whitespace-nowrap">₱{daily.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                              <td className="px-6 py-4 whitespace-nowrap">₱{premium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                              <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                                {sg.grade}
+                                {isNewGrade && <NewGradeBadge />}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                ₱{basic.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {!isNewGrade && <TrendBadge current={basic} previous={prev?.basicSalary} />}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                ₱{gross.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {!isNewGrade && <TrendBadge current={gross} previous={prev?.grossPremium} />}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                ₱{totalDed.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {!isNewGrade && <TrendBadge current={totalDed} previous={prevDed} />}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap font-medium">
+                                ₱{monthly.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {!isNewGrade && <TrendBadge current={monthly} previous={prev?.monthlySalaryAsPerContract} />}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                ₱{daily.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {!isNewGrade && <TrendBadge current={daily} previous={prev?.dailySalaryAsPerContract} />}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                ₱{premium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {!isNewGrade && <TrendBadge current={premium} previous={prev?.monthlyPremium} />}
+                              </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 {sg.isSpecialSalaryGrade ? (
                                   <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
