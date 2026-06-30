@@ -1,4 +1,5 @@
 import express from 'express';
+import { errDetail } from '../utils/errors.js';
 import ChangeLog from '../models/ChangeLog.js';
 import { verifyToken } from './auth.js';
 
@@ -27,7 +28,7 @@ router.get('/', verifyToken, async (req, res) => {
     
     res.json({ logs, total });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -47,7 +48,7 @@ router.get('/entity/:entityType/:entityId', verifyToken, async (req, res) => {
     
     res.json(logs);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 

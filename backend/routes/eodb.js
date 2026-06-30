@@ -1,5 +1,6 @@
 // eodb.js (updated)
 import express from 'express';
+import { errDetail } from '../utils/errors.js';
 import User from '../models/User.js';
 import Contract from '../models/Contract.js';
 import { verifyToken } from './auth.js';
@@ -63,7 +64,7 @@ router.get('/check-existing', verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Error checking existing EODB:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -115,7 +116,7 @@ router.get('/user-data', verifyToken, async (req, res) => {
     res.json(eodbData);
   } catch (error) {
     console.error('Error fetching EODB data:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -132,7 +133,7 @@ router.get('/photo/:filename', verifyToken, async (req, res) => {
     res.sendFile(filePath);
   } catch (error) {
     console.error('Error serving photo:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 

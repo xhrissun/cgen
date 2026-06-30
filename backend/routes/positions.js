@@ -2,12 +2,13 @@
 
 import mongoose from 'mongoose';
 import express from 'express';
+import { errDetail } from '../utils/errors.js';
 import Position from '../models/Position.js';
 import SalaryGrade from '../models/SalaryGrade.js';
 import Clause from '../models/Clause.js';
 import ClauseGroup from '../models/ClauseGroup.js';
 import User from '../models/User.js';
-import { verifyToken } from './auth.js';
+import { verifyToken, requireRole } from './auth.js';
 import Notification from '../models/Notification.js';
 import { logActivity } from '../utils/activityLogger.js';
 import { exec } from 'child_process';
@@ -76,7 +77,7 @@ router.get('/salary-grades/all', verifyToken, async (req, res) => {
 
     res.json(sortByGrade(docs));
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -97,7 +98,7 @@ router.get('/salary-grades/periods', verifyToken, async (req, res) => {
     ]);
     res.json(periods);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -133,7 +134,7 @@ router.get('/salary-grades/:grade', verifyToken, async (req, res) => {
 
     res.json(salaryGrade);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -143,7 +144,7 @@ router.get('/salary-grades/:grade', verifyToken, async (req, res) => {
 // the new period starts (so there are no gaps or overlaps).
 // NOTE: This route MUST be declared before POST /salary-grades to avoid Express
 // matching '/bulk' as the /:grade param on the GET route and to keep routing unambiguous.
-router.post('/salary-grades/bulk', verifyToken, async (req, res) => {
+router.post('/salary-grades/bulk', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const { grades, periodStartDate, periodEndDate, periodLabel } = req.body;
 
@@ -197,17 +198,17 @@ router.post('/salary-grades/bulk', verifyToken, async (req, res) => {
     if (error.code === 11000) {
       return res.status(409).json({
         message: 'One or more salary grades already exist for this period start date. Use a different Period Start Date or delete the existing set first.',
-        error: error.message
+        error: errDetail(error)
       });
     }
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
 // POST — add one grade row to a set.
 // Body must include periodStartDate (and optionally periodEndDate, periodLabel).
 // Also closes any previously open period whose periodStartDate < the new periodStartDate.
-router.post('/salary-grades', verifyToken, async (req, res) => {
+router.post('/salary-grades', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const {
       grade, isSpecialSalaryGrade, description,
@@ -278,15 +279,15 @@ router.post('/salary-grades', verifyToken, async (req, res) => {
     if (error.code === 11000) {
       return res.status(409).json({
         message: `Salary Grade ${req.body.grade} already exists for this period. Please run the normalization migration (node backend/scripts/normalizeSalaryGrades.js) to fix legacy data, then retry.`,
-        error: error.message
+        error: errDetail(error)
       });
     }
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
 // PUT /salary-grades/:id — update a single grade row (rates or period dates)
-router.put('/salary-grades/:id', verifyToken, async (req, res) => {
+router.put('/salary-grades/:id', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const doc = await SalaryGrade.findByIdAndUpdate(
       req.params.id,
@@ -296,22 +297,22 @@ router.put('/salary-grades/:id', verifyToken, async (req, res) => {
     if (!doc) return res.status(404).json({ message: 'Salary grade not found' });
     res.json(doc);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
 // DELETE entire period set by periodStartDate
-router.delete('/salary-grades/period/:periodStart', verifyToken, async (req, res) => {
+router.delete('/salary-grades/period/:periodStart', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const result = await SalaryGrade.deleteMany({ periodStartDate: new Date(req.params.periodStart) });
     res.json({ message: `Deleted ${result.deletedCount} grade(s) for period starting ${req.params.periodStart}.` });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
 // DELETE a single grade row by _id
-router.delete('/salary-grades/:id', verifyToken, async (req, res) => {
+router.delete('/salary-grades/:id', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const sg = await SalaryGrade.findById(req.params.id);
     if (!sg) return res.status(404).json({ message: 'Salary grade not found' });
@@ -328,7 +329,7 @@ router.delete('/salary-grades/:id', verifyToken, async (req, res) => {
     await SalaryGrade.findByIdAndDelete(req.params.id);
     res.json({ message: 'Salary grade deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -344,11 +345,11 @@ router.get('/clauses/all', verifyToken, async (req, res) => {
     });
     res.json(clauses);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
-router.post('/clauses', verifyToken, async (req, res) => {
+router.post('/clauses', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     // Auto-assign sortOrder if not provided — append after current max, in steps of 10
     if (req.body.sortOrder === undefined || req.body.sortOrder === null) {
@@ -364,11 +365,11 @@ router.post('/clauses', verifyToken, async (req, res) => {
     await newClause.save();
     res.status(201).json(newClause);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
-router.put('/clauses/:id', verifyToken, async (req, res) => {
+router.put('/clauses/:id', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const clause = await Clause.findByIdAndUpdate(
       req.params.id,
@@ -377,11 +378,11 @@ router.put('/clauses/:id', verifyToken, async (req, res) => {
     );
     res.json(clause);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
-router.delete('/clauses/:id', verifyToken, async (req, res) => {
+router.delete('/clauses/:id', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const clause = await Clause.findByIdAndDelete(req.params.id);
     if (!clause) {
@@ -389,13 +390,13 @@ router.delete('/clauses/:id', verifyToken, async (req, res) => {
     }
     res.json({ message: 'Clause deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
 // Bulk reorder clauses — accepts [{ _id, sortOrder }, ...]
 // Called after drag-and-drop reorder in the admin UI
-router.put('/clauses/reorder', verifyToken, async (req, res) => {
+router.put('/clauses/reorder', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const { orderedIds } = req.body; // array of clause _ids in new order
     if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
@@ -413,12 +414,12 @@ router.put('/clauses/reorder', verifyToken, async (req, res) => {
     await Clause.bulkWrite(bulkOps);
     res.json({ message: 'Clause order saved', count: orderedIds.length });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
 // Reorder clauses within a clause group — accepts { clauseIds: [...ordered _ids] }
-router.put('/clause-groups/:id/reorder', verifyToken, async (req, res) => {
+router.put('/clause-groups/:id/reorder', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const { clauseIds } = req.body;
     if (!Array.isArray(clauseIds)) {
@@ -440,7 +441,7 @@ router.put('/clause-groups/:id/reorder', verifyToken, async (req, res) => {
 
     res.json(group);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -484,7 +485,7 @@ router.get('/clause-groups', verifyToken, async (req, res) => {
     console.error('Stack:', error.stack);
     res.status(500).json({ 
       message: 'Server error fetching clause groups', 
-      error: error.message 
+      error: errDetail(error) 
     });
   }
 });
@@ -500,11 +501,11 @@ router.get('/clause-groups/:id', verifyToken, async (req, res) => {
     
     res.json(group);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
-router.post('/clause-groups', verifyToken, async (req, res) => {
+router.post('/clause-groups', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const { name, description, clauses } = req.body;
     
@@ -521,11 +522,11 @@ router.post('/clause-groups', verifyToken, async (req, res) => {
     res.status(201).json(newGroup);
   } catch (error) {
     console.error('Error creating clause group:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
-router.put('/clause-groups/:id', verifyToken, async (req, res) => {
+router.put('/clause-groups/:id', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const { name, description, clauses } = req.body;
     
@@ -546,11 +547,11 @@ router.put('/clause-groups/:id', verifyToken, async (req, res) => {
     
     res.json(group);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
-router.delete('/clause-groups/:id', verifyToken, async (req, res) => {
+router.delete('/clause-groups/:id', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const group = await ClauseGroup.findByIdAndDelete(req.params.id);
     
@@ -560,7 +561,7 @@ router.delete('/clause-groups/:id', verifyToken, async (req, res) => {
     
     res.json({ message: 'Clause group deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -842,7 +843,7 @@ router.get('/clause-groups/:id/template', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('Error generating clause group template:', error);
-    res.status(500).json({ message: 'Failed to generate template.', error: error.message });
+    res.status(500).json({ message: 'Failed to generate template.', error: errDetail(error) });
   }
 });
 
@@ -862,7 +863,7 @@ router.get('/', verifyToken, async (req, res) => {
       .populate('createdBy', 'username');
     res.json(positions);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -878,11 +879,11 @@ router.get('/:id', verifyToken, async (req, res) => {
     
     res.json(position);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
-router.post('/', verifyToken, async (req, res) => {
+router.post('/', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON'), async (req, res) => {
   try {
     const {
       title,
@@ -1012,11 +1013,11 @@ router.post('/', verifyToken, async (req, res) => {
     
     res.status(201).json(newPosition);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
-router.put('/:id', verifyToken, async (req, res) => {
+router.put('/:id', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON'), async (req, res) => {
   try {
     // Fetch the existing position first
     const existingPosition = await Position.findById(req.params.id);
@@ -1138,11 +1139,11 @@ router.put('/:id', verifyToken, async (req, res) => {
 
     res.json(position);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
-router.delete('/:id', verifyToken, async (req, res) => {
+router.delete('/:id', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const position = await Position.findByIdAndDelete(req.params.id);
     
@@ -1152,7 +1153,7 @@ router.delete('/:id', verifyToken, async (req, res) => {
     
     res.json({ message: 'Position deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 

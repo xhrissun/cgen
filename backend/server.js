@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { errDetail } from './utils/errors.js';
 import express from 'express';
 import cors from 'cors';
 import compression from 'compression';
@@ -10,6 +11,7 @@ import contractRoutes from './routes/contracts.js';
 import holidayRoutes from './routes/holidays.js';
 import signatoryRoutes from './routes/signatories.js';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import User from './models/User.js';
 import { startContractExpiryChecker } from './utils/contractExpiry.js';
 import notificationRoutes from './routes/notifications.js';
@@ -43,13 +45,22 @@ app.use(express.urlencoded({ extended: true }));
 connectDB();
 
 // Initialize default admin user
+// Credentials are taken from ADMIN_USERNAME/ADMIN_PASSWORD env vars so no
+// hardcoded credentials ship in source control. If ADMIN_PASSWORD isn't set,
+// a random one-time password is generated and printed to the server console
+// only (never logged anywhere persistent) so the operator can log in once
+// and must change it immediately.
 const initializeAdmin = async () => {
   try {
     const adminExists = await User.findOne({ role: 'ADMINISTRATOR' });
     if (!adminExists) {
-      const hashedPassword = await bcrypt.hash('admin123', 10);
+      const username = process.env.ADMIN_USERNAME || 'admin';
+      const generatedPassword = !process.env.ADMIN_PASSWORD;
+      const password = process.env.ADMIN_PASSWORD || crypto.randomBytes(12).toString('base64url');
+
+      const hashedPassword = await bcrypt.hash(password, 10);
       const admin = new User({
-        username: 'admin',
+        username,
         password: hashedPassword,
         role: 'ADMINISTRATOR',
         status: 'ACTIVE',
@@ -60,10 +71,15 @@ const initializeAdmin = async () => {
         }
       });
       await admin.save();
-      console.log('Default admin user created - username: admin, password: admin123');
+      if (generatedPassword) {
+        console.log(`Default admin user created — username: ${username}. A random one-time password was generated since ADMIN_PASSWORD was not set: ${password}`);
+        console.log('Log in immediately and change this password. Set ADMIN_USERNAME / ADMIN_PASSWORD env vars to control this on future deploys.');
+      } else {
+        console.log(`Default admin user created — username: ${username} (password taken from ADMIN_PASSWORD env var).`);
+      }
     }
   } catch (error) {
-    console.error('Error initializing admin:', error);
+    console.error('Error initializing admin:', errDetail(error));
   }
 };
 
@@ -94,7 +110,7 @@ app.get('/api/health', (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!', error: err.message });
+  res.status(500).json({ message: 'Something went wrong!', error: errDetail(err) });
 });
 
 // Start server

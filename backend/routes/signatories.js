@@ -1,4 +1,5 @@
 import express from 'express';
+import { errDetail } from '../utils/errors.js';
 import Signatory from '../models/Signatory.js';
 import { verifyToken } from './auth.js';
 
@@ -21,7 +22,7 @@ router.get('/', verifyToken, async (req, res) => {
     const signatories = await Signatory.find(query).sort({ role: 1, name: 1 });
     res.json(signatories);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -36,7 +37,7 @@ router.get('/:id', verifyToken, async (req, res) => {
     
     res.json(signatory);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -64,7 +65,7 @@ router.get('/defaults/all', verifyToken, async (req, res) => {
     
     res.json(organized);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -97,7 +98,7 @@ router.post('/', verifyToken, async (req, res) => {
     await newSignatory.save();
     res.status(201).json(newSignatory);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -131,7 +132,7 @@ router.put('/:id', verifyToken, async (req, res) => {
     
     res.json(signatory);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -150,7 +151,7 @@ router.delete('/:id', verifyToken, async (req, res) => {
     
     res.json({ message: 'Signatory deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 

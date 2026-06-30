@@ -1,6 +1,7 @@
 // FILE: cgen-main/backend/routes/contracts.js
 
 import express from 'express';
+import { errDetail } from '../utils/errors.js';
 import Contract from '../models/Contract.js';
 import User from '../models/User.js';
 import Position from '../models/Position.js';
@@ -184,7 +185,7 @@ router.get('/', verifyToken, async (req, res) => {
     
     res.json(contracts);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -201,7 +202,7 @@ router.get('/:id', verifyToken, async (req, res) => {
     
     res.json(contract);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -209,6 +210,10 @@ router.get('/:id', verifyToken, async (req, res) => {
 
 router.post('/', verifyToken, async (req, res) => {
   try {
+    if (!['ADMINISTRATOR', 'FOCAL_PERSON'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
     const {
       userId,
       mode,
@@ -428,13 +433,17 @@ router.post('/', verifyToken, async (req, res) => {
     res.status(201).json(newContract);
   } catch (error) {
     console.error('❌ Contract creation error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
 // Update contract
 router.put('/:id', verifyToken, async (req, res) => {
   try {
+    if (!['ADMINISTRATOR', 'FOCAL_PERSON'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
     const contract = await Contract.findByIdAndUpdate(
       req.params.id,
       { ...req.body, updatedAt: new Date() },
@@ -447,7 +456,7 @@ router.put('/:id', verifyToken, async (req, res) => {
     
     res.json(contract);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -465,7 +474,7 @@ router.delete('/:id', verifyToken, async (req, res) => {
     
     res.json({ message: 'Contract deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -822,7 +831,7 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
    
   } catch (error) {
     console.error('❌ PDF Generation Error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -894,7 +903,7 @@ router.get('/export/csv', verifyToken, async (req, res) => {
     res.attachment(`contracts_export_${timestamp}.csv`);
     res.send(csv);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -943,7 +952,7 @@ router.patch('/:id/status', verifyToken, async (req, res) => {
     console.log(`✓ Contract ${contract.contractNumber} status changed to ${status}`);
     res.json(contract);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -1005,7 +1014,7 @@ router.post('/:id/upload-signed', verifyToken, signedContractUpload.single('sign
         console.warn('Failed to delete uploaded file from R2:', err.message);
       }
     }
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -1024,7 +1033,7 @@ router.get('/:id/signed-contract', verifyToken, async (req, res) => {
 
     res.redirect(contract.signedContractFile.url);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -1055,7 +1064,7 @@ router.patch('/:id/archive', verifyToken, async (req, res) => {
     console.log(`✓ Contract ${contract.contractNumber} archived`);
     res.json({ message: 'Contract archived successfully', contract });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -1083,7 +1092,7 @@ router.patch('/:id/unarchive', verifyToken, async (req, res) => {
     console.log(`✓ Contract ${contract.contractNumber} unarchived`);
     res.json({ message: 'Contract unarchived successfully', contract });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -1133,7 +1142,7 @@ router.delete('/:id', verifyToken, async (req, res) => {
     console.log(`✓ Contract ${contract.contractNumber} deleted`);
     res.json({ message: 'Contract deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 

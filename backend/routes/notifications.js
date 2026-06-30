@@ -1,4 +1,5 @@
 import express from 'express';
+import { errDetail } from '../utils/errors.js';
 import Notification from '../models/Notification.js';
 import { verifyToken } from './auth.js';
 
@@ -13,7 +14,7 @@ router.get('/', verifyToken, async (req, res) => {
       .lean();
     res.json(notifications);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -32,7 +33,7 @@ router.patch('/:id/read', verifyToken, async (req, res) => {
     
     res.json(notification);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -45,7 +46,7 @@ router.patch('/read-all', verifyToken, async (req, res) => {
     );
     res.json({ message: 'All notifications marked as read' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 

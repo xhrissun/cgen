@@ -1,4 +1,5 @@
 import express from 'express';
+import { errDetail } from '../utils/errors.js';
 import bcrypt from 'bcryptjs';
 import { documentUpload, profilePhotoUpload } from '../utils/r2Upload.js';
 import { deleteFromR2 } from '../utils/r2Delete.js';
@@ -34,20 +35,43 @@ router.get('/', verifyToken, async (req, res) => {
     const users = await User.find(query).select('-password');
     res.json(users);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
 // Get user by ID
 router.get('/:id', verifyToken, async (req, res) => {
   try {
+    // Authorization: a user may view their own record. Admins and finance
+    // officers may view anyone. Focal persons may only view users assigned
+    // to their own place of assignment. Everyone else is denied (this closes
+    // the IDOR that let any authenticated user pull any other user's PII).
+    const isSelf = req.user.userId === req.params.id;
+    const isAdmin = req.user.role === 'ADMINISTRATOR';
+    const isFinance = req.user.role === 'FINANCE_OFFICER';
+
+    if (!isSelf && !isAdmin && !isFinance) {
+      if (req.user.role === 'FOCAL_PERSON') {
+        const requester = await User.findById(req.user.userId).select('placeOfAssignment');
+        const target = await User.findById(req.params.id).select('placeOfAssignment');
+        if (!target) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+        if (!requester || target.placeOfAssignment !== requester.placeOfAssignment) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+      } else {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+
     const user = await User.findById(req.params.id).select('-password');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
     res.json(user);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -135,7 +159,7 @@ router.post('/', verifyToken, async (req, res) => {
     
     res.status(201).json(userResponse);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -244,7 +268,7 @@ router.put('/:id', verifyToken, async (req, res) => {
 
     res.json(user);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -273,7 +297,7 @@ router.post('/:id/reset-password', verifyToken, async (req, res) => {
 
     res.json({ message: 'Password reset successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -291,7 +315,7 @@ router.delete('/:id', verifyToken, async (req, res) => {
     
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -407,7 +431,7 @@ router.post('/:id/documents', verifyToken, documentUpload.single('file'), async 
   } catch (error) {
     console.error('Upload error:', error);
     if (req.file?.key) await deleteFromR2(req.file.key).catch(() => {});
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -473,7 +497,7 @@ router.get('/:id/documents/*', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('Error serving document:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -517,7 +541,7 @@ router.delete('/:id/documents/*', verifyToken, async (req, res) => {
 
     res.json({ message: 'Document deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
@@ -534,7 +558,7 @@ router.get('/:id/history', verifyToken, async (req, res) => {
     
     res.json(user.contractHistory);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
