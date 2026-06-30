@@ -80,18 +80,18 @@ function App() {
                 <Layout user={user} onLogout={handleLogout} fullWidth={true}>
                   <AdminDashboard user={user} />
                 </Layout>
-              ) : user.role === 'CONTRACTUAL' || user.role === 'FOCAL_PERSON' ? (
-                // Contractual and Focal Person now use the same fixed-sidebar
-                // layout pattern as Admin (fullWidth=true disables Layout's
-                // own max-width container/padding so the dashboard's own
-                // sidebar can sit flush against the nav bar).
+              ) : user.role === 'CONTRACTUAL' || user.role === 'FOCAL_PERSON' || user.role === 'FINANCE_OFFICER' ? (
+                // Contractual, Focal Person, and Finance Officer all use the
+                // same fixed-sidebar layout pattern as Admin (fullWidth=true
+                // disables Layout's own max-width container/padding so the
+                // dashboard's own sidebar can sit flush against the nav bar).
                 <Layout user={user} onLogout={handleLogout} fullWidth={true}>
                   {user.role === 'CONTRACTUAL' && <ContractualDashboard user={user} />}
                   {user.role === 'FOCAL_PERSON' && <FocalPersonDashboard user={user} />}
+                  {user.role === 'FINANCE_OFFICER' && <FinanceOfficerDashboard user={user} />}
                 </Layout>
               ) : (
                 <Layout user={user} onLogout={handleLogout} fullWidth={false}>
-                  {user.role === 'FINANCE_OFFICER' && <FinanceOfficerDashboard user={user} />}
                 </Layout>
               )
             ) : (

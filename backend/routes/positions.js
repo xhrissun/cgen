@@ -1017,14 +1017,25 @@ router.post('/', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON'), asyn
   }
 });
 
-router.put('/:id', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON'), async (req, res) => {
+router.put('/:id', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON', 'FINANCE_OFFICER'), async (req, res) => {
   try {
     // Fetch the existing position first
     const existingPosition = await Position.findById(req.params.id);
     if (!existingPosition) {
       return res.status(404).json({ message: 'Position not found' });
     }
-    
+
+    // Finance Officers may ONLY assign/update the `charging` field — nothing
+    // else they send (duties, clauses, title, salary grade, etc.) is honored.
+    if (req.user.role === 'FINANCE_OFFICER') {
+      const position = await Position.findByIdAndUpdate(
+        req.params.id,
+        { charging: req.body.charging, updatedAt: new Date() },
+        { new: true }
+      ).populate('assignedClauses');
+      return res.json(position);
+    }
+
     const updateData = {
       ...req.body,
       updatedAt: new Date()

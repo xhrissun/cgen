@@ -17,7 +17,7 @@ import path from 'path';
 import fs from 'fs';
 import { promisify } from 'util';
 import { fileURLToPath } from 'url';
-import Holiday from '../models/Holiday.js';
+import { resolveHolidaysInRange } from '../utils/holidayResolver.js';
 import { calculatePremiumBreakdown } from '../utils/salaryCalculator.js';
 import { logActivity } from '../utils/activityLogger.js';
 import Notification from '../models/Notification.js';
@@ -289,12 +289,7 @@ router.post('/', verifyToken, async (req, res) => {
     const firstDayOfStartMonth = new Date(contractStart.getFullYear(), contractStart.getMonth(), 1);
     const lastDayOfEndMonth = new Date(contractEnd.getFullYear(), contractEnd.getMonth() + 1, 0);
 
-    const holidays = await Holiday.find({
-      date: {
-        $gte: firstDayOfStartMonth,
-        $lte: lastDayOfEndMonth
-      }
-    });
+    const holidays = await resolveHolidaysInRange(firstDayOfStartMonth, lastDayOfEndMonth);
 
     console.log(`✓ Found ${holidays.length} holidays in full months (${firstDayOfStartMonth.toISOString().split('T')[0]} to ${lastDayOfEndMonth.toISOString().split('T')[0]})`);
     

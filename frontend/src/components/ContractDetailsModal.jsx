@@ -86,6 +86,11 @@ function ContractDetailsModal({ contract, onClose }) {
   const [previewingPDF, setPreviewingPDF] = useState(false);
   const [pdfBlob, setPdfBlob] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [expandedMonths, setExpandedMonths] = useState({});
+
+  const toggleMonthCalendar = (monthKey) => {
+    setExpandedMonths(prev => ({ ...prev, [monthKey]: !prev[monthKey] }));
+  };
 
   if (!contract) return null;
 
@@ -291,8 +296,8 @@ function ContractDetailsModal({ contract, onClose }) {
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                           <thead>
                             <tr style={{ background: D.bg }}>
-                              {['Month', 'Type', 'Working Days', 'Daily Rate', 'Premium'].map((h, i) => (
-                                <th key={h} style={{ padding: '10px 14px', textAlign: i >= 2 ? 'center' : 'left', color: D.textMuted, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: `1px solid ${D.border}` }}>{h}</th>
+                              {['Month', 'Type', 'Working Days', 'Daily Rate', 'Premium', ''].map((h, i) => (
+                                <th key={h || 'cal'} style={{ padding: '10px 14px', textAlign: i >= 2 ? 'center' : 'left', color: D.textMuted, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: `1px solid ${D.border}` }}>{h}</th>
                               ))}
                             </tr>
                           </thead>
@@ -314,10 +319,26 @@ function ContractDetailsModal({ contract, onClose }) {
                                   <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: D.textPrimary, fontFamily: 'monospace' }}>
                                     ₱{(m.calculatedPremium || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
+                                  <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                                    <button
+                                      onClick={() => toggleMonthCalendar(m.monthKey)}
+                                      title="Toggle calendar view"
+                                      style={{ background: expandedMonths[m.monthKey] ? D.blueMuted : 'transparent', border: `1px solid ${expandedMonths[m.monthKey] ? D.blueBorder : D.border}`, color: expandedMonths[m.monthKey] ? D.blue : D.textMuted, borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer' }}
+                                    >
+                                      📅 {expandedMonths[m.monthKey] ? 'Hide' : 'View'}
+                                    </button>
+                                  </td>
                                 </tr>
+                                {expandedMonths[m.monthKey] && (
+                                  <tr key={`${m.monthKey}-cal`} style={{ background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)', borderBottom: `1px solid ${D.border}` }}>
+                                    <td colSpan={6} style={{ padding: '4px 14px 14px' }}>
+                                      <MonthCalendar month={m} />
+                                    </td>
+                                  </tr>
+                                )}
                                 {m.holidaysInMonth && m.holidaysInMonth.length > 0 && (
                                   <tr key={`${m.monthKey}-hols`} style={{ background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)', borderBottom: `1px solid ${D.border}` }}>
-                                    <td colSpan={5} style={{ padding: '6px 14px 10px' }}>
+                                    <td colSpan={6} style={{ padding: '6px 14px 10px' }}>
                                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                         {m.holidaysInMonth.map(h => {
                                           const typeLabel = h.type === 'REGULAR' ? 'Regular' : h.type === 'SPECIAL_NON_WORKING' ? 'Special Non-Working' : 'Special Working';
@@ -348,6 +369,7 @@ function ContractDetailsModal({ contract, onClose }) {
                               <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 800, color: D.green, fontSize: 14, fontFamily: 'monospace' }}>
                                 ₱{contract.finalPremium?.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                               </td>
+                              <td />
                             </tr>
                           </tfoot>
                         </table>
@@ -479,6 +501,106 @@ function ContractDetailsModal({ contract, onClose }) {
             Close
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Interactive month calendar ──
+   Renders a single month grid for the working-days breakdown row it
+   belongs to, color-coding each day as: weekend, regular holiday,
+   special non-working holiday, special working day, an in-range working
+   day, or an out-of-range day (for partial months). Hover a day to see
+   its holiday name (native title tooltip) for a lightweight, dependency-
+   free interactive view. */
+function MonthCalendar({ month: m }) {
+  const holidayByDay = {};
+  (m.holidaysInMonth || []).forEach(h => {
+    const day = parseInt(String(h.date).split('-')[2], 10);
+    holidayByDay[day] = h;
+  });
+
+  const daysInMonth = new Date(Date.UTC(m.year, m.month, 0)).getUTCDate();
+  const firstWeekday = new Date(Date.UTC(m.year, m.month - 1, 1)).getUTCDay(); // 0=Sun
+
+  const rangeStart = m.contractStartDay || 1;
+  const rangeEnd = m.contractEndDay || daysInMonth;
+
+  const cells = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const dayStyle = (day) => {
+    if (day === null) return { bg: 'transparent', border: 'transparent', color: 'transparent' };
+    const dow = new Date(Date.UTC(m.year, m.month - 1, day)).getUTCDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const hol = holidayByDay[day];
+    const inRange = day >= rangeStart && day <= rangeEnd;
+
+    if (hol && hol.type === 'REGULAR') return { bg: D.redMuted, border: 'rgba(239,68,68,0.4)', color: D.red, label: hol.name };
+    if (hol && hol.type === 'SPECIAL_NON_WORKING') return { bg: D.orangeMuted, border: 'rgba(251,146,60,0.45)', color: D.orange, label: hol.name };
+    if (hol && hol.type === 'SPECIAL_WORKING') return { bg: D.blueMuted, border: D.blueBorder, color: D.blue, label: hol.name };
+    if (isWeekend) return { bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.2)', color: '#94a3b8', label: 'Weekend' };
+    if (!inRange) return { bg: 'transparent', border: D.border, color: D.textMuted, label: 'Outside contract period' };
+    return { bg: D.greenMuted, border: D.greenBorder, color: D.green, label: 'Working day' };
+  };
+
+  return (
+    <div style={{ background: D.cardDeep, border: `1px solid ${D.border}`, borderRadius: 10, padding: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <p style={{ fontSize: 12, fontWeight: 700, color: D.textPrimary, margin: 0 }}>{m.monthName} {m.year}</p>
+        <p style={{ fontSize: 11, color: D.textMuted, margin: 0 }}>
+          {m.isFullMonth ? 'Full month in contract' : `In range: day ${rangeStart}–${rangeEnd}`}
+        </p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 6 }}>
+        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+          <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: D.textMuted, letterSpacing: '0.05em' }}>{d}</div>
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+        {cells.map((day, i) => {
+          const s = dayStyle(day);
+          return (
+            <div
+              key={i}
+              title={day ? `${m.monthName} ${day}, ${m.year}${s.label ? ` — ${s.label}` : ''}` : undefined}
+              style={{
+                aspectRatio: '1 / 1',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 11,
+                fontWeight: day ? 600 : 400,
+                borderRadius: 6,
+                background: s.bg,
+                border: `1px solid ${s.border}`,
+                color: s.color,
+                cursor: day ? 'default' : 'auto',
+              }}
+            >
+              {day || ''}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 12, paddingTop: 10, borderTop: `1px solid ${D.border}` }}>
+        {[
+          { color: D.green, label: 'Working day' },
+          { color: '#94a3b8', label: 'Weekend' },
+          { color: D.red, label: 'Regular holiday' },
+          { color: D.orange, label: 'Special non-working' },
+          { color: D.blue, label: 'Special working' },
+          { color: D.textMuted, label: 'Outside contract period' },
+        ].map(({ color, label }) => (
+          <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: D.textMuted }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block' }} />
+            {label}
+          </span>
+        ))}
       </div>
     </div>
   );

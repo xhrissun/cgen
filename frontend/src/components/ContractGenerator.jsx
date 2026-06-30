@@ -298,11 +298,25 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
     }
   };
 
-  const fetchHolidays = async () => {
+  const fetchHolidays = async (startDate = null, endDate = null) => {
     try {
       const token = localStorage.getItem('token');
+      // When a contract period is known, request the RESOLVED holiday set
+      // for the full months it spans — this expands recurring holidays
+      // (e.g. "Christmas Day" entered once but marked Recurring) onto
+      // whatever year the contract actually falls in. Without a range,
+      // fall back to the raw literal list (covers the initial mount before
+      // any dates are picked).
+      const params = {};
+      if (startDate && endDate) {
+        const s = new Date(startDate);
+        const e = new Date(endDate);
+        params.startDate = new Date(s.getFullYear(), s.getMonth(), 1).toISOString();
+        params.endDate = new Date(e.getFullYear(), e.getMonth() + 1, 0).toISOString();
+      }
       const response = await api.get('/api/holidays', {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        params
       });
       setHolidays(response.data);
     } catch (error) {
@@ -558,8 +572,14 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   };
 
   useEffect(() => {
+    if (formData.startDate && formData.endDate) {
+      fetchHolidays(formData.startDate, formData.endDate);
+    }
+  }, [formData.startDate, formData.endDate]);
+
+  useEffect(() => {
     calculatePremiumPreview();
-  }, [formData.startDate, formData.endDate, formData.salaryGrade, formData.semester]);
+  }, [formData.startDate, formData.endDate, formData.salaryGrade, formData.semester, holidays]);
 
   const handleSubmit = async (e) => {
   e.preventDefault();

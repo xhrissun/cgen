@@ -1,27 +1,33 @@
 import express from 'express';
 import { errDetail } from '../utils/errors.js';
 import Holiday from '../models/Holiday.js';
+import { resolveHolidaysInRange } from '../utils/holidayResolver.js';
 import { verifyToken } from './auth.js';
 
 const router = express.Router();
 
-// Get all holidays
+// Get all holidays.
+// - With ?startDate&endDate: returns the RESOLVED list for that range —
+//   i.e. recurring holidays are projected onto every year the range
+//   touches (see utils/holidayResolver.js). This is what contract
+//   generation / preview should always use.
+// - Without a date range (e.g. the Holiday Management admin list, or a
+//   ?year filter): returns the literal stored records, unchanged, since
+//   that view is about managing the underlying entries themselves.
 router.get('/', verifyToken, async (req, res) => {
   try {
     const { year, startDate, endDate } = req.query;
+
+    if (startDate && endDate) {
+      const holidays = await resolveHolidaysInRange(startDate, endDate);
+      return res.json(holidays);
+    }
+
     let query = {};
-    
     if (year) {
       query.year = parseInt(year);
     }
-    
-    if (startDate && endDate) {
-      query.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
-    }
-    
+
     const holidays = await Holiday.find(query).sort({ date: 1 });
     res.json(holidays);
   } catch (error) {
