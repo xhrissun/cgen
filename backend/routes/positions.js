@@ -7,6 +7,7 @@ import Position from '../models/Position.js';
 import SalaryGrade from '../models/SalaryGrade.js';
 import Clause from '../models/Clause.js';
 import ClauseGroup from '../models/ClauseGroup.js';
+import { resolvePositionClauses, cascadeRefreshDraftContractsForPosition } from '../utils/clauseResolver.js';
 import User from '../models/User.js';
 import { verifyToken, requireRole } from './auth.js';
 import Notification from '../models/Notification.js';
@@ -22,6 +23,44 @@ const __dirname  = path.dirname(__filename);
 const execPromise = promisify(exec);
 
 const router = express.Router();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cascade helpers: when a clause's content changes, or a clause group's
+// membership/order changes, any DRAFT/PENDING contract built from a position
+// that uses that clause/group should pick up the change automatically.
+// Signed/approved/active/past contracts are NEVER touched here.
+// ─────────────────────────────────────────────────────────────────────────────
+async function cascadeRefreshGroupChangeToDraftContracts(groupId) {
+  const affectedPositions = await Position.find({ assignedClauseGroups: groupId });
+  let total = 0;
+  for (const position of affectedPositions) {
+    total += await cascadeRefreshDraftContractsForPosition(position);
+  }
+  return total;
+}
+
+async function cascadeRefreshClauseChangeToDraftContracts(clauseId) {
+  // Positions that reference this clause directly...
+  const directPositions = await Position.find({ assignedClauses: clauseId });
+
+  // ...plus positions whose linked clause groups contain this clause.
+  const groupsWithClause = await ClauseGroup.find({ clauses: clauseId }).select('_id');
+  const groupIds = groupsWithClause.map(g => g._id);
+  const viaGroupPositions = groupIds.length
+    ? await Position.find({ assignedClauseGroups: { $in: groupIds } })
+    : [];
+
+  const allPositions = [...directPositions, ...viaGroupPositions];
+  const seen = new Set();
+  let total = 0;
+  for (const position of allPositions) {
+    const idStr = position._id.toString();
+    if (seen.has(idStr)) continue;
+    seen.add(idStr);
+    total += await cascadeRefreshDraftContractsForPosition(position);
+  }
+  return total;
+}
 
 // ⚠️ IMPORTANT: Specific routes MUST come BEFORE dynamic routes like /:id
 
@@ -376,6 +415,11 @@ router.put('/clauses/:id', verifyToken, requireRole('ADMINISTRATOR'), async (req
       { ...req.body, updatedAt: new Date() },
       { new: true }
     );
+
+    if (clause) {
+      await cascadeRefreshClauseChangeToDraftContracts(clause._id);
+    }
+
     res.json(clause);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
@@ -438,6 +482,8 @@ router.put('/clause-groups/:id/reorder', verifyToken, requireRole('ADMINISTRATOR
     if (!group) {
       return res.status(404).json({ message: 'Clause group not found' });
     }
+
+    await cascadeRefreshGroupChangeToDraftContracts(group._id);
 
     res.json(group);
   } catch (error) {
@@ -545,6 +591,8 @@ router.put('/clause-groups/:id', verifyToken, requireRole('ADMINISTRATOR'), asyn
       return res.status(404).json({ message: 'Clause group not found' });
     }
     
+    await cascadeRefreshGroupChangeToDraftContracts(group._id);
+
     res.json(group);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
@@ -847,6 +895,84 @@ router.get('/clause-groups/:id/template', verifyToken, async (req, res) => {
   }
 });
 
+// Admin-only bulk assignment: assign clause(s)/clause group(s) to every
+// position under a given Place of Assignment in one go.
+// Body: {
+//   placeOfAssignment: string (required),
+//   clauseGroups: [ClauseGroup _id, ...]  (optional),
+//   assignedClauses: [Clause _id, ...]    (optional, ad-hoc individual clauses),
+//   mode: 'replace' | 'append'            (default 'replace')
+// }
+// 'replace' overwrites each matching position's clause/group assignment.
+// 'append' adds the given groups/clauses on top of whatever the position
+// already has (no duplicates).
+router.post('/bulk-assign-clauses', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
+  try {
+    const { placeOfAssignment, clauseGroups = [], assignedClauses = [], mode = 'replace' } = req.body;
+
+    if (!placeOfAssignment) {
+      return res.status(400).json({ message: 'placeOfAssignment is required' });
+    }
+    if (clauseGroups.length === 0 && assignedClauses.length === 0) {
+      return res.status(400).json({ message: 'Provide at least one clause group or individual clause to assign' });
+    }
+    if (!['replace', 'append'].includes(mode)) {
+      return res.status(400).json({ message: "mode must be 'replace' or 'append'" });
+    }
+
+    const targetPositions = await Position.find({ placeOfAssignment });
+    if (targetPositions.length === 0) {
+      return res.status(404).json({ message: `No positions found for place of assignment "${placeOfAssignment}"` });
+    }
+
+    let updatedCount = 0;
+    let refreshedContractCount = 0;
+
+    for (const position of targetPositions) {
+      let newGroups, newIndividual;
+
+      if (mode === 'replace') {
+        newGroups = [...clauseGroups];
+        newIndividual = [...assignedClauses];
+      } else {
+        const existingGroups = new Set((position.assignedClauseGroups || []).map(id => id.toString()));
+        clauseGroups.forEach(id => existingGroups.add(id.toString()));
+        newGroups = [...existingGroups];
+
+        const existingIndividual = new Set((position.assignedClauses || []).map(id => id.toString()));
+        assignedClauses.forEach(id => existingIndividual.add(id.toString()));
+        newIndividual = [...existingIndividual];
+      }
+
+      position.assignedClauseGroups = newGroups;
+      position.assignedClauses = newIndividual;
+      position.needsClauseAssignment = newGroups.length === 0 && newIndividual.length === 0;
+      position.updatedAt = new Date();
+      await position.save();
+      updatedCount++;
+
+      refreshedContractCount += await cascadeRefreshDraftContractsForPosition(position);
+    }
+
+    await logActivity({
+      actionType: 'BULK_UPDATE',
+      entityType: 'Position',
+      entityName: `Bulk clause assignment for "${placeOfAssignment}"`,
+      performedBy: req.user.userId,
+      changesAfter: { placeOfAssignment, clauseGroups, assignedClauses, mode, positionsUpdated: updatedCount },
+      req
+    });
+
+    res.json({
+      message: `Updated ${updatedCount} position(s) for "${placeOfAssignment}".${refreshedContractCount > 0 ? ` Refreshed ${refreshedContractCount} draft/pending contract(s).` : ''}`,
+      positionsUpdated: updatedCount,
+      draftContractsRefreshed: refreshedContractCount
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
+  }
+});
+
 // ⚠️ Position routes with dynamic :id - MUST BE LAST
 router.get('/', verifyToken, async (req, res) => {
   try {
@@ -860,8 +986,22 @@ router.get('/', verifyToken, async (req, res) => {
     
     const positions = await Position.find(query)
       .populate('assignedClauses')
+      .populate('assignedClauseGroups')
       .populate('createdBy', 'username');
-    res.json(positions);
+
+    // Attach the live-resolved clause list (individual + current group
+    // contents) to each position so the frontend always shows what would
+    // actually be used if a contract were generated right now.
+    const positionsWithResolved = await Promise.all(
+      positions.map(async (position) => {
+        const resolvedClauses = await resolvePositionClauses(position);
+        const positionJson = position.toObject();
+        positionJson.resolvedClauses = resolvedClauses;
+        return positionJson;
+      })
+    );
+
+    res.json(positionsWithResolved);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
@@ -871,13 +1011,18 @@ router.get('/', verifyToken, async (req, res) => {
 router.get('/:id', verifyToken, async (req, res) => {
   try {
     const position = await Position.findById(req.params.id)
-      .populate('assignedClauses');
+      .populate('assignedClauses')
+      .populate('assignedClauseGroups');
     
     if (!position) {
       return res.status(404).json({ message: 'Position not found' });
     }
     
-    res.json(position);
+    const resolvedClauses = await resolvePositionClauses(position);
+    const positionJson = position.toObject();
+    positionJson.resolvedClauses = resolvedClauses;
+
+    res.json(positionJson);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
@@ -913,21 +1058,11 @@ router.post('/', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON'), asyn
     const currentUser = await User.findById(req.user.userId);
     
     // Only admins can assign clauses
-    let finalClauses = [];
+    let finalIndividualClauses = [];
+    let finalClauseGroups = [];
     if (req.user.role === 'ADMINISTRATOR') {
-      finalClauses = [...(assignedClauses || [])];
-      
-      // If clause groups are provided, add all their clauses
-      if (clauseGroups && clauseGroups.length > 0) {
-        const groups = await ClauseGroup.find({ _id: { $in: clauseGroups } });
-        groups.forEach(group => {
-          group.clauses.forEach(clauseId => {
-            if (!finalClauses.includes(clauseId.toString())) {
-              finalClauses.push(clauseId);
-            }
-          });
-        });
-      }
+      finalIndividualClauses = [...(assignedClauses || [])];
+      finalClauseGroups = [...(clauseGroups || [])];
     }
     
     const newPosition = new Position({
@@ -938,12 +1073,13 @@ router.post('/', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON'), asyn
       isSpecialSalaryGrade,
       specialSalaryAmount: specialSalaryAmount ? parseFloat(specialSalaryAmount) : undefined, // ← ADD THIS PARSE
       dutiesAndResponsibilities,
-      assignedClauses: finalClauses,
+      assignedClauses: finalIndividualClauses,
+      assignedClauseGroups: finalClauseGroups,
       placeOfAssignment: finalPlaceOfAssignment, // Use the forced assignment for focal persons
       charging,
       premium,
       createdBy: req.user.userId,
-      needsClauseAssignment: req.user.role !== 'ADMINISTRATOR' && finalClauses.length === 0
+      needsClauseAssignment: req.user.role !== 'ADMINISTRATOR' && finalIndividualClauses.length === 0 && finalClauseGroups.length === 0
     });
     
     await newPosition.save();
@@ -965,7 +1101,7 @@ router.post('/', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON'), asyn
     });
     
     // Notify admins if position needs clause assignment
-    if (req.user.role === 'FOCAL_PERSON' && finalClauses.length === 0) {
+    if (req.user.role === 'FOCAL_PERSON' && finalIndividualClauses.length === 0 && finalClauseGroups.length === 0) {
       const admins = await User.find({ role: 'ADMINISTRATOR' });
       const notifications = admins.map(admin => ({
         userId: admin._id,
@@ -1011,7 +1147,11 @@ router.post('/', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON'), asyn
       console.log(`✓ Notified ${financeAndAdmins.length} finance/admins about charging needed`);
     }
     
-    res.status(201).json(newPosition);
+    const resolvedClauses = await resolvePositionClauses(newPosition);
+    const newPositionJson = newPosition.toObject();
+    newPositionJson.resolvedClauses = resolvedClauses;
+
+    res.status(201).json(newPositionJson);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
@@ -1053,33 +1193,37 @@ router.put('/:id', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON', 'FI
     
     // Only admins can modify clause assignments
     if (req.user.role === 'ADMINISTRATOR') {
-      // Handle clause groups if provided
-      if (req.body.clauseGroups && req.body.clauseGroups.length > 0) {
-        const groups = await ClauseGroup.find({ _id: { $in: req.body.clauseGroups } });
-        let allClauses = [...(req.body.assignedClauses || [])];
-        
-        groups.forEach(group => {
-          group.clauses.forEach(clauseId => {
-            if (!allClauses.includes(clauseId.toString())) {
-              allClauses.push(clauseId);
-            }
-          });
-        });
-        
-        updateData.assignedClauses = allClauses;
-        updateData.needsClauseAssignment = allClauses.length === 0;
+      // clauseGroups (possibly empty array, meaning "unlink all groups") is
+      // stored as-is on assignedClauseGroups — we no longer flatten it into
+      // assignedClauses. This is what lets future clause-group edits
+      // propagate to this position automatically.
+      if (req.body.clauseGroups !== undefined) {
+        updateData.assignedClauseGroups = req.body.clauseGroups;
       }
+      if (req.body.assignedClauses !== undefined) {
+        updateData.assignedClauses = req.body.assignedClauses;
+      }
+      delete updateData.clauseGroups; // not a real schema field — assignedClauseGroups is
+
+      const finalIndividual = updateData.assignedClauses !== undefined
+        ? updateData.assignedClauses
+        : existingPosition.assignedClauses;
+      const finalGroups = updateData.assignedClauseGroups !== undefined
+        ? updateData.assignedClauseGroups
+        : existingPosition.assignedClauseGroups;
+      updateData.needsClauseAssignment = (finalIndividual?.length || 0) === 0 && (finalGroups?.length || 0) === 0;
     } else {
       // Non-admins cannot modify clause assignments
       delete updateData.assignedClauses;
       delete updateData.clauseGroups;
+      delete updateData.assignedClauseGroups;
     }
     
     const position = await Position.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true }
-    ).populate('assignedClauses');
+    ).populate('assignedClauses').populate('assignedClauseGroups');
     
     if (!position) {
       return res.status(404).json({ message: 'Position not found' });
@@ -1088,67 +1232,24 @@ router.put('/:id', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON', 'FI
     // ── Temporal integrity: refresh DRAFT/PENDING contracts for this position ──
     //
     // RULE: Contracts that have NOT yet been signed/approved (DRAFT, PENDING)
-    // should always reflect the current position definition — duties, clauses.
+    // should always reflect the current position definition — duties, clauses
+    // (including clauses that come from linked clause groups, resolved live).
     // They have not been legally committed yet so updating them is correct.
     //
     // Contracts in APPROVED, ACTIVE, EXPIRED, TERMINATED, or CANCELLED are
     // NEVER modified — their snapshots are the legal record as of signing date.
-    //
-    // This covers the scenario: "I created a contract for Jul 2 – Dec 31, then
-    // edited the position on Jun 25 (before the contract starts) — the DRAFT
-    // contract should reflect the edited position."
-    const draftStatuses = ['DRAFT', 'PENDING'];
-    const Contract = (await import('../models/Contract.js')).default;
-
-    // Find all unsigned contracts for this positionCode
-    const unsignedContracts = await Contract.find({
-      positionCode: existingPosition.positionCode,
-      status: { $in: draftStatuses }
-    });
-
-    if (unsignedContracts.length > 0) {
-      // Build clauseId → content map from the updated position
-      const clauseContentMap = {};
-      if (position.assignedClauses && position.assignedClauses.length > 0) {
-        position.assignedClauses.forEach(c => {
-          clauseContentMap[c._id.toString()] = c.content;
-        });
-      }
-
-      // New duties from the updated position
-      const newDuties = updateData.dutiesAndResponsibilities || existingPosition.dutiesAndResponsibilities;
-
-      for (const contract of unsignedContracts) {
-        let changed = false;
-
-        // 1. Refresh clause content snapshots
-        contract.clauses = contract.clauses.map(entry => {
-          const idStr = entry.clauseId?.toString();
-          if (idStr && clauseContentMap[idStr] !== undefined) {
-            const newContent = clauseContentMap[idStr];
-            if (entry.customContent !== newContent) {
-              changed = true;
-              return { ...entry.toObject(), customContent: newContent };
-            }
-          }
-          return entry;
-        });
-
-        // 2. Refresh duties and responsibilities
-        const dutiesChanged = JSON.stringify(contract.dutiesAndResponsibilities) !== JSON.stringify(newDuties);
-        if (dutiesChanged) {
-          contract.dutiesAndResponsibilities = newDuties;
-          changed = true;
-        }
-
-        if (changed) {
-          await contract.save();
-          console.log(`↺ Refreshed duties+clauses for contract ${contract.contractNumber} (${contract.status})`);
-        }
-      }
+    const refreshedCount = await cascadeRefreshDraftContractsForPosition(position);
+    if (refreshedCount > 0) {
+      console.log(`↺ Refreshed duties+clauses for ${refreshedCount} draft/pending contract(s) of position ${position.positionCode}`);
     }
 
-    res.json(position);
+    // Attach the resolved (group + individual) clause list for the frontend,
+    // without changing the shape of assignedClauses itself.
+    const resolvedClauses = await resolvePositionClauses(position);
+    const positionJson = position.toObject();
+    positionJson.resolvedClauses = resolvedClauses;
+
+    res.json(positionJson);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }

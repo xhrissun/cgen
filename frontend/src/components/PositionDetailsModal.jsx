@@ -74,14 +74,19 @@ function PositionDetailsModal({ position, onClose }) {
             </div>
           )}
 
-          {/* Assigned Clauses */}
+          {/* Assigned Clauses (live-resolved: individual + current contents of any linked clause groups) */}
           <div>
             <h4 className="text-lg font-semibold mb-3 text-gray-700">
-              Assigned Clauses ({position.assignedClauses?.length || 0})
+              Assigned Clauses ({(position.resolvedClauses || position.assignedClauses || []).length})
             </h4>
-            {position.assignedClauses && position.assignedClauses.length > 0 ? (
+            {position.assignedClauseGroups && position.assignedClauseGroups.length > 0 && (
+              <p className="text-xs text-gray-500 mb-2">
+                Linked clause group(s): {position.assignedClauseGroups.map(g => g.name || g).join(', ')}
+              </p>
+            )}
+            {(position.resolvedClauses || position.assignedClauses || []).length > 0 ? (
               <div className="space-y-2 max-h-64 overflow-y-auto">
-                {position.assignedClauses.map((clause, idx) => (
+                {(position.resolvedClauses || position.assignedClauses).map((clause, idx) => (
                   <div key={idx} className="border rounded-lg p-3 bg-gray-50 hover:bg-gray-100">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">

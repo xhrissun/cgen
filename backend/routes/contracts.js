@@ -20,6 +20,7 @@ import { fileURLToPath } from 'url';
 import { resolveHolidaysInRange } from '../utils/holidayResolver.js';
 import { calculatePremiumBreakdown } from '../utils/salaryCalculator.js';
 import { logActivity } from '../utils/activityLogger.js';
+import { resolvePositionClauses } from '../utils/clauseResolver.js';
 import Notification from '../models/Notification.js';
 
 // Add this AFTER your imports, BEFORE router.get('/:id/generate')
@@ -375,13 +376,14 @@ router.post('/', verifyToken, async (req, res) => {
     console.log(`  - Total Working Days: ${premiumCalc.totalWorkingDays}`);
     console.log(`  - Full Months: ${premiumCalc.fullMonths}, Partial: ${premiumCalc.partialMonths}`);
     
-    // 4. GET POSITION CLAUSES
-    const positionData = await Position.findOne({ positionCode })
-      .populate('assignedClauses');
+    // 4. GET POSITION CLAUSES (live-resolved: individual + current contents
+    //    of any linked clause groups — see clauseResolver.js)
+    const positionData = await Position.findOne({ positionCode });
 
     let clauses = [];
-    if (positionData && positionData.assignedClauses) {
-      clauses = positionData.assignedClauses.map(c => ({ 
+    if (positionData) {
+      const resolvedClauseDocs = await resolvePositionClauses(positionData);
+      clauses = resolvedClauseDocs.map(c => ({
         clauseId: c._id,
         customContent: c.content
       }));

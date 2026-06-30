@@ -38,6 +38,16 @@ function PositionManagement() {
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [clauseSelectionMode, setClauseSelectionMode] = useState('individual');
   const [currentUserRole, setCurrentUserRole] = useState('');
+
+  // Admin-only bulk assignment by Place of Assignment
+  const [showBulkAssign, setShowBulkAssign] = useState(false);
+  const [bulkAssignSaving, setBulkAssignSaving] = useState(false);
+  const [bulkAssign, setBulkAssign] = useState({
+    placeOfAssignment: '',
+    clauseGroups: [],
+    assignedClauses: [],
+    mode: 'replace'
+  });
   
   // Filter states
   const [filterPosition, setFilterPosition] = useState('');
@@ -219,6 +229,7 @@ function PositionManagement() {
 
   const handleEdit = (position) => {
     setEditingPosition(position);
+    const existingGroupIds = (position.assignedClauseGroups || []).map(g => g._id || g);
     setFormData({
       //positionCode: position.positionCode || '',
       title: position.title,
@@ -229,8 +240,8 @@ function PositionManagement() {
       dutiesAndResponsibilities: position.dutiesAndResponsibilities.length > 0 
         ? position.dutiesAndResponsibilities 
         : [''],
-      assignedClauses: position.assignedClauses.map(c => c._id),
-      clauseGroups: [],
+      assignedClauses: (position.assignedClauses || []).map(c => c._id || c),
+      clauseGroups: existingGroupIds,
       placeOfAssignment: position.placeOfAssignment || '',
       charging: position.charging || '',
       premium: position.premium || {
@@ -239,6 +250,9 @@ function PositionManagement() {
         premiumAmount: 0
       }
     });
+    // Show whichever tab actually has something assigned, so existing
+    // assignments aren't silently cleared by switching tabs.
+    setClauseSelectionMode(existingGroupIds.length > 0 ? 'groups' : 'individual');
     setShowForm(true);
   };
 
@@ -325,6 +339,60 @@ function PositionManagement() {
     return Array.from(individualIds);
   };
 
+  const toggleBulkClauseGroup = (groupId) => {
+    setBulkAssign(prev => ({
+      ...prev,
+      clauseGroups: prev.clauseGroups.includes(groupId)
+        ? prev.clauseGroups.filter(id => id !== groupId)
+        : [...prev.clauseGroups, groupId]
+    }));
+  };
+
+  const toggleBulkClause = (clauseId) => {
+    setBulkAssign(prev => ({
+      ...prev,
+      assignedClauses: prev.assignedClauses.includes(clauseId)
+        ? prev.assignedClauses.filter(id => id !== clauseId)
+        : [...prev.assignedClauses, clauseId]
+    }));
+  };
+
+  const handleBulkAssign = async (e) => {
+    e.preventDefault();
+    if (!bulkAssign.placeOfAssignment) {
+      alert('Please select a Place of Assignment.');
+      return;
+    }
+    if (bulkAssign.clauseGroups.length === 0 && bulkAssign.assignedClauses.length === 0) {
+      alert('Please select at least one clause group or individual clause.');
+      return;
+    }
+
+    const verb = bulkAssign.mode === 'replace' ? 'REPLACE' : 'append to';
+    if (!confirm(
+      `This will ${verb} the clause assignment for EVERY position under ` +
+      `"${bulkAssign.placeOfAssignment}". Continue?`
+    )) {
+      return;
+    }
+
+    setBulkAssignSaving(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await api.post('/api/positions/bulk-assign-clauses', bulkAssign, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert(response.data.message);
+      setBulkAssign({ placeOfAssignment: '', clauseGroups: [], assignedClauses: [], mode: 'replace' });
+      setShowBulkAssign(false);
+      fetchPositions();
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setBulkAssignSaving(false);
+    }
+  };
+
   const handleViewDetails = async (position) => {
     try {
       const token = localStorage.getItem('token');
@@ -341,17 +409,143 @@ function PositionManagement() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h3 className="text-xl font-bold">Position Management</h3>
-        <button
-          onClick={() => {
-            setShowForm(!showForm);
-            setEditingPosition(null);
-            resetForm();
-          }}
-          className="btn btn-primary"
-        >
-          {showForm ? 'Cancel' : 'Add Position'}
-        </button>
+        <div className="flex gap-2">
+          {currentUserRole === 'ADMINISTRATOR' && (
+            <button
+              onClick={() => {
+                setShowBulkAssign(!showBulkAssign);
+                setShowForm(false);
+              }}
+              className="btn btn-secondary"
+            >
+              {showBulkAssign ? 'Cancel Bulk Assign' : 'Bulk Assign Clauses'}
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setShowForm(!showForm);
+              setShowBulkAssign(false);
+              setEditingPosition(null);
+              resetForm();
+            }}
+            className="btn btn-primary"
+          >
+            {showForm ? 'Cancel' : 'Add Position'}
+          </button>
+        </div>
       </div>
+
+      {/* Admin-only: bulk assign clause groups / clauses to every position
+          under a chosen Place of Assignment in one action. */}
+      {showBulkAssign && currentUserRole === 'ADMINISTRATOR' && (
+        <div className="card border-2 border-blue-200 bg-blue-50">
+          <h4 className="font-semibold mb-1">Bulk Assign Clauses by Place of Assignment</h4>
+          <p className="text-sm text-gray-600 mb-4">
+            Applies the selected clause group(s)/clause(s) to every position currently
+            assigned to the chosen Place of Assignment. Useful for fixing or setting up
+            many positions at once instead of editing them one by one.
+          </p>
+          <form onSubmit={handleBulkAssign} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Place of Assignment *</label>
+              <select
+                value={bulkAssign.placeOfAssignment}
+                onChange={(e) => setBulkAssign({ ...bulkAssign, placeOfAssignment: e.target.value })}
+                className="input w-full"
+                required
+              >
+                <option value="">Select a Place of Assignment...</option>
+                {PLACE_OF_ASSIGNMENT_OPTIONS.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Clause Groups</label>
+              <div className="border rounded-lg p-3 max-h-56 overflow-y-auto space-y-2 bg-white">
+                {clauseGroups.length === 0 ? (
+                  <p className="text-sm text-gray-500">No clause groups available.</p>
+                ) : clauseGroups.map(group => (
+                  <label key={group._id} className="flex items-start hover:bg-gray-50 p-2 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={bulkAssign.clauseGroups.includes(group._id)}
+                      onChange={() => toggleBulkClauseGroup(group._id)}
+                      className="mr-2 mt-1"
+                    />
+                    <div>
+                      <div className="font-medium text-sm">{group.name}</div>
+                      <div className="text-xs text-gray-500">Contains {group.clauses?.length || 0} clause(s)</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Additional Individual Clauses (optional)</label>
+              <div className="border rounded-lg p-3 max-h-56 overflow-y-auto space-y-2 bg-white">
+                {clauses.map(clause => (
+                  <label key={clause._id} className="flex items-start hover:bg-gray-50 p-2 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={bulkAssign.assignedClauses.includes(clause._id)}
+                      onChange={() => toggleBulkClause(clause._id)}
+                      className="mr-2 mt-1"
+                    />
+                    <div className="text-sm">
+                      Clause {clause.clauseNumber}: {clause.title || 'Untitled'}
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Mode</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="bulkMode"
+                    checked={bulkAssign.mode === 'replace'}
+                    onChange={() => setBulkAssign({ ...bulkAssign, mode: 'replace' })}
+                  />
+                  Replace existing assignment
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="bulkMode"
+                    checked={bulkAssign.mode === 'append'}
+                    onChange={() => setBulkAssign({ ...bulkAssign, mode: 'append' })}
+                  />
+                  Append to existing assignment
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {bulkAssign.mode === 'replace'
+                  ? 'Every matching position\'s clause/group assignment will be overwritten with exactly what you selected above.'
+                  : 'The selected group(s)/clause(s) will be added on top of whatever each matching position already has.'}
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowBulkAssign(false)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={bulkAssignSaving}>
+                {bulkAssignSaving ? <><Spinner size="sm" color="white" />Applying…</> : 'Apply to All Matching Positions'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Filters */}
       {!showForm && (
@@ -684,7 +878,10 @@ function PositionManagement() {
             ) : filteredPositions.length === 0 ? (
               <tr><td colSpan="7"><EmptyState icon="📋" title="No positions found" description="Create a position or adjust your filters." /></td></tr>
             ) : filteredPositions.map(position => {
-              const needsAttention = !position.assignedClauses || position.assignedClauses.length === 0;
+              const totalClauseCount = position.resolvedClauses
+                ? position.resolvedClauses.length
+                : (position.assignedClauses?.length || 0);
+              const needsAttention = totalClauseCount === 0;
               
               return (
                 <tr key={position._id} className={needsAttention ? 'bg-yellow-50' : ''}>
@@ -709,7 +906,12 @@ function PositionManagement() {
                   </td>
                   <td className="text-sm">{position.placeOfAssignment || '-'}</td>
                   <td>
-                    {position.assignedClauses.length}
+                    {totalClauseCount}
+                    {position.assignedClauseGroups?.length > 0 && (
+                      <span className="ml-1 text-xs text-gray-500">
+                        ({position.assignedClauseGroups.length} group{position.assignedClauseGroups.length > 1 ? 's' : ''})
+                      </span>
+                    )}
                     {needsAttention && (
                       <span className="ml-1 text-yellow-600 font-semibold">⚠️</span>
                     )}

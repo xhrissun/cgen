@@ -288,7 +288,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
       let availablePositions = response.data;
       if (userRole === 'FOCAL_PERSON') {
         availablePositions = response.data.filter(p => 
-          p.assignedClauses && p.assignedClauses.length > 0
+          (p.resolvedClauses?.length || p.assignedClauses?.length || 0) > 0
         );
       }
       
@@ -965,12 +965,12 @@ const handleFileUpload = (contractId, event) => {
               <Select
                 value={positions.find(p => p.positionCode === formData.positionCode) ? {
                   value: formData.positionCode,
-                  label: `[${formData.positionCode}] ${positions.find(p => p.positionCode === formData.positionCode)?.title} (Grade ${positions.find(p => p.positionCode === formData.positionCode)?.salaryGrade}) - ${positions.find(p => p.positionCode === formData.positionCode)?.assignedClauses?.length || 0} clauses`
+                  label: `[${formData.positionCode}] ${positions.find(p => p.positionCode === formData.positionCode)?.title} (Grade ${positions.find(p => p.positionCode === formData.positionCode)?.salaryGrade}) - ${positions.find(p => p.positionCode === formData.positionCode)?.resolvedClauses?.length ?? (positions.find(p => p.positionCode === formData.positionCode)?.assignedClauses?.length || 0)} clauses`
                 } : null}
                 onChange={(option) => handlePositionChange(option?.value || '')}
                 options={positions.map(pos => ({
                   value: pos.positionCode,
-                  label: `[${pos.positionCode}] ${pos.title}${pos.description ? ` - ${pos.description}` : ''} (Grade ${pos.salaryGrade}) - ${pos.assignedClauses?.length || 0} clauses`
+                  label: `[${pos.positionCode}] ${pos.title}${pos.description ? ` - ${pos.description}` : ''} (Grade ${pos.salaryGrade}) - ${pos.resolvedClauses?.length ?? (pos.assignedClauses?.length || 0)} clauses`
                 }))}
                 placeholder="Select Position"
                 isClearable

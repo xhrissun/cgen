@@ -22,10 +22,21 @@ const positionSchema = new mongoose.Schema({
   
   dutiesAndResponsibilities: [{ type: String }],
   
-  // Clause assignments - references to Clause model
+  // Ad-hoc/individual clause assignments NOT coming from a clause group.
+  // Clauses that arrive via a group are NOT copied in here anymore — they are
+  // resolved live from assignedClauseGroups (see clauseResolver.js). This is
+  // what makes clause-group edits propagate to every position using that group.
   assignedClauses: [{ 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Clause' 
+  }],
+
+  // Clause groups linked to this position. The actual clauses are resolved
+  // live (not snapshotted) so that editing a group's clauses automatically
+  // updates every position — and every still-unsigned contract — that uses it.
+  assignedClauseGroups: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ClauseGroup'
   }],
   
   placeOfAssignment: String,
