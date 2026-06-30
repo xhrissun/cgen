@@ -4,9 +4,103 @@ import axios from 'axios';
 // In dev, it falls back to empty string so Vite proxy handles /api/... calls
 const BASE_URL = import.meta.env.VITE_API_URL || 'https://cgen-backend-docker-build.onrender.com';
 
-const api = axios.create({
-  baseURL: BASE_URL,
-});
+// ─── In-Memory GET Cache ──────────────────────────────────────────────────────
+// Caches GET responses keyed by full request URL.  Solves the tab-switching
+// slowness: every component re-mounts and re-fetches the same endpoints
+// (/api/users, /api/contracts, /api/positions, etc.).  With the cache, the
+// second+ visits to any tab return instantly from memory.
+//
+// TTL by resource (conservative — data that changes rarely gets longer TTLs):
+//   notifications      20 s  (polled every 30 s anyway)
+//   users / contracts  60 s
+//   change-logs        30 s
+//   positions, salary-grades, clauses, clause-groups,
+//   signatories, holidays   5 min  (admin-managed, change infrequently)
+//
+// Automatic invalidation: any POST / PUT / PATCH / DELETE response clears all
+// cached entries whose URL prefix matches the mutated resource, so the user
+// always sees their own changes immediately.
+//
+// Call clearCache() on logout to prevent one user's data leaking to another.
+
+const TTL_MAP = {
+  'notifications':   20  * 1000,
+  'users':           60  * 1000,
+  'contracts':       60  * 1000,
+  'change-logs':     30  * 1000,
+  'positions':        5  * 60 * 1000,
+  'salary-grades':    5  * 60 * 1000,
+  'clauses':          5  * 60 * 1000,
+  'clause-groups':    5  * 60 * 1000,
+  'signatories':      5  * 60 * 1000,
+  'holidays':         5  * 60 * 1000,
+};
+const DEFAULT_TTL = 60 * 1000;
+
+// { cacheKey → { data, expires } }
+const _store = new Map();
+
+function resolveTTL(urlPath) {
+  for (const [segment, ms] of Object.entries(TTL_MAP)) {
+    if (urlPath.includes(`/${segment}`)) return ms;
+  }
+  return DEFAULT_TTL;
+}
+
+function cacheKey(baseURL, urlPath, params) {
+  const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+  return (baseURL || '') + urlPath + qs;
+}
+
+function invalidateByPrefix(urlPath) {
+  // Extract first path segment after /api/  e.g. /api/positions/123 → 'positions'
+  const m = urlPath.match(/\/api\/([^/?]+)/);
+  if (!m) return;
+  const prefix = `/api/${m[1]}`;
+  for (const k of _store.keys()) {
+    if (k.includes(prefix)) _store.delete(k);
+  }
+}
+
+/** Clear entire cache — call on logout */
+export function clearCache() {
+  _store.clear();
+}
+
+/** Force-invalidate a resource prefix, e.g. invalidateCache('contracts') */
+export function invalidateCache(prefix) {
+  if (!prefix) { _store.clear(); return; }
+  for (const k of _store.keys()) {
+    if (k.includes(`/api/${prefix}`)) _store.delete(k);
+  }
+}
+
+// ─── Axios instance ───────────────────────────────────────────────────────────
+const _axios = axios.create({ baseURL: BASE_URL });
+
+// Wrap _axios so GET requests go through the cache.
+// All other methods pass through and invalidate cache on success.
+const api = {
+  // ── GET — check cache first, fall back to real request ──
+  async get(url, config = {}) {
+    const key = cacheKey(BASE_URL, url, config.params);
+    const hit = _store.get(key);
+    if (hit && Date.now() < hit.expires) {
+      // Return a response-shaped object; callers only ever use .data
+      return { data: hit.data, status: 200, _fromCache: true };
+    }
+
+    const response = await _axios.get(url, config);
+    _store.set(key, { data: response.data, expires: Date.now() + resolveTTL(url) });
+    return response;
+  },
+
+  // ── Mutating methods — pass through and bust the cache ──
+  async post(url, data, config)   { const r = await _axios.post(url, data, config);   invalidateByPrefix(url); return r; },
+  async put(url, data, config)    { const r = await _axios.put(url, data, config);    invalidateByPrefix(url); return r; },
+  async patch(url, data, config)  { const r = await _axios.patch(url, data, config);  invalidateByPrefix(url); return r; },
+  async delete(url, config)       { const r = await _axios.delete(url, config);       invalidateByPrefix(url); return r; },
+};
 
 export default api;
 
@@ -14,8 +108,6 @@ export default api;
 export const API_BASE = BASE_URL;
 
 // R2 public base URL injected at build time (optional — set VITE_R2_PUBLIC_URL in frontend .env)
-// When set: photos are served directly from R2 (faster, no backend hop)
-// When NOT set: photos are proxied through the backend (works even if bucket is not public)
 const R2_PUBLIC_URL = import.meta.env.VITE_R2_PUBLIC_URL || '';
 
 /**
@@ -35,63 +127,38 @@ const R2_PUBLIC_URL = import.meta.env.VITE_R2_PUBLIC_URL || '';
 export const getDocumentUrl = (filenameOrUrl, userId, token) => {
   if (!filenameOrUrl) return null;
 
-  // (a) Already a full URL
   if (filenameOrUrl.startsWith('http')) {
-    // Detect private R2 storage endpoint — browsers cannot access this directly.
-    // multer-s3 used to store file.location which pointed to the private endpoint.
-    // Extract the key and route through the backend proxy instead.
     const isPrivateR2 = filenameOrUrl.includes('.r2.cloudflarestorage.com');
-
     if (isPrivateR2) {
-      // Extract the key: URL is https://<accountId>.r2.cloudflarestorage.com/<bucket>/<key>
-      // or sometimes https://<accountId>.r2.cloudflarestorage.com/<key>
       try {
         const parsed = new URL(filenameOrUrl);
-        const parts = parsed.pathname.replace(/^\//, '').split('/');
-        // If first segment looks like a bucket name (no extension), strip it
-        const key = parts.length > 1 && !parts[0].includes('.') ? parts.slice(1).join('/') : parts.join('/');
-        if (key && userId && token) {
+        const parts  = parsed.pathname.replace(/^\//, '').split('/');
+        const key    = parts.length > 1 && !parts[0].includes('.') ? parts.slice(1).join('/') : parts.join('/');
+        if (key && userId && token)
           return `${BASE_URL}/api/users/${userId}/photo/${key}?token=${token}`;
-        }
-      } catch (_) { /* fall through */ }
+      } catch (_) {}
     }
-
-    // Public URL — if R2_PUBLIC_URL is set, trust it's accessible directly
     if (R2_PUBLIC_URL) return filenameOrUrl;
-
-    // No public URL configured — proxy through backend
     try {
       const parsed = new URL(filenameOrUrl);
-      const key = parsed.pathname.replace(/^\//, '');
-      if (key && userId && token) {
+      const key    = parsed.pathname.replace(/^\//, '');
+      if (key && userId && token)
         return `${BASE_URL}/api/users/${userId}/photo/${key}?token=${token}`;
-      }
-    } catch (_) { /* fall through */ }
-
+    } catch (_) {}
     return filenameOrUrl;
   }
 
-  // (b) R2 key — path contains a slash, e.g. "profile-photos/file.jpg"
   if (filenameOrUrl.includes('/')) {
-    if (R2_PUBLIC_URL) {
-      // Bucket is public — build direct R2 URL
-      return `${R2_PUBLIC_URL}/${filenameOrUrl}`;
-    }
-    // No public URL — proxy through backend with credentials
-    if (userId && token) {
+    if (R2_PUBLIC_URL) return `${R2_PUBLIC_URL}/${filenameOrUrl}`;
+    if (userId && token)
       return `${BASE_URL}/api/users/${userId}/photo/${filenameOrUrl}?token=${token}`;
-    }
   }
 
-  // (c) Legacy short filename (no slash) — proxy through existing documents route
   const t = Date.now();
   const v = Math.random().toString(36).substring(2, 12);
   return `${BASE_URL}/api/users/${userId}/documents/${filenameOrUrl}?token=${token}&t=${t}&v=${v}`;
 };
 
-/**
- * Open or download a document. Handles both R2 URLs and legacy filenames.
- */
 export const openDocument = (filenameOrUrl, userId, token) => {
   const url = getDocumentUrl(filenameOrUrl, userId, token);
   if (url) window.open(url, '_blank');

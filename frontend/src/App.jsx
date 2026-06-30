@@ -7,6 +7,7 @@ import ContractualDashboard from './components/ContractualDashboard';
 import FocalPersonDashboard from './components/FocalPersonDashboard';
 import FinanceOfficerDashboard from './components/FinanceOfficerDashboard';
 import { ToastProvider } from './components/ui.jsx';
+import { clearCache } from './api.js';
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -54,6 +55,7 @@ function App() {
   };
 
   const handleLogout = () => {
+    clearCache();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
