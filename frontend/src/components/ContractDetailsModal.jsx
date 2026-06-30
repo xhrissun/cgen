@@ -417,9 +417,9 @@ function ContractDetailsModal({ contract, onClose }) {
             <div>
               <SectionHeader>Duties and Responsibilities ({contract.dutiesAndResponsibilities.length})</SectionHeader>
               <Panel style={{ maxHeight: 220, overflowY: 'auto' }}>
-                <ol style={{ margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <ol style={{ margin: 0, padding: '0 0 0 22px', display: 'flex', flexDirection: 'column', gap: 8, listStyleType: 'lower-alpha' }}>
                   {contract.dutiesAndResponsibilities.map((duty, idx) => (
-                    <li key={idx} style={{ fontSize: 13, color: D.textSecondary, lineHeight: 1.6 }}>{duty}</li>
+                    <li key={idx} style={{ fontSize: 13, color: D.textSecondary, lineHeight: 1.6, paddingLeft: 4 }}>{duty}</li>
                   ))}
                 </ol>
               </Panel>

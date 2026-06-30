@@ -17,13 +17,14 @@ export const calculateWorkingDays = (startDate, endDate, holidays = []) => {
   const start = new Date(startDate);
   const end = new Date(endDate);
   
-  // Create a set of holiday dates for quick lookup (UTC dates only)
-  const holidayDates = new Set(
-    holidays.map(h => {
-      const d = new Date(h.date);
-      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-    })
-  );
+  // Build a map of holiday dates -> holiday details (name, type) for quick lookup (UTC dates only)
+  const holidayMap = new Map();
+  holidays.forEach(h => {
+    const d = new Date(h.date);
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    holidayMap.set(key, { date: key, name: h.name, type: h.type });
+  });
+  const holidayDates = new Set(holidayMap.keys());
   
   console.log('Holiday dates set:', Array.from(holidayDates));
   
@@ -76,7 +77,7 @@ export const calculateWorkingDays = (startDate, endDate, holidays = []) => {
       if (isWeekend) weekendCount++;
       if (isHoliday) {
         holidayCount++;
-        monthlyBreakdown[monthKey].holidaysInMonth.push(dateStr);
+        monthlyBreakdown[monthKey].holidaysInMonth.push(holidayMap.get(dateStr) || { date: dateStr, name: 'Holiday', type: 'REGULAR' });
       }
       
       if (!isWeekend && !isHoliday) {
