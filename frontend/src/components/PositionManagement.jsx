@@ -906,14 +906,16 @@ function PositionManagement() {
                   </td>
                   <td className="text-sm">{position.placeOfAssignment || '-'}</td>
                   <td>
-                    {totalClauseCount}
+                    <div>
+                      {totalClauseCount} clause{totalClauseCount === 1 ? '' : 's'}
+                      {needsAttention && (
+                        <span className="ml-1 text-yellow-600 font-semibold">⚠️</span>
+                      )}
+                    </div>
                     {position.assignedClauseGroups?.length > 0 && (
-                      <span className="ml-1 text-xs text-gray-500">
-                        ({position.assignedClauseGroups.length} group{position.assignedClauseGroups.length > 1 ? 's' : ''})
-                      </span>
-                    )}
-                    {needsAttention && (
-                      <span className="ml-1 text-yellow-600 font-semibold">⚠️</span>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {position.assignedClauseGroups.map(g => g.name || g).join(', ')}
+                      </div>
                     )}
                   </td>
                   <td>
