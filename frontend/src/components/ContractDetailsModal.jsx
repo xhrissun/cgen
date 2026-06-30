@@ -244,17 +244,17 @@ function ContractDetailsModal({ contract, onClose }) {
                 {!contract.isSpecialSalaryGrade && (
                   <>
                     <InfoCell label="Monthly Salary (Contract)">
-                      ₱{contract.monthlySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                      ₱{contract.monthlySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </InfoCell>
                     <InfoCell label="Daily Salary (Contract)">
-                      ₱{contract.dailySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                      ₱{contract.dailySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </InfoCell>
                     <InfoCell label="Monthly Premium">
-                      ₱{contract.monthlyPremium.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                      ₱{contract.monthlyPremium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </InfoCell>
                     <InfoCell label={`${contract.bonusType} Premium`}>
                       <span style={{ fontSize: 15, fontWeight: 700, color: D.green }}>
-                        ₱{contract.finalPremium?.toLocaleString('en-PH', { minimumFractionDigits: 2 }) || '0.00'}
+                        ₱{contract.finalPremium?.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                       </span>
                     </InfoCell>
                   </>
@@ -309,10 +309,10 @@ function ContractDetailsModal({ contract, onClose }) {
                                   </td>
                                   <td style={{ padding: '10px 14px', textAlign: 'center', color: D.textSecondary }}>{m.totalWorkingDaysInMonth} / {m.actualWorkingDaysInRange}</td>
                                   <td style={{ padding: '10px 14px', textAlign: 'right', color: D.textSecondary, fontFamily: 'monospace' }}>
-                                    ₱{(m.dailyPremiumRate || 0).toLocaleString('en-PH', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                                    ₱{(m.dailyPremiumRate || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
                                   <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: D.textPrimary, fontFamily: 'monospace' }}>
-                                    ₱{(m.calculatedPremium || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                                    ₱{(m.calculatedPremium || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
                                 </tr>
                                 {m.holidaysInMonth && m.holidaysInMonth.length > 0 && (
@@ -346,7 +346,7 @@ function ContractDetailsModal({ contract, onClose }) {
                               <td style={{ padding: '11px 14px', textAlign: 'center', fontWeight: 700, color: D.textPrimary }}>{contract.premiumSummary?.totalWorkingDays} days</td>
                               <td />
                               <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 800, color: D.green, fontSize: 14, fontFamily: 'monospace' }}>
-                                ₱{contract.finalPremium?.toLocaleString('en-PH', { minimumFractionDigits: 2 }) || '0.00'}
+                                ₱{contract.finalPremium?.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                               </td>
                             </tr>
                           </tfoot>

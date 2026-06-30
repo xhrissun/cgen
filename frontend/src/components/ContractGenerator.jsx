@@ -985,25 +985,25 @@ const handleFileUpload = (contractId, event) => {
                         <div>
                           <p className="text-xs text-gray-500 uppercase tracking-wide">Monthly Salary (Contract)</p>
                           <p className="text-base font-semibold">
-                            ₱{previewData.monthlySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                            ₱{previewData.monthlySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500 uppercase tracking-wide">Daily Salary (Contract)</p>
                           <p className="text-base font-semibold">
-                            ₱{previewData.dailySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                            ₱{previewData.dailySalaryAsPerContract.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500 uppercase tracking-wide">Monthly Premium</p>
                           <p className="text-base font-semibold">
-                            ₱{previewData.monthlyPremium.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                            ₱{previewData.monthlyPremium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500 uppercase tracking-wide">{previewData.bonusType} Premium</p>
                           <p className="text-base font-semibold text-green-700">
-                            ₱{previewData.totalPremium.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                            ₱{previewData.totalPremium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
                         </div>
                       </>
@@ -1062,7 +1062,7 @@ const handleFileUpload = (contractId, event) => {
                                       {m.totalWorkingDaysInMonth} / {m.actualWorkingDaysInRange}
                                     </td>
                                     <td className="px-3 py-2 text-right text-gray-700">
-                                      ₱{m.dailyPremiumRate.toLocaleString('en-PH', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                                      ₱{m.dailyPremiumRate.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </td>
                                     <td className="px-3 py-2 text-right font-semibold">
                                       ₱{m.calculatedPremium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

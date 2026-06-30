@@ -362,7 +362,7 @@ function FinanceOfficerDashboard({ user }) {
                         <label className="block text-sm font-medium mb-1">D. Monthly Salary as per Contract</label>
                         <input
                           type="text"
-                          value={`₱${parseFloat(salaryGradeForm.monthlySalaryAsPerContract || 0).toLocaleString('en-PH', {minimumFractionDigits: 2})}`}
+                          value={`₱${parseFloat(salaryGradeForm.monthlySalaryAsPerContract || 0).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
                           className="input bg-white"
                           readOnly
                         />
@@ -372,7 +372,7 @@ function FinanceOfficerDashboard({ user }) {
                         <label className="block text-sm font-medium mb-1">E. Daily Salary as per Contract</label>
                         <input
                           type="text"
-                          value={`₱${parseFloat(salaryGradeForm.dailySalaryAsPerContract || 0).toLocaleString('en-PH', {minimumFractionDigits: 2})}`}
+                          value={`₱${parseFloat(salaryGradeForm.dailySalaryAsPerContract || 0).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
                           className="input bg-white"
                           readOnly
                         />
@@ -382,7 +382,7 @@ function FinanceOfficerDashboard({ user }) {
                         <label className="block text-sm font-medium mb-1">F. Monthly Premium</label>
                         <input
                           type="text"
-                          value={`₱${parseFloat(salaryGradeForm.monthlyPremium || 0).toLocaleString('en-PH', {minimumFractionDigits: 2})}`}
+                          value={`₱${parseFloat(salaryGradeForm.monthlyPremium || 0).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
                           className="input bg-white"
                           readOnly
                         />
@@ -467,12 +467,12 @@ function FinanceOfficerDashboard({ user }) {
                     return (
                       <tr key={sg._id}>
                         <td className="font-semibold">{sg.grade}</td>
-                        <td>₱{basicSalary.toLocaleString('en-PH', {minimumFractionDigits: 2})}</td>
-                        <td>₱{grossPremium.toLocaleString('en-PH', {minimumFractionDigits: 2})}</td>
-                        <td>₱{totalDeductions.toLocaleString('en-PH', {minimumFractionDigits: 2})}</td>
-                        <td>₱{monthlySalary.toLocaleString('en-PH', {minimumFractionDigits: 2})}</td>
-                        <td>₱{dailySalary.toLocaleString('en-PH', {minimumFractionDigits: 2})}</td>
-                        <td>₱{monthlyPremium.toLocaleString('en-PH', {minimumFractionDigits: 2})}</td>
+                        <td>₱{basicSalary.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td>₱{grossPremium.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td>₱{totalDeductions.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td>₱{monthlySalary.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td>₱{dailySalary.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td>₱{monthlyPremium.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                         <td>
                           {sg.isSpecialSalaryGrade ? (
                             <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
@@ -530,7 +530,7 @@ function FinanceOfficerDashboard({ user }) {
                       <td>Grade {position.salaryGrade}</td>
                       <td>
                         {salaryGrade ? (
-                          <span>₱{salaryGrade.monthlyPremium.toLocaleString('en-PH', {minimumFractionDigits: 2})}</span>
+                          <span>₱{salaryGrade.monthlyPremium.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                         ) : (
                           <span className="text-gray-400">N/A</span>
                         )}

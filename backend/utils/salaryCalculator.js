@@ -17,13 +17,18 @@ export const calculateWorkingDays = (startDate, endDate, holidays = []) => {
   const start = new Date(startDate);
   const end = new Date(endDate);
   
-  // Create a set of holiday dates for quick lookup (UTC dates only)
-  const holidayDates = new Set(
-    holidays.map(h => {
-      const d = new Date(h.date);
-      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-    })
-  );
+  // Create a set of holiday dates for quick lookup (UTC dates only), and a
+  // parallel lookup map so we can attach the holiday's name/type when
+  // building each month's breakdown (previously only the bare date string
+  // was kept, so the UI's per-month holiday list had no name/type to show).
+  const holidayDates = new Set();
+  const holidayDetailsByDate = new Map();
+  holidays.forEach(h => {
+    const d = new Date(h.date);
+    const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    holidayDates.add(dateStr);
+    holidayDetailsByDate.set(dateStr, { date: dateStr, name: h.name, type: h.type });
+  });
   
   console.log('Holiday dates set:', Array.from(holidayDates));
   
@@ -76,7 +81,9 @@ export const calculateWorkingDays = (startDate, endDate, holidays = []) => {
       if (isWeekend) weekendCount++;
       if (isHoliday) {
         holidayCount++;
-        monthlyBreakdown[monthKey].holidaysInMonth.push(dateStr);
+        monthlyBreakdown[monthKey].holidaysInMonth.push(
+          holidayDetailsByDate.get(dateStr) || { date: dateStr, name: 'Holiday', type: 'REGULAR' }
+        );
       }
       
       if (!isWeekend && !isHoliday) {

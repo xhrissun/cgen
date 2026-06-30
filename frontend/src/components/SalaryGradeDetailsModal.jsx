@@ -44,7 +44,7 @@ function SalaryGradeDetailsModal({ salaryGrade, onClose }) {
             <h4 className="text-lg font-semibold mb-3 text-gray-700">A. Basic Salary</h4>
             <div className="bg-blue-50 p-4 rounded-lg">
               <p className="text-3xl font-bold text-blue-900">
-                ₱{salaryGrade.basicSalary.toLocaleString('en-PH', {minimumFractionDigits: 2})}
+                ₱{salaryGrade.basicSalary.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
               </p>
             </div>
           </div>
@@ -56,7 +56,7 @@ function SalaryGradeDetailsModal({ salaryGrade, onClose }) {
                 <h4 className="text-lg font-semibold mb-3 text-gray-700">B. Gross Premium (15% of Basic Salary)</h4>
                 <div className="bg-green-50 p-4 rounded-lg">
                   <p className="text-2xl font-bold text-green-900">
-                    ₱{salaryGrade.grossPremium.toLocaleString('en-PH', {minimumFractionDigits: 2})}
+                    ₱{salaryGrade.grossPremium.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                   </p>
                 </div>
               </div>
@@ -69,25 +69,25 @@ function SalaryGradeDetailsModal({ salaryGrade, onClose }) {
                     <div className="flex justify-between">
                       <span className="text-sm font-medium text-gray-700">SSS:</span>
                       <span className="font-semibold">
-                        ₱{deductions.sss.toLocaleString('en-PH', {minimumFractionDigits: 2})}
+                        ₱{deductions.sss.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm font-medium text-gray-700">Pag-IBIG:</span>
                       <span className="font-semibold">
-                        ₱{deductions.pagibig.toLocaleString('en-PH', {minimumFractionDigits: 2})}
+                        ₱{deductions.pagibig.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm font-medium text-gray-700">PhilHealth:</span>
                       <span className="font-semibold">
-                        ₱{deductions.philhealth.toLocaleString('en-PH', {minimumFractionDigits: 2})}
+                        ₱{deductions.philhealth.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                       </span>
                     </div>
                   </div>
                   <div className="border-t pt-2 flex justify-between font-bold text-red-900">
                     <span>Total Deductions:</span>
-                    <span>₱{totalDeductions.toLocaleString('en-PH', {minimumFractionDigits: 2})}</span>
+                    <span>₱{totalDeductions.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                   </div>
                 </div>
               </div>
@@ -103,7 +103,7 @@ function SalaryGradeDetailsModal({ salaryGrade, onClose }) {
                         <p className="text-xs text-gray-500">Basic Salary + Deductions</p>
                       </div>
                       <p className="text-xl font-bold text-purple-900">
-                        ₱{salaryGrade.monthlySalaryAsPerContract.toLocaleString('en-PH', {minimumFractionDigits: 2})}
+                        ₱{salaryGrade.monthlySalaryAsPerContract.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                       </p>
                     </div>
                   </div>
@@ -115,7 +115,7 @@ function SalaryGradeDetailsModal({ salaryGrade, onClose }) {
                         <p className="text-xs text-gray-500">Monthly Salary ÷ 22 days</p>
                       </div>
                       <p className="text-xl font-bold text-purple-900">
-                        ₱{salaryGrade.dailySalaryAsPerContract.toLocaleString('en-PH', {minimumFractionDigits: 2})}
+                        ₱{salaryGrade.dailySalaryAsPerContract.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                       </p>
                     </div>
                   </div>
@@ -127,7 +127,7 @@ function SalaryGradeDetailsModal({ salaryGrade, onClose }) {
                         <p className="text-xs text-gray-500">Gross Premium - Deductions</p>
                       </div>
                       <p className="text-xl font-bold text-purple-900">
-                        ₱{salaryGrade.monthlyPremium.toLocaleString('en-PH', {minimumFractionDigits: 2})}
+                        ₱{salaryGrade.monthlyPremium.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                       </p>
                     </div>
                   </div>

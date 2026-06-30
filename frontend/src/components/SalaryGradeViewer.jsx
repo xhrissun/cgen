@@ -171,12 +171,12 @@ function SalaryGradeViewer() {
                   return (
                     <tr key={sg._id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{sg.grade}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">₱{basic.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">₱{gross.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">₱{totalDed.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
-                      <td className="px-6 py-4 whitespace-nowrap font-medium">₱{monthly.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">₱{daily.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">₱{premium.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">₱{basic.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">₱{gross.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">₱{totalDed.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-6 py-4 whitespace-nowrap font-medium">₱{monthly.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">₱{daily.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">₱{premium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {sg.isSpecialSalaryGrade ? (
                           <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">

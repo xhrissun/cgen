@@ -118,7 +118,7 @@ function PositionDetailsModal({ position, onClose }) {
                 <div>
                   <label className="text-sm font-medium text-gray-600">Premium Amount</label>
                   <p className="font-semibold">
-                    ₱{position.premium.premiumAmount?.toLocaleString('en-PH', {minimumFractionDigits: 2})}
+                    ₱{position.premium.premiumAmount?.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                   </p>
                 </div>
               </div>
