@@ -621,7 +621,7 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
     if (rawContent.includes('{dutiesAndResponsibilities}')) {
       let dutiesText = '';
       if (contract.dutiesAndResponsibilities && contract.dutiesAndResponsibilities.length > 0) {
-        dutiesText = '\n\\begin{enumerate}[label=\\Alph*.,leftmargin=0.5in,itemsep=0pt,parsep=0pt,topsep=0pt]\n';
+        dutiesText = '\n\\begin{enumerate}[label=\\alph*),leftmargin=0.5in,itemsep=0pt,parsep=0pt,topsep=0pt]\n';
         contract.dutiesAndResponsibilities.forEach((duty, idx) => {
           if (duty.trim()) {
             const wrappedDuty = wrapLongText(duty.trim(), 85);

@@ -680,7 +680,7 @@ router.get('/clause-groups/:id/template', verifyToken, async (req, res) => {
       // duties placeholder
       if (rawContent.includes('{dutiesAndResponsibilities}')) {
         const dutiesPlaceholder =
-          '\n\\begin{enumerate}[label=\\Alph*.,leftmargin=0.5in,itemsep=0pt,parsep=0pt,topsep=0pt]\n' +
+          '\n\\begin{enumerate}[label=\\alph*),leftmargin=0.5in,itemsep=0pt,parsep=0pt,topsep=0pt]\n' +
           '\\item \\lbrack{}DUTY A\\rbrack{};\n' +
           '\\item \\lbrack{}DUTY B\\rbrack{};\n' +
           '\\item \\lbrack{}DUTY C\\rbrack{}; and\n' +
