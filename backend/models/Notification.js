@@ -19,6 +19,7 @@ const notificationSchema = new mongoose.Schema({
       'CONTRACT_CREATED',
       'CONTRACT_UPDATED',
       'CONTRACT_DELETED',
+      'CONTRACT_CANCELLED',
       'CHARGING_NEEDED',
       'SALARY_GRADE_CREATED',
       'SALARY_GRADE_UPDATED',

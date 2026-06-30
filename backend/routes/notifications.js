@@ -1,70 +1,53 @@
-import mongoose from 'mongoose';
+import express from 'express';
+import { errDetail } from '../utils/errors.js';
+import Notification from '../models/Notification.js';
+import { verifyToken } from './auth.js';
 
-const notificationSchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  type: {
-    type: String,
-    enum: [
-      'POSITION_NEEDS_CLAUSES',
-      'USER_CREATED',
-      'USER_UPDATED',
-      'USER_DELETED',
-      'POSITION_CREATED',
-      'POSITION_UPDATED',
-      'POSITION_DELETED',
-      'CONTRACT_CREATED',
-      'CONTRACT_UPDATED',
-      'CONTRACT_DELETED',
-      'CONTRACT_CANCELLED',
-      'CHARGING_NEEDED',
-      'SALARY_GRADE_CREATED',
-      'SALARY_GRADE_UPDATED',
-      'CLAUSE_CREATED',
-      'CLAUSE_UPDATED',
-      'CLAUSE_DELETED',
-      'HOLIDAY_CREATED',
-      'HOLIDAY_UPDATED',
-      'HOLIDAY_DELETED'
-    ],
-    required: true
-  },
-  title: {
-    type: String,
-    required: true
-  },
-  message: {
-    type: String,
-    required: true
-  },
-  relatedId: {
-    type: mongoose.Schema.Types.ObjectId,
-    refPath: 'relatedModel'
-  },
-  relatedModel: {
-    type: String,
-    enum: ['User', 'Position', 'Contract', 'SalaryGrade', 'Clause', 'Holiday']
-  },
-  actionBy: {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    username: String,
-    role: String,
-    placeOfAssignment: String
-  },
-  isRead: {
-    type: Boolean,
-    default: false
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
+const router = express.Router();
+
+// Get user's notifications
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    const notifications = await Notification.find({ userId: req.user.userId })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+    res.json(notifications);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });
 
-// Performance indexes
-notificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 }); // covers every notification fetch
+// Mark notification as read
+router.patch('/:id/read', verifyToken, async (req, res) => {
+  try {
+    const notification = await Notification.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user.userId },
+      { isRead: true },
+      { new: true }
+    );
+    
+    if (!notification) {
+      return res.status(404).json({ message: 'Notification not found' });
+    }
+    
+    res.json(notification);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
+  }
+});
 
-export default mongoose.model('Notification', notificationSchema);
+// Mark all as read
+router.patch('/read-all', verifyToken, async (req, res) => {
+  try {
+    await Notification.updateMany(
+      { userId: req.user.userId, isRead: false },
+      { isRead: true }
+    );
+    res.json({ message: 'All notifications marked as read' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
+  }
+});
+
+export default router;
