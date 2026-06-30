@@ -3,6 +3,14 @@
 import mongoose from 'mongoose';
 
 const contractSchema = new mongoose.Schema({
+  // NOTE: Contracts intentionally do NOT denormalize username or role.
+  // userId is the only link to User, and all contract-relevant data
+  // (position, salary, signatories, place of assignment, etc.) is
+  // snapshotted into this document at generation time below.
+  // This means changing a user's username or role (e.g. for a Regional
+  // Special Order reclassification) NEVER alters, hides, or breaks any
+  // previously generated contract — past contracts remain fully intact
+  // and viewable exactly as they were generated, indexed by userId.
   contractNumber: { type: String, unique: true },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   mode: { type: String, enum: ['NEW', 'RENEWAL'], required: true },

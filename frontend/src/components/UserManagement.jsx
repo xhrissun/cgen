@@ -502,14 +502,19 @@ function UserManagement() {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Username</label>
+                <label className="block text-sm font-medium mb-1">
+                  Username
+                  {editingUser && currentUserRole !== 'ADMINISTRATOR' && (
+                    <span className="text-xs text-gray-400 ml-2">(Admin only)</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   value={formData.username}
                   onChange={(e) => setFormData({...formData, username: e.target.value})}
                   className="input"
                   required
-                  disabled={editingUser}
+                  disabled={editingUser && currentUserRole !== 'ADMINISTRATOR'}
                 />
               </div>
                 <div>
