@@ -123,9 +123,18 @@ router.get('/user-data', verifyToken, async (req, res) => {
 // Get profile photo for EODB
 router.get('/photo/:filename', verifyToken, async (req, res) => {
   try {
-    const { filename } = req.params;
-    const filePath = path.join(process.cwd(), 'uploads', filename);
-    
+    const uploadsDir = path.join(process.cwd(), 'uploads');
+    // Strip any directory components from the requested filename so a value
+    // like "../../.env" or "..%2F..%2Fserver.js" can't escape the uploads
+    // folder (path traversal).
+    const safeFilename = path.basename(req.params.filename);
+    const filePath = path.join(uploadsDir, safeFilename);
+
+    // Belt-and-suspenders: confirm the resolved path is still inside uploadsDir.
+    if (!filePath.startsWith(uploadsDir + path.sep)) {
+      return res.status(400).json({ message: 'Invalid filename' });
+    }
+
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ message: 'Photo not found' });
     }

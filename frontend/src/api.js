@@ -83,11 +83,20 @@ const _axios = axios.create({ baseURL: BASE_URL });
 const api = {
   // ── GET — check cache first, fall back to real request ──
   async get(url, config = {}) {
+    // Binary/file downloads (e.g. PDF generation) must never be served from
+    // or written to the cache: the cached stub has no `.headers`, which
+    // breaks callers that read response.headers['content-disposition'], and
+    // a "generate PDF" call should always hit the server fresh anyway.
+    const isBinary = config.responseType && config.responseType !== 'json';
+    if (isBinary) {
+      return _axios.get(url, config);
+    }
+
     const key = cacheKey(BASE_URL, url, config.params);
     const hit = _store.get(key);
     if (hit && Date.now() < hit.expires) {
       // Return a response-shaped object; callers only ever use .data
-      return { data: hit.data, status: 200, _fromCache: true };
+      return { data: hit.data, status: 200, headers: {}, _fromCache: true };
     }
 
     const response = await _axios.get(url, config);
