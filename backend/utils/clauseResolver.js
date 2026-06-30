@@ -31,9 +31,24 @@ import Clause from '../models/Clause.js';
  *   (array of ObjectId|string).
  * @returns {Promise<Array<Clause>>} resolved, deduplicated, ordered Clause docs
  */
+/**
+ * Extracts a plain id string from either a raw ObjectId/string, or an
+ * already-populated Mongoose document (e.g. when the caller did
+ * .populate('assignedClauses') before passing the position in here).
+ * Without this, calling .toString() directly on a populated document
+ * stringifies the WHOLE document (via its inspect-based toString) instead
+ * of its id, which then fails as an invalid ObjectId in a later $in query.
+ */
+function toIdString(item) {
+  if (item == null) return '';
+  if (typeof item === 'string') return item;
+  if (item._id) return item._id.toString(); // populated document
+  return item.toString(); // raw ObjectId
+}
+
 export async function resolvePositionClauses(position) {
-  const groupIds = (position.assignedClauseGroups || []).map(id => id.toString());
-  const individualIds = (position.assignedClauses || []).map(id => id.toString());
+  const groupIds = (position.assignedClauseGroups || []).map(toIdString);
+  const individualIds = (position.assignedClauses || []).map(toIdString);
 
   const seen = new Set();
   const orderedIds = [];
@@ -47,7 +62,7 @@ export async function resolvePositionClauses(position) {
       const group = groupsById.get(gid);
       if (!group) return; // group was deleted — silently skip, don't break the position
       (group.clauses || []).forEach(clauseId => {
-        const idStr = clauseId.toString();
+        const idStr = toIdString(clauseId);
         if (!seen.has(idStr)) {
           seen.add(idStr);
           orderedIds.push(idStr);
