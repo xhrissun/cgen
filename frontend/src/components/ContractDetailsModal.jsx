@@ -82,14 +82,37 @@ function Panel({ children, style }) {
   );
 }
 
-function ContractDetailsModal({ contract, onClose }) {
+function ContractDetailsModal({ contract: initialContract, onClose }) {
   const [previewingPDF, setPreviewingPDF] = useState(false);
   const [pdfBlob, setPdfBlob] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [expandedMonths, setExpandedMonths] = useState({});
+  const [contract, setContract] = useState(initialContract);
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcMessage, setRecalcMessage] = useState(null);
 
   const toggleMonthCalendar = (monthKey) => {
     setExpandedMonths(prev => ({ ...prev, [monthKey]: !prev[monthKey] }));
+  };
+
+  const handleRecalculateHolidays = async () => {
+    if (!contract?._id) return;
+    setRecalculating(true);
+    setRecalcMessage(null);
+    try {
+      const response = await api.post(`/api/contracts/${contract._id}/recalculate-holidays`);
+      setContract(response.data.contract);
+      const { oldPremium, newPremium } = response.data;
+      setRecalcMessage(
+        oldPremium === newPremium
+          ? 'Already up to date — no holiday changes affected this contract.'
+          : `Updated: ₱${oldPremium?.toFixed(2)} → ₱${newPremium.toFixed(2)}`
+      );
+    } catch (err) {
+      setRecalcMessage(err.response?.data?.message || 'Recalculation failed.');
+    } finally {
+      setRecalculating(false);
+    }
   };
 
   if (!contract) return null;
@@ -291,7 +314,22 @@ function ContractDetailsModal({ contract, onClose }) {
                   {/* Monthly Breakdown Table */}
                   {contract.workingDaysBreakdown && contract.workingDaysBreakdown.length > 0 && (
                     <div style={{ borderTop: `1px solid ${D.border}`, paddingTop: 18, marginBottom: 18 }}>
-                      <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: D.textMuted, marginBottom: 12 }}>Monthly Premium Breakdown</p>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: D.textMuted, margin: 0 }}>Monthly Premium Breakdown</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {recalcMessage && (
+                            <span style={{ fontSize: 11, color: D.textSecondary }}>{recalcMessage}</span>
+                          )}
+                          <button
+                            onClick={handleRecalculateHolidays}
+                            disabled={recalculating}
+                            title="Re-fetch the latest holiday list and recompute this contract's premium breakdown"
+                            style={{ background: 'transparent', border: `1px solid ${D.border}`, color: D.textSecondary, borderRadius: 6, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: recalculating ? 'default' : 'pointer', opacity: recalculating ? 0.6 : 1 }}
+                          >
+                            {recalculating ? 'Recalculating…' : '↺ Recalculate Holidays'}
+                          </button>
+                        </div>
+                      </div>
                       <div style={{ borderRadius: 8, overflow: 'hidden', border: `1px solid ${D.border}` }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                           <thead>

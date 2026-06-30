@@ -2,6 +2,7 @@ import express from 'express';
 import { errDetail } from '../utils/errors.js';
 import Holiday from '../models/Holiday.js';
 import { resolveHolidaysInRange } from '../utils/holidayResolver.js';
+import { refreshUnsignedContractsHolidays } from '../utils/contractHolidayRefresh.js';
 import { verifyToken } from './auth.js';
 
 const router = express.Router();
@@ -68,6 +69,15 @@ router.post('/', verifyToken, async (req, res) => {
     });
     
     await newHoliday.save();
+
+    // Temporal integrity: holidays affect every contract whose period
+    // overlaps this date, not just future ones. Refresh unsigned
+    // (DRAFT/PENDING) contracts so their calendar/premium reflects it.
+    const refreshedCount = await refreshUnsignedContractsHolidays();
+    if (refreshedCount > 0) {
+      console.log(`↺ Holiday "${newHoliday.name}" added — refreshed ${refreshedCount} unsigned contract(s)`);
+    }
+
     res.status(201).json(newHoliday);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
@@ -90,7 +100,12 @@ router.put('/:id', verifyToken, async (req, res) => {
     if (!holiday) {
       return res.status(404).json({ message: 'Holiday not found' });
     }
-    
+
+    const refreshedCount = await refreshUnsignedContractsHolidays();
+    if (refreshedCount > 0) {
+      console.log(`↺ Holiday "${holiday.name}" updated — refreshed ${refreshedCount} unsigned contract(s)`);
+    }
+
     res.json(holiday);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
@@ -110,6 +125,11 @@ router.delete('/:id', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'Holiday not found' });
     }
     
+    const refreshedCount = await refreshUnsignedContractsHolidays();
+    if (refreshedCount > 0) {
+      console.log(`↺ Holiday "${holiday.name}" deleted — refreshed ${refreshedCount} unsigned contract(s)`);
+    }
+
     res.json({ message: 'Holiday deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
@@ -130,6 +150,12 @@ router.post('/bulk', verifyToken, async (req, res) => {
     }
     
     const createdHolidays = await Holiday.insertMany(holidays);
+
+    const refreshedCount = await refreshUnsignedContractsHolidays();
+    if (refreshedCount > 0) {
+      console.log(`↺ Bulk holiday import — refreshed ${refreshedCount} unsigned contract(s)`);
+    }
+
     res.status(201).json({ 
       message: `${createdHolidays.length} holidays created successfully`,
       holidays: createdHolidays

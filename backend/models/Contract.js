@@ -77,11 +77,28 @@ const contractSchema = new mongoose.Schema({
     dailyPremiumRate: Number,
     calculatedPremium: Number,
     isFullMonth: Boolean,
-    holidaysInMonth: [{
+    // ROOT CAUSE FIX: this MUST be an explicit `new mongoose.Schema(...)`,
+    // not the `[{ ... }]` shorthand. The shorthand object below has a key
+    // literally named "type" (date/name/type holiday fields). Mongoose's
+    // shorthand parser treats ANY key named "type" as the SchemaType
+    // declaration for the whole object — so `{ date: String, name: String,
+    // type: String }` was being silently flattened into `[String]`
+    // (an array of plain strings), with `date` and `name` discarded as
+    // unrecognized schema options. This was invisible for a long time
+    // because holidaysInMonth was always empty (a separate bug in
+    // holidayResolver.js meant recurring holidays never matched), so
+    // Mongoose never had to cast a real object into this broken path.
+    // Once that bug was fixed and holidaysInMonth started receiving real
+    // {date, name, type} objects, every contract whose period contains a
+    // holiday started failing with:
+    //   "Cast to [string] failed for value ... at path holidaysInMonth.0"
+    // An explicit Schema instance bypasses the shorthand's "type" keyword
+    // ambiguity entirely, since Mongoose checks `instanceof Schema` first.
+    holidaysInMonth: [new mongoose.Schema({
       date: String,
       name: String,
       type: String
-    }]
+    }, { _id: false })]
   }],
   
   // Premium Summary

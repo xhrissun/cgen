@@ -206,6 +206,75 @@ router.get('/:id', verifyToken, async (req, res) => {
   }
 });
 
+// Force recalc of holidays/premium for ONE contract, regardless of status.
+//
+// The automatic refresh (triggered on holiday create/update/delete, see
+// routes/holidays.js + utils/contractHolidayRefresh.js) intentionally only
+// touches DRAFT/PENDING contracts, to protect already-signed contracts'
+// legal snapshot. This endpoint is the deliberate escape hatch for
+// admins who need to correct an APPROVED/ACTIVE contract that was
+// generated before a holiday existed in the system (e.g. a holiday added
+// late, after a contract for that period had already been finalized).
+router.post('/:id/recalculate-holidays', verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'ADMINISTRATOR') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const contract = await Contract.findById(req.params.id);
+    if (!contract) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    const contractStart = new Date(contract.startDate);
+    const contractEnd = new Date(contract.endDate);
+    const firstDayOfStartMonth = new Date(contractStart.getFullYear(), contractStart.getMonth(), 1);
+    const lastDayOfEndMonth = new Date(contractEnd.getFullYear(), contractEnd.getMonth() + 1, 0);
+
+    const holidays = await resolveHolidaysInRange(firstDayOfStartMonth, lastDayOfEndMonth);
+
+    const premiumCalc = calculatePremiumBreakdown({
+      monthlyPremium: contract.monthlyPremium,
+      startDate: contractStart,
+      endDate: contractEnd,
+      holidays,
+      semester: contract.semester
+    });
+
+    const oldPremium = contract.finalPremium;
+
+    contract.workingDaysBreakdown = premiumCalc.premiumBreakdown;
+    contract.finalPremium = premiumCalc.finalPremium;
+    contract.finalPremiumInWords = numberToWords(premiumCalc.finalPremium);
+    contract.bonusType = premiumCalc.bonusType;
+    contract.premiumSummary = {
+      totalMonths: premiumCalc.totalMonths,
+      fullMonths: premiumCalc.fullMonths,
+      partialMonths: premiumCalc.partialMonths,
+      totalWorkingDays: premiumCalc.totalWorkingDays
+    };
+
+    await contract.save();
+
+    await logActivity({
+      actionType: 'UPDATE',
+      entityType: 'Contract',
+      entityId: contract._id,
+      userId: req.user.userId,
+      details: `Force-recalculated holidays/premium (₱${oldPremium?.toFixed?.(2)} → ₱${premiumCalc.finalPremium.toFixed(2)})`
+    });
+
+    res.json({
+      message: 'Contract recalculated',
+      oldPremium,
+      newPremium: premiumCalc.finalPremium,
+      contract
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
+  }
+});
+
 // backend/routes/contracts.js - CREATE CONTRACT (simplified)
 
 router.post('/', verifyToken, async (req, res) => {
