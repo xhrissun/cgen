@@ -41,9 +41,6 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Connect to MongoDB
-connectDB();
-
 // Initialize default admin user
 // Credentials are taken from ADMIN_USERNAME/ADMIN_PASSWORD env vars so no
 // hardcoded credentials ship in source control. If ADMIN_PASSWORD isn't set,
@@ -94,9 +91,6 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/change-logs', changeLogRoutes);
 app.use('/api/eodb', eodbRoutes);
 
-// Start contract expiry checker
-startContractExpiryChecker();
-
 // Health check — also exposes the detected IP to the frontend
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -113,12 +107,21 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Something went wrong!', error: errDetail(err) });
 });
 
-// Start server
-app.listen(PORT, HOST, () => {
-  console.log(`Backend running on port ${PORT}`);
-  initializeAdmin();
-  startKeepAlive();
-});
+// Start server — wait for MongoDB to finish connecting before doing anything
+// that issues queries (admin init, contract expiry checker, or accepting
+// requests), since the connection is configured with bufferCommands: false.
+const startServer = async () => {
+  await connectDB();
+
+  app.listen(PORT, HOST, async () => {
+    console.log(`Backend running on port ${PORT}`);
+    await initializeAdmin();
+    startContractExpiryChecker();
+    startKeepAlive();
+  });
+};
+
+startServer();
 
 export default app;
 
