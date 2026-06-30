@@ -578,14 +578,18 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
       position: 'Chief, Finance Division'
     };
     
-    // Get current timestamp
+    // Get current timestamp — explicitly in Manila time so the printed
+    // "Generated on" date/time is correct regardless of the server's host
+    // timezone (e.g. a UTC production server).
     const now = new Date();
     const dateStr = now.toLocaleDateString('en-US', {
+      timeZone: 'Asia/Manila',
       month: '2-digit',
       day: '2-digit',
       year: 'numeric'
     });
     const timeStr = now.toLocaleTimeString('en-US', {
+      timeZone: 'Asia/Manila',
       hour: 'numeric',
       minute: '2-digit',
       second: '2-digit',
