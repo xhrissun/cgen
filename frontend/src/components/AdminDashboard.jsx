@@ -450,16 +450,12 @@ function AdminDashboard({ user }) {
     const basicSalary = parseFloat(value) || 0;
     
     if (newSalaryGrade.isSpecialSalaryGrade) {
-      // Special salary grade — no premium/bonus, but SSS and Pag-IBIG are
-      // still editable and still factor into the contract's monthly salary
-      // figure, same as a regular grade. Only PhilHealth (5% of basic) is
-      // auto-computed and read-only.
+      // Special salary grade — no premium/bonus, and Monthly/Daily Salary
+      // stay pinned to Basic Salary exactly. SSS and Pag-IBIG are editable
+      // and get saved with the record, but — unlike a regular grade —
+      // they are NOT added on top to inflate the contract's monthly salary
+      // figure. Only PhilHealth (5% of basic) is auto-computed.
       const philhealth = basicSalary * 0.05;
-      const sss = parseFloat(newSalaryGrade.deductions.sss) || 0;
-      const pagibig = parseFloat(newSalaryGrade.deductions.pagibig) || 0;
-      const totalDeductions = sss + pagibig + philhealth;
-      const monthlySalaryAsPerContract = basicSalary + totalDeductions;
-      const dailySalaryAsPerContract = monthlySalaryAsPerContract / 22;
       
       setNewSalaryGrade({
         ...newSalaryGrade,
@@ -469,8 +465,8 @@ function AdminDashboard({ user }) {
           ...newSalaryGrade.deductions,
           philhealth: philhealth.toFixed(2)
         },
-        monthlySalaryAsPerContract: monthlySalaryAsPerContract.toFixed(2),
-        dailySalaryAsPerContract: dailySalaryAsPerContract.toFixed(2),
+        monthlySalaryAsPerContract: basicSalary.toFixed(2),
+        dailySalaryAsPerContract: (basicSalary / 22).toFixed(2),
         monthlyPremium: '0.00'
       });
     } else {
@@ -516,8 +512,10 @@ function AdminDashboard({ user }) {
     const dailySalaryAsPerContract = monthlySalaryAsPerContract / 22;
 
     if (newSalaryGrade.isSpecialSalaryGrade) {
-      // Special Salary Grade = no premium/bonus, but deductions still
-      // apply and still feed into the contract's monthly salary figure.
+      // Special Salary Grade = no premium/bonus, and Monthly/Daily Salary
+      // always equal Basic Salary. SSS/Pag-IBIG are still saved with the
+      // record (editable here) but never added on top of the basic salary
+      // the way they are for a regular grade.
       setNewSalaryGrade({
         ...newSalaryGrade,
         deductions: {
@@ -525,8 +523,8 @@ function AdminDashboard({ user }) {
           philhealth: philhealth.toFixed(2)
         },
         grossPremium: '0.00',
-        monthlySalaryAsPerContract: monthlySalaryAsPerContract.toFixed(2),
-        dailySalaryAsPerContract: dailySalaryAsPerContract.toFixed(2),
+        monthlySalaryAsPerContract: basicSalary.toFixed(2),
+        dailySalaryAsPerContract: (basicSalary / 22).toFixed(2),
         monthlyPremium: '0.00'
       });
       return;
@@ -1344,16 +1342,11 @@ function AdminDashboard({ user }) {
                             const basic = parseFloat(newSalaryGrade.basicSalary) || 0;
 
                             if (isSpecial) {
-                              // Special = no premium/bonus. SSS and Pag-IBIG
-                              // are left as-is (still editable, still count
-                              // toward the monthly salary figure) — only
-                              // grossPremium/monthlyPremium are zeroed.
+                              // Special = no premium/bonus, and Monthly/Daily
+                              // Salary equal Basic Salary exactly. SSS and
+                              // Pag-IBIG are left as-is (still editable,
+                              // still saved) but not added on top.
                               const philhealth = basic * 0.05;
-                              const sss = parseFloat(newSalaryGrade.deductions.sss) || 0;
-                              const pagibig = parseFloat(newSalaryGrade.deductions.pagibig) || 0;
-                              const totalDed = sss + pagibig + philhealth;
-                              const monthlyContract = basic + totalDed;
-                              const dailyContract = monthlyContract / 22;
 
                               setNewSalaryGrade({
                                 ...newSalaryGrade,
@@ -1363,8 +1356,8 @@ function AdminDashboard({ user }) {
                                   ...newSalaryGrade.deductions,
                                   philhealth: philhealth.toFixed(2),
                                 },
-                                monthlySalaryAsPerContract: monthlyContract.toFixed(2),
-                                dailySalaryAsPerContract: dailyContract.toFixed(2),
+                                monthlySalaryAsPerContract: basic.toFixed(2),
+                                dailySalaryAsPerContract: (basic / 22).toFixed(2),
                                 monthlyPremium: '0.00',
                               });
                             } else {
