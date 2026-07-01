@@ -3,6 +3,16 @@ import { SkeletonTable, SectionLoader, dispatchPageLoading } from './ui.jsx';
 import api from '../api.js';
 import UserDetailsModal from './UserDetailsModal';
 
+// Some staff have typed a placeholder ("-", "N/A", "NONE", etc.) into the
+// Middle Name field to get past an old required-field check, since a person
+// can legitimately have no middle name. Treat any placeholder-only value the
+// same as an empty middle name so it never renders as a stray "-".
+const NO_MIDDLE_NAME_PATTERN = /^[\s\-._]*$|^(n\/?a\.?|none|no\s*middle\s*name)$/i;
+const normalizeMiddleName = (value) => {
+  const trimmed = String(value || '').trim();
+  return NO_MIDDLE_NAME_PATTERN.test(trimmed) ? '' : trimmed;
+};
+
 // Place of Assignment options
 const PLACE_OF_ASSIGNMENT_OPTIONS = [
   'ADMINISTRATIVE DIVISION',
@@ -748,7 +758,7 @@ function UserManagement() {
                 <td>{user.username}</td>
                 <td>
                   {user.personalInfo?.lastName && user.personalInfo?.firstName
-                    ? `${user.personalInfo.lastName}, ${user.personalInfo.firstName}${user.personalInfo.middleName ? ' ' + user.personalInfo.middleName : ''}`
+                    ? `${user.personalInfo.lastName}, ${user.personalInfo.firstName}${normalizeMiddleName(user.personalInfo.middleName) ? ' ' + normalizeMiddleName(user.personalInfo.middleName) : ''}`
                     : user.personalInfo?.lastName || user.personalInfo?.firstName || '-'}
                 </td>
                 <td>

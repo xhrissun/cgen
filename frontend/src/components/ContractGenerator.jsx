@@ -61,6 +61,17 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   const INACTIVE_STATUSES = ['EXPIRED', 'CANCELLED', 'TERMINATED'];
   const isGenerationBlocked = (contract) => INACTIVE_STATUSES.includes(contract?.status);
 
+  // Some staff have typed a placeholder ("-", "N/A", "NONE", etc.) into the
+  // Middle Name field just to get past a "required field" check, since a
+  // person can legitimately have no middle name. Treat any placeholder-only
+  // value the same as an empty middle name everywhere it's displayed —
+  // otherwise it prints as e.g. "Juan Dela Cruz -" in name lists.
+  const NO_MIDDLE_NAME_PATTERN = /^[\s\-._]*$|^(n\/?a\.?|none|no\s*middle\s*name)$/i;
+  const normalizeMiddleName = (value) => {
+    const trimmed = String(value || '').trim();
+    return NO_MIDDLE_NAME_PATTERN.test(trimmed) ? '' : trimmed;
+  };
+
   const getDuplicateNames = () => {
     const nameMap = {};
     
@@ -72,7 +83,8 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
       
       const user = contract.userId?.personalInfo;
       if (user?.lastName && user?.firstName) {
-        const fullName = `${user.lastName}, ${user.firstName}${user.middleName ? ' ' + user.middleName : ''}`;
+        const middleName = normalizeMiddleName(user.middleName);
+        const fullName = `${user.lastName}, ${user.firstName}${middleName ? ' ' + middleName : ''}`;
         
         // Create a key combining name, year, semester, AND status
         const key = `${fullName}|${contract.year}|${contract.semester}|${contract.status}`;
@@ -136,7 +148,8 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
     const hasPersonalInfo = !!(
       pi.lastName && 
       pi.firstName && 
-      pi.middleName &&
+      // Middle Name intentionally not required — some people legitimately
+      // have none.
       pi.sex &&
       pi.placeOfBirth &&
       pi.birthday &&
@@ -171,7 +184,6 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
     // Personal Information
     if (!pi.lastName) missing.push('Last Name');
     if (!pi.firstName) missing.push('First Name');
-    if (!pi.middleName) missing.push('Middle Name');
     if (!pi.sex) missing.push('Sex');
     if (!pi.placeOfBirth) missing.push('Place of Birth');
     if (!pi.birthday) missing.push('Birthday');
@@ -968,7 +980,7 @@ const handleFileUpload = (contractId, event) => {
                     .map(user => ({
                       value: user._id,
                       label: user.personalInfo?.lastName && user.personalInfo?.firstName
-                        ? `${user.personalInfo.lastName}, ${user.personalInfo.firstName}${user.personalInfo.middleName ? ' ' + user.personalInfo.middleName : ''} (${user.username})`
+                        ? `${user.personalInfo.lastName}, ${user.personalInfo.firstName}${normalizeMiddleName(user.personalInfo.middleName) ? ' ' + normalizeMiddleName(user.personalInfo.middleName) : ''} (${user.username})`
                         : `${user.personalInfo?.lastName || user.personalInfo?.firstName || ''} (${user.username})`
                     }))}
                   placeholder="Select User"
@@ -1666,7 +1678,7 @@ const handleFileUpload = (contractId, event) => {
                 if (showDuplicatesOnly) {
                   const user = c.userId?.personalInfo;
                   if (user?.lastName && user?.firstName) {
-                    const fullName = `${user.lastName}, ${user.firstName}${user.middleName ? ' ' + user.middleName : ''}`;
+                    const fullName = `${user.lastName}, ${user.firstName}${normalizeMiddleName(user.middleName) ? ' ' + normalizeMiddleName(user.middleName) : ''}`;
                     const key = `${fullName}|${c.year}|${c.semester}|${c.status}`;
                     const duplicateData = duplicateNames[key];
                     matchDuplicate = duplicateData && duplicateData.contracts.length > 1;
@@ -1717,7 +1729,7 @@ const handleFileUpload = (contractId, event) => {
                   if (showDuplicatesOnly) {
                     const user = c.userId?.personalInfo;
                     if (user?.lastName && user?.firstName) {
-                      const fullName = `${user.lastName}, ${user.firstName}${user.middleName ? ' ' + user.middleName : ''}`;
+                      const fullName = `${user.lastName}, ${user.firstName}${normalizeMiddleName(user.middleName) ? ' ' + normalizeMiddleName(user.middleName) : ''}`;
                       const key = `${fullName}|${c.year}|${c.semester}|${c.status}`;
                       const duplicateData = duplicateNames[key];
                       matchDuplicate = duplicateData && duplicateData.contracts.length > 1;
@@ -1752,7 +1764,7 @@ const handleFileUpload = (contractId, event) => {
                   </td>
                   <td className="px-4 py-2">
                     {contract.userId?.personalInfo?.lastName && contract.userId?.personalInfo?.firstName
-                      ? `${contract.userId.personalInfo.lastName}, ${contract.userId.personalInfo.firstName}${contract.userId.personalInfo.middleName ? ' ' + contract.userId.personalInfo.middleName : ''}`
+                      ? `${contract.userId.personalInfo.lastName}, ${contract.userId.personalInfo.firstName}${normalizeMiddleName(contract.userId.personalInfo.middleName) ? ' ' + normalizeMiddleName(contract.userId.personalInfo.middleName) : ''}`
                       : contract.userId?.personalInfo?.lastName || contract.userId?.personalInfo?.firstName || contract.userId?.username || '-'}
                     {!isUserProfileComplete(contract.userId) && (
                       <span className="ml-2 text-xs text-red-600" title="Profile incomplete">⚠️</span>
@@ -1760,7 +1772,7 @@ const handleFileUpload = (contractId, event) => {
                     {(() => {
                       const user = contract.userId?.personalInfo;
                       if (user?.lastName && user?.firstName) {
-                        const fullName = `${user.lastName}, ${user.firstName}${user.middleName ? ' ' + user.middleName : ''}`;
+                        const fullName = `${user.lastName}, ${user.firstName}${normalizeMiddleName(user.middleName) ? ' ' + normalizeMiddleName(user.middleName) : ''}`;
                         const key = `${fullName}|${contract.year}|${contract.semester}|${contract.status}`;
                         const duplicateData = duplicateNames[key];
                         const isDuplicate = duplicateData && duplicateData.contracts.length > 1;

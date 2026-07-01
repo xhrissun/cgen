@@ -14,6 +14,16 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
+// Some staff have typed a placeholder ("-", "N/A", "NONE", etc.) into the
+// Middle Name field to get past an old required-field check, since a person
+// can legitimately have no middle name. Treat any placeholder-only value the
+// same as an empty middle name so it never becomes a stray middle initial.
+const NO_MIDDLE_NAME_PATTERN = /^[\s\-._]*$|^(n\/?a\.?|none|no\s*middle\s*name)$/i;
+const normalizeMiddleName = (value) => {
+  const trimmed = String(value || '').trim();
+  return NO_MIDDLE_NAME_PATTERN.test(trimmed) ? '' : trimmed;
+};
+
 // Model for Print Logs
 import mongoose from 'mongoose';
 
@@ -100,8 +110,8 @@ router.get('/user-data', verifyToken, async (req, res) => {
     const eodbData = {
       lastName: user.personalInfo?.lastName || '',
       firstName: user.personalInfo?.firstName || '',
-      middleInitial: user.personalInfo?.middleInitial || 
-                     (user.personalInfo?.middleName ? user.personalInfo.middleName.charAt(0) : ''),
+      middleInitial: normalizeMiddleName(user.personalInfo?.middleInitial) || 
+                     (normalizeMiddleName(user.personalInfo?.middleName) ? normalizeMiddleName(user.personalInfo.middleName).charAt(0) : ''),
       title: user.personalInfo?.suffix || '', // Using suffix as title field
       position: latestContract?.position ? `${latestContract.position} (COS)` : 'CONTRACTUAL (COS)',
       assignment: user.placeOfAssignment || latestContract?.placeOfAssignment || 'DENR IV-A',

@@ -34,6 +34,18 @@ const sanitizeFilename = (str = '') => {
     .trim();
 };
 
+// Some staff have typed a placeholder ("-", "N/A", "NONE", etc.) into the
+// Middle Name field just to satisfy the "required field" profile-completeness
+// check, since a person can legitimately have no middle name. Without this
+// normalization, that placeholder gets treated as a real middle name/initial
+// and prints as e.g. "JUAN -. DELA CRUZ" on the generated contract. Treat
+// any placeholder-only value the same as an empty middle name everywhere.
+const NO_MIDDLE_NAME_PATTERN = /^[\s\-._]*$|^(n\/?a\.?|none|no\s*middle\s*name)$/i;
+const normalizeMiddleName = (value) => {
+  const trimmed = String(value || '').trim();
+  return NO_MIDDLE_NAME_PATTERN.test(trimmed) ? '' : trimmed;
+};
+
 // Enhanced filename builder
 const buildSafeFilename = (lastName, firstName, middleInitial, suffix) => {
   const clean = (str) => sanitizeFilename(str).toUpperCase();
@@ -228,6 +240,177 @@ router.get('/check-existing', verifyToken, async (req, res) => {
   }
 });
 
+// ── Active Employees Monitor ──────────────────────────────────────────────
+// Restricted to ADMINISTRATOR and FINANCE_OFFICER — this surfaces salary,
+// deduction, and charging figures across all currently-active employees,
+// which is financial/HR-sensitive data, same access level as the CSV
+// export and Finance Officer Dashboard elsewhere in this file.
+// IMPORTANT: registered BEFORE GET '/:id' below, or Express treats
+// "monitor" as an :id value and these routes are never reached.
+const buildActiveEmployeesData = async () => {
+  const contracts = await Contract.find({ status: 'ACTIVE', isArchived: false })
+    .populate('userId')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  // One row per employee — in case more than one ACTIVE contract somehow
+  // exists for the same person, keep only the most recently created one.
+  const latestByUser = new Map();
+  contracts.forEach((c) => {
+    const uid = c.userId?._id?.toString();
+    if (!uid) return;
+    if (!latestByUser.has(uid)) latestByUser.set(uid, c);
+  });
+
+  const now = new Date();
+  const msPerDay = 1000 * 60 * 60 * 24;
+
+  const employees = Array.from(latestByUser.values()).map((c) => {
+    const pi = c.userId?.personalInfo || {};
+    const middleName = normalizeMiddleName(pi.middleName);
+    const fullName = pi.lastName && pi.firstName
+      ? `${pi.lastName}, ${pi.firstName}${middleName ? ' ' + middleName : ''}`
+      : 'N/A';
+
+    const endDate = new Date(c.endDate);
+    const daysRemaining = Math.ceil((endDate - now) / msPerDay);
+
+    return {
+      contractId: c._id,
+      contractNumber: c.contractNumber,
+      userId: c.userId?._id,
+      fullName,
+      username: c.userId?.username || 'N/A',
+      position: c.position,
+      placeOfAssignment: c.placeOfAssignment,
+      charging: c.charging || 'N/A',
+      mode: c.mode,
+      year: c.year,
+      semester: c.semester === 1 ? 'First' : 'Second',
+      startDate: c.startDate,
+      endDate: c.endDate,
+      daysRemaining,
+      expiringSoon: daysRemaining <= 30,
+      isSpecialSalaryGrade: !!c.isSpecialSalaryGrade,
+      basicSalary: c.basicSalary || 0,
+      monthlySalaryAsPerContract: c.monthlySalaryAsPerContract || 0,
+      dailySalaryAsPerContract: c.dailySalaryAsPerContract || 0,
+      monthlyPremium: c.monthlyPremium || 0,
+      finalPremium: c.finalPremium || 0,
+      bonusType: c.bonusType || 'N/A',
+      deductions: {
+        sss: c.deductions?.sss || 0,
+        pagibig: c.deductions?.pagibig || 0,
+        philhealth: c.deductions?.philhealth || 0,
+        total: c.deductions?.total || 0
+      },
+      philhealth: pi.philhealth || 'N/A',
+      pagibig: pi.pagibig || 'N/A',
+      tin: pi.tin || 'N/A'
+    };
+  });
+
+  // Summary aggregates
+  const totalActiveEmployees = employees.length;
+  const totalMonthlySalarySpend = employees.reduce((sum, e) => sum + e.monthlySalaryAsPerContract, 0);
+  const totalMonthlyPremiumSpend = employees.reduce((sum, e) => sum + e.monthlyPremium, 0);
+  const totalDeductionsSpend = employees.reduce((sum, e) => sum + (e.deductions.total || 0), 0);
+  const contractsExpiringSoon = employees.filter(e => e.expiringSoon).length;
+
+  const byChargingMap = new Map();
+  employees.forEach((e) => {
+    const key = e.charging || 'UNSPECIFIED';
+    if (!byChargingMap.has(key)) {
+      byChargingMap.set(key, { charging: key, count: 0, totalMonthlySalary: 0 });
+    }
+    const entry = byChargingMap.get(key);
+    entry.count += 1;
+    entry.totalMonthlySalary += e.monthlySalaryAsPerContract;
+  });
+
+  const byAssignmentMap = new Map();
+  employees.forEach((e) => {
+    const key = e.placeOfAssignment || 'UNSPECIFIED';
+    if (!byAssignmentMap.has(key)) {
+      byAssignmentMap.set(key, { placeOfAssignment: key, count: 0 });
+    }
+    byAssignmentMap.get(key).count += 1;
+  });
+
+  return {
+    summary: {
+      totalActiveEmployees,
+      totalMonthlySalarySpend,
+      totalMonthlyPremiumSpend,
+      totalDeductionsSpend,
+      contractsExpiringSoon,
+      byCharging: Array.from(byChargingMap.values()).sort((a, b) => b.count - a.count),
+      byPlaceOfAssignment: Array.from(byAssignmentMap.values()).sort((a, b) => b.count - a.count)
+    },
+    employees
+  };
+};
+
+router.get('/monitor/active-employees', verifyToken, async (req, res) => {
+  try {
+    if (!['ADMINISTRATOR', 'FINANCE_OFFICER'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    const data = await buildActiveEmployeesData();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
+  }
+});
+
+router.get('/monitor/active-employees/csv', verifyToken, async (req, res) => {
+  try {
+    if (!['ADMINISTRATOR', 'FINANCE_OFFICER'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    const { employees } = await buildActiveEmployeesData();
+
+    const data = employees.map(e => ({
+      contractNumber: e.contractNumber,
+      fullName: e.fullName,
+      username: e.username,
+      position: e.position?.toUpperCase() || 'N/A',
+      placeOfAssignment: e.placeOfAssignment,
+      charging: e.charging,
+      mode: e.mode,
+      year: e.year,
+      semester: e.semester,
+      startDate: new Date(e.startDate).toISOString().split('T')[0],
+      endDate: new Date(e.endDate).toISOString().split('T')[0],
+      daysRemaining: e.daysRemaining,
+      isSpecialSalaryGrade: e.isSpecialSalaryGrade ? 'Yes' : 'No',
+      basicSalary: e.basicSalary,
+      monthlySalaryAsPerContract: e.monthlySalaryAsPerContract,
+      dailySalaryAsPerContract: e.dailySalaryAsPerContract,
+      monthlyPremium: e.monthlyPremium,
+      finalPremium: e.finalPremium,
+      bonusType: e.bonusType,
+      sss: e.deductions.sss,
+      pagibig: e.deductions.pagibig,
+      philhealth: e.deductions.philhealth,
+      totalDeductions: e.deductions.total,
+      employeePhilhealthNo: e.philhealth,
+      employeePagibigNo: e.pagibig,
+      employeeTin: e.tin
+    }));
+
+    const parser = new Parser();
+    const csv = parser.parse(data);
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    res.header('Content-Type', 'text/csv');
+    res.attachment(`active_employees_${timestamp}.csv`);
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
+  }
+});
+
 // Get contract by ID
 router.get('/:id', verifyToken, async (req, res) => {
   try {
@@ -379,7 +562,9 @@ router.post('/', verifyToken, async (req, res) => {
     // Personal Information
     if (!pi.lastName) missingFields.push('Last Name');
     if (!pi.firstName) missingFields.push('First Name');
-    if (!pi.middleName) missingFields.push('Middle Name');
+    // Middle Name intentionally NOT required — some people legitimately
+    // have none, and requiring it just encourages placeholder values like
+    // "-" or "N/A" that then leak into the generated contract's name line.
     if (!pi.sex) missingFields.push('Sex');
     if (!pi.placeOfBirth) missingFields.push('Place of Birth');
     if (!pi.birthday) missingFields.push('Birthday');
@@ -691,11 +876,13 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
     
     // Build full name
     const getMiddleInitial = (personalInfo) => {
-      if (personalInfo.middleInitial) {
-        return personalInfo.middleInitial.toUpperCase();
+      const middleInitial = normalizeMiddleName(personalInfo.middleInitial);
+      if (middleInitial) {
+        return middleInitial.toUpperCase();
       }
-      if (personalInfo.middleName) {
-        return personalInfo.middleName.charAt(0).toUpperCase();
+      const middleName = normalizeMiddleName(personalInfo.middleName);
+      if (middleName) {
+        return middleName.charAt(0).toUpperCase();
       }
       return '';
     };
@@ -924,7 +1111,7 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
         const downloadFileName = buildSafeFilename(
           pi.lastName,
           pi.firstName,
-          pi.middleInitial || (pi.middleName ? pi.middleName.charAt(0) : ''),
+          normalizeMiddleName(pi.middleInitial) || (normalizeMiddleName(pi.middleName) ? normalizeMiddleName(pi.middleName).charAt(0) : ''),
           pi.suffix
         );
 
@@ -1018,7 +1205,7 @@ router.get('/export/csv', verifyToken, async (req, res) => {
     
     const data = latestContracts.map(c => ({
       contractNumber: c.contractNumber,
-      fullName: c.userId ? `${c.userId.personalInfo.lastName}, ${c.userId.personalInfo.firstName} ${c.userId.personalInfo.middleName || ''}`.trim() : 'N/A',
+      fullName: c.userId ? `${c.userId.personalInfo.lastName}, ${c.userId.personalInfo.firstName} ${normalizeMiddleName(c.userId.personalInfo.middleName)}`.trim() : 'N/A',
       position: c.position?.toUpperCase() || 'N/A',
       placeOfAssignment: c.placeOfAssignment,
       mode: c.mode,

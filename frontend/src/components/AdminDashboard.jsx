@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../api.js';
 import { 
   LayoutDashboard, Users, Briefcase, FileText, FolderOpen,
-  DollarSign, FileCheck, Layers, Calendar, PenTool, ScrollText
+  DollarSign, FileCheck, Layers, Calendar, PenTool, ScrollText, Activity
 } from 'lucide-react';
 import { SkeletonStatCard, SkeletonTable, SectionLoader, dispatchPageLoading } from './ui.jsx';
 import UserManagement from './UserManagement';
@@ -17,6 +17,7 @@ import SalaryGradeDetailsModal from './SalaryGradeDetailsModal';
 import { findPreviousPeriod, buildPreviousGradeMap, TrendBadge, NewGradeBadge } from './salaryGradeTrend.jsx';
 import DocumentViewer from './DocumentViewer';
 import ActivityLog from './ActivityLog';
+import ActiveEmployeesMonitor from './ActiveEmployeesMonitor';
 
 function AdminDashboard({ user }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -175,6 +176,13 @@ function AdminDashboard({ user }) {
       icon: ScrollText, 
       group: 'monitoring',
       description: 'System activity tracking'
+    },
+    { 
+      id: 'activeEmployees', 
+      name: 'Active Employees', 
+      icon: Activity, 
+      group: 'monitoring',
+      description: 'Monitor active employees, salary and charging metrics'
     }
   ];
 
@@ -1926,6 +1934,7 @@ function AdminDashboard({ user }) {
           {activeTab === 'documents' && <DocumentViewer userRole="ADMINISTRATOR" />}
           {activeTab === 'contracts' && <ContractGenerator userRole="ADMINISTRATOR" />}
           {activeTab === 'activityLog' && <ActivityLog />}
+          {activeTab === 'activeEmployees' && <ActiveEmployeesMonitor />}
 
           {/* Modal */}
           {selectedSalaryGrade && (

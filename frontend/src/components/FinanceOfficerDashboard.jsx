@@ -17,12 +17,13 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../api.js';
 import {
-  LayoutDashboard, Briefcase, DollarSign, UserCircle, Search, Filter, Eye
+  LayoutDashboard, Briefcase, DollarSign, UserCircle, Search, Filter, Eye, Activity
 } from 'lucide-react';
 import { SkeletonTable, SkeletonStatCard, dispatchPageLoading } from './ui.jsx';
 import SalaryGradeViewer from './SalaryGradeViewer';
 import PositionDetailsModal from './PositionDetailsModal';
 import ContractualDashboard from './ContractualDashboard';
+import ActiveEmployeesMonitor from './ActiveEmployeesMonitor';
 
 function FinanceOfficerDashboard({ user }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -67,6 +68,13 @@ function FinanceOfficerDashboard({ user }) {
       icon: DollarSign,
       group: 'management',
       description: 'Reference schedule — view only'
+    },
+    {
+      id: 'activeEmployees',
+      name: 'Active Employees',
+      icon: Activity,
+      group: 'management',
+      description: 'Monitor active employees, salary and charging metrics'
     },
     {
       id: 'profile',
@@ -551,6 +559,9 @@ function FinanceOfficerDashboard({ user }) {
 
             {/* SALARY GRADES — strictly view-only, no admin controls */}
             {activeTab === 'salaryGrades' && <SalaryGradeViewer />}
+
+            {/* ACTIVE EMPLOYEES MONITOR */}
+            {activeTab === 'activeEmployees' && <ActiveEmployeesMonitor />}
 
             {/* PROFILE */}
             {activeTab === 'profile' && <ContractualDashboard user={user} embedded={true} />}

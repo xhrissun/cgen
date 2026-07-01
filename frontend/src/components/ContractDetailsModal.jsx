@@ -158,8 +158,16 @@ function ContractDetailsModal({ contract: initialContract, onClose }) {
   };
 
   const user = contract.userId?.personalInfo;
+  // Some staff have typed a placeholder ("-", "N/A", "NONE", etc.) into the
+  // Middle Name field to get past an old required-field check. Treat that
+  // the same as an empty middle name so it doesn't render as a stray "-".
+  const NO_MIDDLE_NAME_PATTERN = /^[\s\-._]*$|^(n\/?a\.?|none|no\s*middle\s*name)$/i;
+  const normalizedMiddleName = (() => {
+    const trimmed = String(user?.middleName || '').trim();
+    return NO_MIDDLE_NAME_PATTERN.test(trimmed) ? '' : trimmed;
+  })();
   const fullName = user && user.lastName && user.firstName
-    ? `${user.lastName}, ${user.firstName}${user.middleName ? ' ' + user.middleName : ''}`
+    ? `${user.lastName}, ${user.firstName}${normalizedMiddleName ? ' ' + normalizedMiddleName : ''}`
     : user?.lastName || user?.firstName || 'N/A';
 
   /* ── PDF Full-screen Preview ── */
