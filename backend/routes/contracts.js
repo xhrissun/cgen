@@ -190,6 +190,44 @@ router.get('/', verifyToken, async (req, res) => {
   }
 });
 
+// Live duplicate check — used by the contract creation form to warn the
+// user interactively (before they even submit) that a matching contract
+// already exists. Mirrors the exact key used by the POST '/' duplicate
+// guard below: same employee + position + contract period (year +
+// semester) with a non-cancelled, non-archived record.
+// IMPORTANT: this must be registered BEFORE GET '/:id' below, or Express
+// will treat "check-existing" as an :id value and this route will never
+// be reached.
+router.get('/check-existing', verifyToken, async (req, res) => {
+  try {
+    const { userId, position, year, semester } = req.query;
+
+    if (!userId || !position || !year || !semester) {
+      return res.json({ duplicate: false });
+    }
+
+    const existingContract = await Contract.findOne({
+      userId,
+      position,
+      year: parseInt(year),
+      semester: parseInt(semester),
+      status: { $ne: 'CANCELLED' },
+      isArchived: false
+    }).select('_id contractNumber status').lean();
+
+    if (!existingContract) {
+      return res.json({ duplicate: false });
+    }
+
+    res.json({
+      duplicate: true,
+      existingContract
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
+  }
+});
+
 // Get contract by ID
 router.get('/:id', verifyToken, async (req, res) => {
   try {
@@ -581,14 +619,22 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'Contract not found' });
     }
 
-    // EXPIRED contracts can no longer be previewed or have their PDF
-    // (re)generated — the period they cover is over, so the generated
-    // document is no longer valid for signing. Uploading an already
-    // signed/approved contract file (upload-signed route) is unaffected
-    // and remains allowed regardless of status.
-    if (contract.status === 'EXPIRED') {
+    // EXPIRED, TERMINATED, and CANCELLED contracts can no longer be
+    // previewed or have their PDF (re)generated — in every one of these
+    // states the contract is no longer a live, signable agreement (the
+    // period is over, it was cut short, or it never took effect), so the
+    // generated document is no longer valid for signing. Uploading an
+    // already signed/approved contract file (upload-signed route) is
+    // unaffected and remains allowed regardless of status.
+    const BLOCKED_GENERATION_STATUSES = ['EXPIRED', 'TERMINATED', 'CANCELLED'];
+    if (BLOCKED_GENERATION_STATUSES.includes(contract.status)) {
+      const reason = {
+        EXPIRED: 'has expired',
+        TERMINATED: 'has been terminated',
+        CANCELLED: 'has been cancelled'
+      }[contract.status];
       return res.status(403).json({
-        message: 'This contract has expired. Preview and PDF generation are disabled. You may still upload the signed/approved contract document.'
+        message: `This contract ${reason}. Preview and PDF generation are disabled. You may still upload the signed/approved contract document.`
       });
     }
    

@@ -29,6 +29,11 @@ const D = {
   orangeMuted: 'rgba(251,146,60,0.15)',
 };
 
+// Contracts in these statuses are no longer live/signable agreements, so
+// PDF preview and generation are disabled for them everywhere in the UI
+// (mirrors the backend block in GET /api/contracts/:id/generate).
+const GENERATION_BLOCKED_STATUSES = ['EXPIRED', 'TERMINATED', 'CANCELLED'];
+
 const STATUS_STYLE = {
   ACTIVE:    { bg: D.greenMuted,  border: D.greenBorder,  color: D.green },
   DRAFT:     { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.25)', color: '#94a3b8' },
@@ -118,6 +123,7 @@ function ContractDetailsModal({ contract: initialContract, onClose }) {
   if (!contract) return null;
 
   const handlePreviewPDF = async () => {
+    if (GENERATION_BLOCKED_STATUSES.includes(contract.status)) return;
     setLoadingPreview(true);
     setPreviewingPDF(true);
     try {
@@ -223,14 +229,28 @@ function ContractDetailsModal({ contract: initialContract, onClose }) {
         <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
 
           {/* ── Action Bar ── */}
-          <div style={{ background: D.greenMuted, border: `1px solid ${D.greenBorder}`, borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ background: GENERATION_BLOCKED_STATUSES.includes(contract.status) ? D.redMuted : D.greenMuted, border: `1px solid ${GENERATION_BLOCKED_STATUSES.includes(contract.status) ? 'rgba(239,68,68,0.3)' : D.greenBorder}`, borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
             <button onClick={handlePreviewPDF}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, background: D.green, border: 'none', borderRadius: 8, padding: '9px 18px', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', letterSpacing: '0.03em' }}
+              disabled={GENERATION_BLOCKED_STATUSES.includes(contract.status)}
+              title={GENERATION_BLOCKED_STATUSES.includes(contract.status) ? `Preview is disabled — this contract is ${contract.status.toLowerCase()}` : ''}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: GENERATION_BLOCKED_STATUSES.includes(contract.status) ? 'rgba(148,163,184,0.25)' : D.green,
+                border: 'none', borderRadius: 8, padding: '9px 18px',
+                color: GENERATION_BLOCKED_STATUSES.includes(contract.status) ? 'rgba(240,244,248,0.45)' : '#fff',
+                fontSize: 13, fontWeight: 600,
+                cursor: GENERATION_BLOCKED_STATUSES.includes(contract.status) ? 'not-allowed' : 'pointer',
+                letterSpacing: '0.03em'
+              }}
             >
               <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               Preview PDF
             </button>
-            <span style={{ fontSize: 12, color: D.textSecondary }}>Opens a full-screen preview of the generated contract PDF</span>
+            <span style={{ fontSize: 12, color: D.textSecondary }}>
+              {GENERATION_BLOCKED_STATUSES.includes(contract.status)
+                ? `Preview and PDF generation are disabled because this contract is ${contract.status.toLowerCase()}. The signed/approved document can still be uploaded.`
+                : 'Opens a full-screen preview of the generated contract PDF'}
+            </span>
           </div>
 
           {/* ── Contract Info ── */}

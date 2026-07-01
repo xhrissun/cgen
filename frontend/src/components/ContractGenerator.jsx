@@ -49,6 +49,17 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   const [filterSemester, setFilterSemester] = useState('');
   const [filterAssignment, setFilterAssignment] = useState('');
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
+  const [showInactiveStatuses, setShowInactiveStatuses] = useState(false);
+
+  // Interactive (non-alert) duplicate check for the "New Contract" form.
+  // Fires whenever the user has picked enough info (employee, position,
+  // year, semester) to know whether a matching contract already exists —
+  // mirrors the server-side guard in POST /api/contracts so the person
+  // sees the conflict live, in-form, instead of after submitting.
+  const [duplicateCheck, setDuplicateCheck] = useState({ checking: false, duplicate: false, existingContract: null });
+
+  const INACTIVE_STATUSES = ['EXPIRED', 'CANCELLED', 'TERMINATED'];
+  const isGenerationBlocked = (contract) => INACTIVE_STATUSES.includes(contract?.status);
 
   const getDuplicateNames = () => {
     const nameMap = {};
@@ -577,6 +588,50 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
     }
   }, [formData.startDate, formData.endDate]);
 
+  // Live duplicate check — debounced so it doesn't fire on every keystroke,
+  // and only runs once the fields that define a "duplicate" are all set.
+  useEffect(() => {
+    if (!formData.userId || !formData.position || !formData.year || !formData.semester) {
+      setDuplicateCheck({ checking: false, duplicate: false, existingContract: null });
+      return;
+    }
+
+    let cancelled = false;
+    setDuplicateCheck(prev => ({ ...prev, checking: true }));
+
+    const timer = setTimeout(async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await api.get('/api/contracts/check-existing', {
+          headers: { Authorization: `Bearer ${token}` },
+          params: {
+            userId: formData.userId,
+            position: formData.position,
+            year: formData.year,
+            semester: formData.semester
+          }
+        });
+        if (!cancelled) {
+          setDuplicateCheck({
+            checking: false,
+            duplicate: !!response.data.duplicate,
+            existingContract: response.data.existingContract || null
+          });
+        }
+      } catch (error) {
+        console.error('Error checking for duplicate contract:', error);
+        if (!cancelled) {
+          setDuplicateCheck({ checking: false, duplicate: false, existingContract: null });
+        }
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [formData.userId, formData.position, formData.year, formData.semester]);
+
   useEffect(() => {
     calculatePremiumPreview();
   }, [formData.startDate, formData.endDate, formData.salaryGrade, formData.semester, holidays]);
@@ -584,10 +639,18 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   const handleSubmit = async (e) => {
   e.preventDefault();
   setLoading(true);
-  
+
   // Add a safety check
   if (!formData.positionCode) {
     alert('Please select a position');
+    setLoading(false);
+    return;
+  }
+
+  // DUPLICATE PREVENTION — interactive, not a plain alert. If the live
+  // check already flagged a conflict, block submission right here; the
+  // banner in the form is the feedback, not a popup.
+  if (duplicateCheck.duplicate) {
     setLoading(false);
     return;
   }
@@ -617,6 +680,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
     alert('Contract created successfully!');
     setShowForm(false);
     setPreviewData(null);
+    setDuplicateCheck({ checking: false, duplicate: false, existingContract: null });
 
         // 🔧 FIX: Preserve placeOfAssignment for focal persons
     const preservedPlaceOfAssignment = currentUserRole === 'FOCAL_PERSON' 
@@ -637,7 +701,20 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
     fetchContracts();
   } catch (error) {
     console.error('Contract creation error:', error.response?.data || error);
-    alert('Error: ' + (error.response?.data?.message || error.message));
+
+    // DUPLICATE PREVENTION — race-condition fallback. If another request
+    // created a matching contract between the live check and this submit,
+    // the backend still returns 409. Surface it the same interactive way
+    // (the in-form banner) instead of a plain alert.
+    if (error.response?.status === 409) {
+      setDuplicateCheck({
+        checking: false,
+        duplicate: true,
+        existingContract: error.response.data?.existingContract || null
+      });
+    } else {
+      alert('Error: ' + (error.response?.data?.message || error.message));
+    }
   } finally {
     setLoading(false);
   }
@@ -845,7 +922,10 @@ const handleFileUpload = (contractId, event) => {
         <h3 className="text-xl font-bold">Contract Generator</h3>
         {(userRole === 'ADMINISTRATOR' || userRole === 'FOCAL_PERSON') && (
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => {
+              setShowForm(!showForm);
+              setDuplicateCheck({ checking: false, duplicate: false, existingContract: null });
+            }}
             className="btn btn-primary"
           >
             {showForm ? 'Cancel' : 'Create New Contract'}
@@ -980,6 +1060,50 @@ const handleFileUpload = (contractId, event) => {
                 required
               />
             </div>
+
+            {/* DUPLICATE PREVENTION — interactive in-form banner, no alert() */}
+            {duplicateCheck.checking && (
+              <div className="flex items-center space-x-2 px-4 py-3 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-600">
+                <Spinner size="sm" />
+                <span>Checking for an existing contract for this employee, position, and period…</span>
+              </div>
+            )}
+
+            {!duplicateCheck.checking && duplicateCheck.duplicate && duplicateCheck.existingContract && (
+              <div className="px-4 py-3 bg-red-50 border border-red-300 rounded-md">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start space-x-2">
+                    <span className="text-red-600 text-lg leading-none">⚠️</span>
+                    <div>
+                      <p className="text-sm font-semibold text-red-800">
+                        Duplicate contract detected
+                      </p>
+                      <p className="text-sm text-red-700 mt-1">
+                        Contract <span className="font-mono font-semibold">{duplicateCheck.existingContract.contractNumber}</span> already
+                        exists for this employee, position, and period (status: {duplicateCheck.existingContract.status}).
+                        Cancel or update the existing contract before creating a new one.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col space-y-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleViewContract({ _id: duplicateCheck.existingContract._id })}
+                      className="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-md hover:bg-red-700 whitespace-nowrap"
+                    >
+                      View Existing Contract
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDuplicateCheck({ checking: false, duplicate: false, existingContract: null })}
+                      className="px-3 py-1.5 border border-red-300 text-red-700 text-xs font-medium rounded-md hover:bg-red-100 whitespace-nowrap"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Premium Preview Section */}
             {previewData && (
@@ -1380,6 +1504,7 @@ const handleFileUpload = (contractId, event) => {
                 onClick={() => {
                   setShowForm(false);
                   setPreviewData(null);
+                  setDuplicateCheck({ checking: false, duplicate: false, existingContract: null });
                 }}
                 className="px-4 py-2 border rounded-md hover:bg-gray-50"
               >
@@ -1387,10 +1512,11 @@ const handleFileUpload = (contractId, event) => {
               </button>
               <button 
                 type="submit" 
-                className="btn btn-primary"
-                disabled={loading}
+                className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={loading || duplicateCheck.duplicate}
+                title={duplicateCheck.duplicate ? 'Resolve the duplicate contract conflict above before creating a new one' : ''}
               >
-                {loading ? <><Spinner size="sm" color="white" />Creating…</> : 'Create Contract'}
+                {loading ? <><Spinner size="sm" color="white" />Creating…</> : duplicateCheck.duplicate ? 'Duplicate Detected' : 'Create Contract'}
               </button>
             </div>
           </form>
@@ -1402,6 +1528,15 @@ const handleFileUpload = (contractId, event) => {
         <div className="flex justify-between items-center mb-4">
           <h4 className="text-lg font-semibold">Contracts</h4>
           <div className="flex space-x-3">
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={showInactiveStatuses}
+                onChange={(e) => setShowInactiveStatuses(e.target.checked)}
+                className="rounded"
+              />
+              <span className="text-sm">Show Expired/Cancelled/Terminated</span>
+            </label>
             <label className="flex items-center space-x-2">
               <input
                 type="checkbox"
@@ -1518,6 +1653,7 @@ const handleFileUpload = (contractId, event) => {
             <span className="text-sm text-gray-600">
               Showing {contracts.filter(c => {
                 const matchArchived = showArchived || !c.isArchived;
+                const matchInactive = showInactiveStatuses || !INACTIVE_STATUSES.includes(c.status) || filterStatus === c.status;
                 const matchName = !filterName || 
                   `${c.userId?.personalInfo?.firstName} ${c.userId?.personalInfo?.middleName} ${c.userId?.personalInfo?.lastName}`
                     .toLowerCase().includes(filterName.toLowerCase());
@@ -1539,7 +1675,7 @@ const handleFileUpload = (contractId, event) => {
                   }
                 }
                 
-                return matchArchived && matchName && matchPosition && matchStatus && matchSemester && matchAssignment && matchDuplicate;
+                return matchArchived && matchInactive && matchName && matchPosition && matchStatus && matchSemester && matchAssignment && matchDuplicate;
               }).length} of {contracts.length} contracts
             </span>
           </div>
@@ -1568,6 +1704,7 @@ const handleFileUpload = (contractId, event) => {
               ) : contracts
                 .filter(c => {
                   const matchArchived = showArchived || !c.isArchived;
+                  const matchInactive = showInactiveStatuses || !INACTIVE_STATUSES.includes(c.status) || filterStatus === c.status;
                   const matchName = !filterName || 
                     `${c.userId?.personalInfo?.firstName} ${c.userId?.personalInfo?.middleName} ${c.userId?.personalInfo?.lastName}`
                       .toLowerCase().includes(filterName.toLowerCase());
@@ -1589,7 +1726,7 @@ const handleFileUpload = (contractId, event) => {
                     }
                   }
                   
-                  return matchArchived && matchName && matchPosition && matchStatus && matchSemester && matchAssignment && matchDuplicate;  // ✅ ADD && matchDuplicate
+                  return matchArchived && matchInactive && matchName && matchPosition && matchStatus && matchSemester && matchAssignment && matchDuplicate;
                 })
                 .sort((a, b) => {
                   // Latest contracts first — sort by createdAt descending
@@ -1716,6 +1853,7 @@ const handleFileUpload = (contractId, event) => {
                       </button>
                       <button
                         onClick={() => {
+                          if (isGenerationBlocked(contract)) return;
                           // Only validate for non-admins
                           if (userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId)) {
                             const missingFields = getMissingFields(contract.userId);
@@ -1724,9 +1862,13 @@ const handleFileUpload = (contractId, event) => {
                           }
                           generatePDF(contract._id);
                         }}
-                        disabled={loading || (userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId))}
-                        className="text-blue-600 hover:text-blue-800 text-xs disabled:opacity-50"
-                        title={userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId) ? 'Complete user profile first' : ''}
+                        disabled={loading || isGenerationBlocked(contract) || (userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId))}
+                        className="text-blue-600 hover:text-blue-800 text-xs disabled:opacity-50 disabled:cursor-not-allowed disabled:text-gray-400 disabled:hover:text-gray-400"
+                        title={
+                          isGenerationBlocked(contract)
+                            ? `PDF generation is disabled for ${contract.status.toLowerCase()} contracts`
+                            : (userRole !== 'ADMINISTRATOR' && !isUserProfileComplete(contract.userId) ? 'Complete user profile first' : '')
+                        }
                       >
                         Generate PDF
                       </button>
