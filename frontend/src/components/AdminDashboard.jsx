@@ -450,20 +450,26 @@ function AdminDashboard({ user }) {
     const basicSalary = parseFloat(value) || 0;
     
     if (newSalaryGrade.isSpecialSalaryGrade) {
-      // Special salary grade - Only PhilHealth deduction (5% of basic)
+      // Special salary grade — no premium/bonus, but SSS and Pag-IBIG are
+      // still editable and still factor into the contract's monthly salary
+      // figure, same as a regular grade. Only PhilHealth (5% of basic) is
+      // auto-computed and read-only.
       const philhealth = basicSalary * 0.05;
-      const dailySalaryAsPerContract = basicSalary / 22;
+      const sss = parseFloat(newSalaryGrade.deductions.sss) || 0;
+      const pagibig = parseFloat(newSalaryGrade.deductions.pagibig) || 0;
+      const totalDeductions = sss + pagibig + philhealth;
+      const monthlySalaryAsPerContract = basicSalary + totalDeductions;
+      const dailySalaryAsPerContract = monthlySalaryAsPerContract / 22;
       
       setNewSalaryGrade({
         ...newSalaryGrade,
         basicSalary: value,
         grossPremium: '0.00',
         deductions: {
-          sss: '0.00',
-          pagibig: '0.00',
+          ...newSalaryGrade.deductions,
           philhealth: philhealth.toFixed(2)
         },
-        monthlySalaryAsPerContract: basicSalary.toFixed(2),
+        monthlySalaryAsPerContract: monthlySalaryAsPerContract.toFixed(2),
         dailySalaryAsPerContract: dailySalaryAsPerContract.toFixed(2),
         monthlyPremium: '0.00'
       });
@@ -496,25 +502,37 @@ function AdminDashboard({ user }) {
 
     // Recalculate when deductions change
     const handleDeductionChange = (field, value) => {
-    // Special salary grades don't use deductions
-    if (newSalaryGrade.isSpecialSalaryGrade) {
-      return;
-    }
-    
     const updatedDeductions = {
       ...newSalaryGrade.deductions,
       [field]: value
     };
     
     const basicSalary = parseFloat(newSalaryGrade.basicSalary) || 0;
-    const grossPremium = basicSalary * 0.15;  // Changed from 0.20 to 0.15
     const philhealth = basicSalary * 0.05;
     const sss = parseFloat(updatedDeductions.sss) || 475.00;
     const pagibig = parseFloat(updatedDeductions.pagibig) || 400.00;
-    
     const totalDeductions = sss + pagibig + philhealth;  // Removed drugTest
     const monthlySalaryAsPerContract = basicSalary + totalDeductions;
     const dailySalaryAsPerContract = monthlySalaryAsPerContract / 22;
+
+    if (newSalaryGrade.isSpecialSalaryGrade) {
+      // Special Salary Grade = no premium/bonus, but deductions still
+      // apply and still feed into the contract's monthly salary figure.
+      setNewSalaryGrade({
+        ...newSalaryGrade,
+        deductions: {
+          ...updatedDeductions,
+          philhealth: philhealth.toFixed(2)
+        },
+        grossPremium: '0.00',
+        monthlySalaryAsPerContract: monthlySalaryAsPerContract.toFixed(2),
+        dailySalaryAsPerContract: dailySalaryAsPerContract.toFixed(2),
+        monthlyPremium: '0.00'
+      });
+      return;
+    }
+
+    const grossPremium = basicSalary * 0.15;  // Changed from 0.20 to 0.15
     const monthlyPremium = grossPremium - totalDeductions;
     
     setNewSalaryGrade({
@@ -1326,19 +1344,27 @@ function AdminDashboard({ user }) {
                             const basic = parseFloat(newSalaryGrade.basicSalary) || 0;
 
                             if (isSpecial) {
+                              // Special = no premium/bonus. SSS and Pag-IBIG
+                              // are left as-is (still editable, still count
+                              // toward the monthly salary figure) — only
+                              // grossPremium/monthlyPremium are zeroed.
                               const philhealth = basic * 0.05;
-                              const daily = basic / 22;
+                              const sss = parseFloat(newSalaryGrade.deductions.sss) || 0;
+                              const pagibig = parseFloat(newSalaryGrade.deductions.pagibig) || 0;
+                              const totalDed = sss + pagibig + philhealth;
+                              const monthlyContract = basic + totalDed;
+                              const dailyContract = monthlyContract / 22;
+
                               setNewSalaryGrade({
                                 ...newSalaryGrade,
                                 isSpecialSalaryGrade: true,
                                 grossPremium: '0.00',
                                 deductions: {
-                                  sss: '0.00',
-                                  pagibig: '0.00',
+                                  ...newSalaryGrade.deductions,
                                   philhealth: philhealth.toFixed(2),
                                 },
-                                monthlySalaryAsPerContract: basic.toFixed(2),
-                                dailySalaryAsPerContract: daily.toFixed(2),
+                                monthlySalaryAsPerContract: monthlyContract.toFixed(2),
+                                dailySalaryAsPerContract: dailyContract.toFixed(2),
                                 monthlyPremium: '0.00',
                               });
                             } else {
@@ -1389,7 +1415,7 @@ function AdminDashboard({ user }) {
 
                     <div className="pt-4 border-t">
                       <h5 className="font-semibold text-lg mb-3">
-                        Deductions {newSalaryGrade.isSpecialSalaryGrade && '(N/A for Special Grade)'}
+                        Deductions {newSalaryGrade.isSpecialSalaryGrade && '(Premium N/A for Special Grade)'}
                       </h5>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div>
@@ -1401,8 +1427,6 @@ function AdminDashboard({ user }) {
                             onChange={(e) => handleDeductionChange('sss', e.target.value)}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             placeholder="0.00"
-                            disabled={newSalaryGrade.isSpecialSalaryGrade}
-                            readOnly={newSalaryGrade.isSpecialSalaryGrade}
                           />
                         </div>
                         <div>
@@ -1414,8 +1438,6 @@ function AdminDashboard({ user }) {
                             onChange={(e) => handleDeductionChange('pagibig', e.target.value)}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             placeholder="0.00"
-                            disabled={newSalaryGrade.isSpecialSalaryGrade}
-                            readOnly={newSalaryGrade.isSpecialSalaryGrade}
                           />
                         </div>
                         <div>
