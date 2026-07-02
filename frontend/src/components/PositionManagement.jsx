@@ -38,6 +38,8 @@ function PositionManagement() {
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [clauseSelectionMode, setClauseSelectionMode] = useState('individual');
   const [currentUserRole, setCurrentUserRole] = useState('');
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   // Admin-only bulk assignment by Place of Assignment
   const [showBulkAssign, setShowBulkAssign] = useState(false);
@@ -405,11 +407,79 @@ function PositionManagement() {
     }
   };
 
+  // Downloads a PDF roster of every position: title, place of assignment,
+  // and its currently active salary grade.
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await api.get('/api/positions/export/pdf', {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.setAttribute('download', `position_roster_${timestamp}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      alert('Error exporting PDF: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  // Downloads a CSV with every position's full salary grade breakdown
+  // (basic salary, deductions, monthly/daily rate, premium).
+  const handleExportCsv = async () => {
+    setExportingCsv(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await api.get('/api/positions/export/csv', {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/csv' }));
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.setAttribute('download', `positions_salary_breakdown_${timestamp}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      alert('Error exporting CSV: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setExportingCsv(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h3 className="text-xl font-bold">Position Management</h3>
         <div className="flex gap-2">
+          <button
+            onClick={handleExportPdf}
+            disabled={exportingPdf}
+            className="btn btn-secondary"
+            title="Export all positions with their place of assignment and current salary grade"
+          >
+            {exportingPdf ? 'Exporting…' : 'Export PDF'}
+          </button>
+          <button
+            onClick={handleExportCsv}
+            disabled={exportingCsv}
+            className="btn btn-secondary"
+            title="Export all positions with the full salary grade breakdown"
+          >
+            {exportingCsv ? 'Exporting…' : 'Export CSV (Salary Breakdown)'}
+          </button>
           {currentUserRole === 'ADMINISTRATOR' && (
             <button
               onClick={() => {

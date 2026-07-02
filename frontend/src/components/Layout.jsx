@@ -252,7 +252,7 @@ function Layout({ user, onLogout, children, fullWidth = false }) {
                   Dan Christian Bonacua Sabao, LPT, CHRM
                 </h2>
                 <p className="text-blue-600 font-medium text-sm">
-                  Administrative Officer I | DENR IV-A
+                  Administrative Officer IV | DENR IV-A
                 </p>
               </div>
 

@@ -17,6 +17,7 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { Parser } from 'json2csv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -970,6 +971,238 @@ router.post('/bulk-assign-clauses', verifyToken, requireRole('ADMINISTRATOR'), a
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POSITIONS EXPORT — PDF (roster) + CSV (salary grade breakdown)
+//
+// PDF  (/positions/export/pdf)  → Position, Place of Assignment, Salary Grade
+// CSV  (/positions/export/csv)  → same, plus the full salary grade breakdown
+//                                  (basic salary, deductions, premium, etc.)
+// using each position's "most present" salary grade — i.e. the SalaryGrade
+// row for that grade whose period covers TODAY, falling back to the most
+// recent period on record if none does.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Resolve the "most present" SalaryGrade row for a given grade string.
+async function getMostPresentSalaryGrade(gradeStr) {
+  if (!gradeStr) return null;
+  const today = new Date();
+
+  let doc = await SalaryGrade.findOne({
+    grade: String(gradeStr),
+    periodStartDate: { $lte: today },
+    $or: [{ periodEndDate: null }, { periodEndDate: { $gte: today } }]
+  });
+
+  if (!doc) {
+    doc = await SalaryGrade.findOne({ grade: String(gradeStr) }).sort({ periodStartDate: -1 });
+  }
+  return doc;
+}
+
+// Fetch every position (respecting the same FOCAL_PERSON scoping used by
+// GET /) along with its resolved "most present" salary grade breakdown.
+async function getPositionsWithCurrentSalaryGrade(req) {
+  let query = {};
+  if (req.user.role === 'FOCAL_PERSON') {
+    const user = await User.findById(req.user.userId);
+    query.placeOfAssignment = user.placeOfAssignment;
+  }
+
+  const positions = await Position.find(query).sort({ placeOfAssignment: 1, title: 1 }).lean();
+
+  const gradeCache = new Map();
+  const rows = [];
+
+  for (const p of positions) {
+    const gradeKey = String(p.salaryGrade);
+    if (!gradeCache.has(gradeKey)) {
+      gradeCache.set(gradeKey, await getMostPresentSalaryGrade(gradeKey));
+    }
+    const sg = gradeCache.get(gradeKey);
+
+    const sss        = sg?.deductions?.sss ?? 0;
+    const pagibig     = sg?.deductions?.pagibig ?? 0;
+    const philhealth  = sg?.deductions?.philhealth ?? 0;
+
+    rows.push({
+      positionCode: p.positionCode,
+      title: p.title,
+      placeOfAssignment: p.placeOfAssignment || '',
+      salaryGrade: p.salaryGrade,
+      isSpecialSalaryGrade: !!p.isSpecialSalaryGrade,
+      periodLabel: sg?.periodLabel || '',
+      basicSalary: sg?.basicSalary ?? null,
+      grossPremium: sg?.grossPremium ?? null,
+      sss,
+      pagibig,
+      philhealth,
+      totalDeductions: sss + pagibig + philhealth,
+      monthlySalaryAsPerContract: sg?.monthlySalaryAsPerContract ?? null,
+      dailySalaryAsPerContract: sg?.dailySalaryAsPerContract ?? null,
+      monthlyPremium: sg?.monthlyPremium ?? null,
+      salaryGradeFound: !!sg
+    });
+  }
+
+  return rows;
+}
+
+// GET /api/positions/export/csv — full roster + salary grade breakdown
+router.get('/export/csv', verifyToken, async (req, res) => {
+  try {
+    const rows = await getPositionsWithCurrentSalaryGrade(req);
+
+    const data = rows.map(r => ({
+      positionCode: r.positionCode,
+      title: r.title,
+      placeOfAssignment: r.placeOfAssignment,
+      salaryGrade: r.salaryGrade,
+      isSpecialSalaryGrade: r.isSpecialSalaryGrade ? 'Yes' : 'No',
+      salaryGradePeriod: r.periodLabel,
+      basicSalary: r.basicSalary ?? '',
+      grossPremium: r.grossPremium ?? '',
+      sss: r.sss,
+      pagibig: r.pagibig,
+      philhealth: r.philhealth,
+      totalDeductions: r.totalDeductions,
+      monthlySalaryAsPerContract: r.monthlySalaryAsPerContract ?? '',
+      dailySalaryAsPerContract: r.dailySalaryAsPerContract ?? '',
+      monthlyPremium: r.monthlyPremium ?? '',
+      salaryGradeStatus: r.salaryGradeFound ? 'Found' : 'NOT FOUND'
+    }));
+
+    const parser = new Parser();
+    const csv = parser.parse(data);
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    res.header('Content-Type', 'text/csv');
+    res.attachment(`positions_salary_breakdown_${timestamp}.csv`);
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
+  }
+});
+
+// GET /api/positions/export/pdf — roster PDF: Position | Place of Assignment | Salary Grade
+router.get('/export/pdf', verifyToken, async (req, res) => {
+  try {
+    const rows = await getPositionsWithCurrentSalaryGrade(req);
+
+    const escapeLatex = (text) => {
+      if (text === null || text === undefined) return '';
+      return String(text)
+        .replace(/\\/g, '\\textbackslash{}')
+        .replace(/[&%$#_{}]/g, '\\$&')
+        .replace(/~/g, '\\textasciitilde{}')
+        .replace(/\^/g, '\\textasciicircum{}');
+    };
+
+    const formatAmount = (n) =>
+      n === null || n === undefined ? 'N/A' : `PHP ${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    let tableRows = '';
+    rows.forEach(r => {
+      tableRows += `${escapeLatex(r.title)} & ${escapeLatex(r.positionCode)} & ${escapeLatex(r.placeOfAssignment)} & ${escapeLatex(r.salaryGrade)}${r.isSpecialSalaryGrade ? ' (SSG)' : ''} & ${escapeLatex(formatAmount(r.monthlySalaryAsPerContract))} \\\\\n\\hline\n`;
+    });
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
+
+    const latexDoc = `\\documentclass[9pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage{times}
+\\usepackage[landscape,margin=0.6in]{geometry}
+\\usepackage{longtable}
+\\usepackage{fancyhdr}
+\\usepackage{array}
+
+\\pagestyle{fancy}
+\\fancyhf{}
+\\fancyhead[L]{\\fontsize{8}{10}\\selectfont\\textit{DENR IV-A CALABARZON --- Position Roster}}
+\\fancyhead[R]{\\fontsize{8}{10}\\selectfont\\textit{Generated ${dateStr} ${timeStr}}}
+\\fancyfoot[C]{\\thepage}
+\\renewcommand{\\headrulewidth}{0.4pt}
+
+\\begin{document}
+
+\\begin{center}
+{\\large\\textbf{POSITION ROSTER --- PLACE OF ASSIGNMENT AND SALARY GRADE}}
+\\end{center}
+\\vspace{4pt}
+
+\\begin{longtable}{|p{2.6in}|p{0.9in}|p{2.6in}|p{1.1in}|p{1.2in}|}
+\\hline
+\\textbf{Position} & \\textbf{Code} & \\textbf{Place of Assignment} & \\textbf{Salary Grade} & \\textbf{Monthly Salary} \\\\
+\\hline
+\\endfirsthead
+\\hline
+\\textbf{Position} & \\textbf{Code} & \\textbf{Place of Assignment} & \\textbf{Salary Grade} & \\textbf{Monthly Salary} \\\\
+\\hline
+\\endhead
+${tableRows}
+\\end{longtable}
+
+\\vspace{6pt}
+{\\fontsize{7}{9}\\selectfont Salary grade shown is the currently active rate as of the generation date. SSG = Special Salary Grade. Total positions: ${rows.length}.}
+
+\\end{document}
+`;
+
+    const tempDir = path.join(process.cwd(), 'temp');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+    const timestamp = Date.now();
+    const baseFile  = `position_roster_${timestamp}`;
+    const texPath   = path.join(tempDir, `${baseFile}.tex`);
+    const pdfPath   = path.join(tempDir, `${baseFile}.pdf`);
+
+    fs.writeFileSync(texPath, latexDoc, 'utf8');
+
+    try {
+      await execPromise(
+        `pdflatex -interaction=nonstopmode -output-directory="${tempDir}" "${texPath}"`,
+        { cwd: tempDir, timeout: 60000 }
+      );
+      // longtable needs a second pass to get page breaks/headers right
+      await execPromise(
+        `pdflatex -interaction=nonstopmode -output-directory="${tempDir}" "${texPath}"`,
+        { cwd: tempDir, timeout: 60000 }
+      );
+
+      if (!fs.existsSync(pdfPath)) throw new Error('PDF not created by pdflatex.');
+
+      const dateSuffix = new Date().toISOString().split('T')[0];
+      res.setHeader('Content-Disposition', `attachment; filename="position_roster_${dateSuffix}.pdf"`);
+
+      res.sendFile(pdfPath, (err) => {
+        [texPath, pdfPath,
+          path.join(tempDir, `${baseFile}.aux`),
+          path.join(tempDir, `${baseFile}.log`),
+          path.join(tempDir, `${baseFile}.out`),
+        ].forEach(f => { try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {} });
+        if (err) console.error('Error sending position roster PDF:', err);
+      });
+
+    } catch (pdfErr) {
+      [texPath, pdfPath].forEach(f => { try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {} });
+      const logPath = path.join(tempDir, `${baseFile}.log`);
+      let details = pdfErr.message;
+      if (fs.existsSync(logPath)) {
+        const log = fs.readFileSync(logPath, 'utf8');
+        const errs = log.match(/! .+/g);
+        if (errs) details = errs.join('\n');
+      }
+      throw new Error(`PDF compilation failed: ${details}`);
+    }
+
+  } catch (error) {
+    console.error('Error generating position roster PDF:', error);
+    res.status(500).json({ message: 'Failed to generate position roster PDF.', error: errDetail(error) });
   }
 });
 
