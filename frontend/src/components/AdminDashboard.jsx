@@ -38,6 +38,7 @@ function AdminDashboard({ user }) {
   const [expiringContracts, setExpiringContracts] = useState([]);
   const [dashLoading, setDashLoading] = useState(true);
   const [salaryGrades, setSalaryGrades] = useState([]);
+  const [selectedGradeIds, setSelectedGradeIds] = useState(new Set());
   const [salaryPeriods, setSalaryPeriods] = useState([]); // list of distinct periods
   const [activePeriodStart, setActivePeriodStart] = useState(null); // currently viewed period
   const [previousGradeMap, setPreviousGradeMap] = useState(new Map()); // grade -> previous-period doc, for ▲/▼ comparison
@@ -674,6 +675,83 @@ function AdminDashboard({ user }) {
     }
   };
 
+  const toggleGradeSelection = (id) => {
+    setSelectedGradeIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisibleGrades = (visibleGrades) => {
+    setSelectedGradeIds(prev => {
+      const visibleIds = visibleGrades.map(sg => sg._id);
+      const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => prev.has(id));
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        visibleIds.forEach(id => next.delete(id));
+      } else {
+        visibleIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  // Client-side CSV export of the currently selected salary grades — no
+  // server round-trip needed since the rows are already loaded in state.
+  const exportSelectedSalaryGradesToCsv = () => {
+    const selected = salaryGrades.filter(sg => selectedGradeIds.has(sg._id));
+    if (selected.length === 0) {
+      alert('Select at least one salary grade to export.');
+      return;
+    }
+
+    const headers = [
+      'Grade', 'Type', 'Period Label', 'Period Start', 'Period End',
+      'Basic Salary', 'Gross Premium', 'SSS', 'Pag-IBIG', 'PhilHealth', 'Total Deductions',
+      'Monthly Salary As Per Contract', 'Daily Salary As Per Contract', 'Monthly Premium', 'Note'
+    ];
+
+    const csvEscape = (val) => {
+      const s = val === null || val === undefined ? '' : String(val);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+
+    const rows = selected.map(sg => {
+      const ded = sg.deductions || { sss: 0, pagibig: 0, philhealth: 0 };
+      const totalDed = (ded.sss || 0) + (ded.pagibig || 0) + (ded.philhealth || 0);
+      return [
+        sg.grade,
+        sg.isSpecialSalaryGrade ? 'Special' : 'Regular',
+        sg.periodLabel || '',
+        sg.periodStartDate ? new Date(sg.periodStartDate).toISOString().split('T')[0] : '',
+        sg.periodEndDate ? new Date(sg.periodEndDate).toISOString().split('T')[0] : '',
+        sg.basicSalary ?? '',
+        sg.grossPremium ?? '',
+        ded.sss ?? '',
+        ded.pagibig ?? '',
+        ded.philhealth ?? '',
+        totalDed,
+        sg.monthlySalaryAsPerContract ?? '',
+        sg.dailySalaryAsPerContract ?? '',
+        sg.monthlyPremium ?? '',
+        sg.note || ''
+      ].map(csvEscape).join(',');
+    });
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const timestamp = new Date().toISOString().split('T')[0];
+    link.setAttribute('download', `salary_grades_selected_${timestamp}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
   // Update the handleCreateClause function to handle both create and update:
   const handleCreateClause = async (e) => {
     e.preventDefault();
@@ -1201,6 +1279,7 @@ function AdminDashboard({ user }) {
                         <p className="text-gray-600">Manage salary grade structure and computations</p>
                       </div>
                     </div>
+                    <div className="flex flex-wrap items-center gap-3">
                     <button
                       onClick={() => {
                         const opening = !showSalaryGradeForm;
@@ -1241,6 +1320,18 @@ function AdminDashboard({ user }) {
                     >
                       {showSalaryGradeForm ? 'Cancel' : 'Add Salary Grade'}
                     </button>
+                    <button
+                      onClick={exportSelectedSalaryGradesToCsv}
+                      disabled={selectedGradeIds.size === 0}
+                      className={`px-6 py-3 rounded-lg font-medium shadow-sm whitespace-nowrap transition-colors ${
+                        selectedGradeIds.size === 0
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-green-600 text-white hover:bg-green-700'
+                      }`}
+                    >
+                      Export Selected to CSV{selectedGradeIds.size > 0 ? ` (${selectedGradeIds.size})` : ''}
+                    </button>
+                    </div>
                   </div>
 
                   {/* Period Switcher */}
@@ -1544,116 +1635,138 @@ function AdminDashboard({ user }) {
               {/* Table */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grade</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Basic Salary</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gross Premium</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Deductions</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monthly Salary</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Daily Salary</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monthly Premium</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {[...salaryGrades]
-                        .sort((a, b) => {
-                          const aNum = parseFloat(a.grade);
-                          const bNum = parseFloat(b.grade);
-                          const aIsNum = !isNaN(aNum);
-                          const bIsNum = !isNaN(bNum);
-                          if (aIsNum && bIsNum) return aNum - bNum;
-                          if (aIsNum) return -1;
-                          if (bIsNum) return 1;
-                          return String(a.grade).localeCompare(String(b.grade));
-                        })
-                        .filter((sg) => {
-                          if (!searchTerm) return true;
-                          const search = searchTerm.toLowerCase();
-                          return (
-                            sg.grade.toString().includes(search) ||
-                            sg.basicSalary.toString().includes(search) ||
-                            (sg.isSpecialSalaryGrade && 'special'.includes(search)) ||
-                            (!sg.isSpecialSalaryGrade && 'regular'.includes(search))
-                          );
-                        })
-                        .map((sg) => {
-                          const basic = sg.basicSalary || 0;
-                          const gross = sg.grossPremium || 0;
-                          const ded = sg.deductions || { sss: 0, pagibig: 0, philhealth: 0 };
-                          const totalDed = (ded.sss || 0) + (ded.pagibig || 0) + (ded.philhealth || 0);
-                          const monthly = sg.monthlySalaryAsPerContract || 0;
-                          const daily = sg.dailySalaryAsPerContract || 0;
-                          const premium = sg.monthlyPremium || 0;
+                  {(() => {
+                    const visibleGrades = [...salaryGrades]
+                      .sort((a, b) => {
+                        const aNum = parseFloat(a.grade);
+                        const bNum = parseFloat(b.grade);
+                        const aIsNum = !isNaN(aNum);
+                        const bIsNum = !isNaN(bNum);
+                        if (aIsNum && bIsNum) return aNum - bNum;
+                        if (aIsNum) return -1;
+                        if (bIsNum) return 1;
+                        return String(a.grade).localeCompare(String(b.grade));
+                      })
+                      .filter((sg) => {
+                        if (!searchTerm) return true;
+                        const search = searchTerm.toLowerCase();
+                        return (
+                          sg.grade.toString().includes(search) ||
+                          sg.basicSalary.toString().includes(search) ||
+                          (sg.isSpecialSalaryGrade && 'special'.includes(search)) ||
+                          (!sg.isSpecialSalaryGrade && 'regular'.includes(search))
+                        );
+                      });
 
-                          const prev = previousGradeMap.get(String(sg.grade));
-                          const isNewGrade = previousGradeMap.size > 0 && !prev;
-                          const prevDed = prev?.deductions
-                            ? (prev.deductions.sss || 0) + (prev.deductions.pagibig || 0) + (prev.deductions.philhealth || 0)
-                            : undefined;
+                    const allVisibleSelected = visibleGrades.length > 0 && visibleGrades.every(sg => selectedGradeIds.has(sg._id));
 
-                          return (
-                            <tr key={sg._id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
-                                {sg.grade}
-                                {isNewGrade && <NewGradeBadge />}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                ₱{basic.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                {!isNewGrade && <TrendBadge current={basic} previous={prev?.basicSalary} />}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                ₱{gross.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                {!isNewGrade && <TrendBadge current={gross} previous={prev?.grossPremium} />}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                ₱{totalDed.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                {!isNewGrade && <TrendBadge current={totalDed} previous={prevDed} />}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap font-medium">
-                                ₱{monthly.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                {!isNewGrade && <TrendBadge current={monthly} previous={prev?.monthlySalaryAsPerContract} />}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                ₱{daily.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                {!isNewGrade && <TrendBadge current={daily} previous={prev?.dailySalaryAsPerContract} />}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                ₱{premium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                {!isNewGrade && <TrendBadge current={premium} previous={prev?.monthlyPremium} />}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                {sg.isSpecialSalaryGrade ? (
-                                  <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                                    Special
-                                  </span>
-                                ) : (
-                                  <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                                    Regular
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                <div className="flex space-x-4">
-                                  <button onClick={() => handleViewSalaryGrade(sg)} className="text-green-600 hover:text-green-900">
-                                    View
-                                  </button>
-                                  <button onClick={() => handleEditSalaryGrade(sg)} className="text-blue-600 hover:text-blue-900">
-                                    Edit
-                                  </button>
-                                  <button onClick={() => handleDeleteSalaryGrade(sg._id)} className="text-red-600 hover:text-red-900">
-                                    Delete
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
+                    return (
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-4 text-left">
+                              <input
+                                type="checkbox"
+                                checked={allVisibleSelected}
+                                onChange={() => toggleSelectAllVisibleGrades(visibleGrades)}
+                                title="Select all visible salary grades"
+                              />
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grade</th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Basic Salary</th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gross Premium</th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Deductions</th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monthly Salary</th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Daily Salary</th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monthly Premium</th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {visibleGrades.map((sg) => {
+                            const basic = sg.basicSalary || 0;
+                            const gross = sg.grossPremium || 0;
+                            const ded = sg.deductions || { sss: 0, pagibig: 0, philhealth: 0 };
+                            const totalDed = (ded.sss || 0) + (ded.pagibig || 0) + (ded.philhealth || 0);
+                            const monthly = sg.monthlySalaryAsPerContract || 0;
+                            const daily = sg.dailySalaryAsPerContract || 0;
+                            const premium = sg.monthlyPremium || 0;
+
+                            const prev = previousGradeMap.get(String(sg.grade));
+                            const isNewGrade = previousGradeMap.size > 0 && !prev;
+                            const prevDed = prev?.deductions
+                              ? (prev.deductions.sss || 0) + (prev.deductions.pagibig || 0) + (prev.deductions.philhealth || 0)
+                              : undefined;
+
+                            return (
+                              <tr key={sg._id} className={`hover:bg-gray-50 ${selectedGradeIds.has(sg._id) ? 'bg-green-50' : ''}`}>
+                                <td className="px-4 py-4 whitespace-nowrap">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedGradeIds.has(sg._id)}
+                                    onChange={() => toggleGradeSelection(sg._id)}
+                                  />
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                                  {sg.grade}
+                                  {isNewGrade && <NewGradeBadge />}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  ₱{basic.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  {!isNewGrade && <TrendBadge current={basic} previous={prev?.basicSalary} />}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  ₱{gross.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  {!isNewGrade && <TrendBadge current={gross} previous={prev?.grossPremium} />}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  ₱{totalDed.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  {!isNewGrade && <TrendBadge current={totalDed} previous={prevDed} />}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap font-medium">
+                                  ₱{monthly.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  {!isNewGrade && <TrendBadge current={monthly} previous={prev?.monthlySalaryAsPerContract} />}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  ₱{daily.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  {!isNewGrade && <TrendBadge current={daily} previous={prev?.dailySalaryAsPerContract} />}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  ₱{premium.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  {!isNewGrade && <TrendBadge current={premium} previous={prev?.monthlyPremium} />}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  {sg.isSpecialSalaryGrade ? (
+                                    <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                      Special
+                                    </span>
+                                  ) : (
+                                    <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                      Regular
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                  <div className="flex space-x-4">
+                                    <button onClick={() => handleViewSalaryGrade(sg)} className="text-green-600 hover:text-green-900">
+                                      View
+                                    </button>
+                                    <button onClick={() => handleEditSalaryGrade(sg)} className="text-blue-600 hover:text-blue-900">
+                                      Edit
+                                    </button>
+                                    <button onClick={() => handleDeleteSalaryGrade(sg._id)} className="text-red-600 hover:text-red-900">
+                                      Delete
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
