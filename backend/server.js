@@ -26,10 +26,6 @@ const LOCAL_IP = getLocalIP();
 
 // Middleware
 app.use(compression()); // gzip all responses
-app.use((req, res, next) => {
-  res.setHeader('Connection');
-  next();
-});
 app.use(cors({
   origin: [
     process.env.FRONTEND_URL,
