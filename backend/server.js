@@ -27,7 +27,7 @@ const LOCAL_IP = getLocalIP();
 // Middleware
 app.use(compression()); // gzip all responses
 app.use((req, res, next) => {
-  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Connection');
   next();
 });
 app.use(cors({
@@ -117,35 +117,9 @@ const startServer = async () => {
     console.log(`Backend running on port ${PORT}`);
     await initializeAdmin();
     startContractExpiryChecker();
-    startKeepAlive();
   });
 };
 
 startServer();
 
 export default app;
-
-// ── Keep-alive self-ping ──────────────────────────────────────────────────────
-// Pings /api/health every 14 minutes so Render's free tier doesn't spin down.
-// Only runs when a RENDER_EXTERNAL_URL or BACKEND_URL env var is set (i.e. in production).
-function startKeepAlive() {
-  const backendUrl = process.env.RENDER_EXTERNAL_URL || process.env.BACKEND_URL;
-  if (!backendUrl) {
-    console.log('Keep-alive: no RENDER_EXTERNAL_URL set — skipping (local dev).');
-    return;
-  }
-
-  const url = `${backendUrl.replace(/\/$/, '')}/api/health`;
-  const INTERVAL_MS = 14 * 60 * 1000; // 14 minutes
-
-  setInterval(async () => {
-    try {
-      const res = await fetch(url);
-      console.log(`Keep-alive ping → ${url} [${res.status}]`);
-    } catch (err) {
-      console.warn(`Keep-alive ping failed: ${err.message}`);
-    }
-  }, INTERVAL_MS);
-
-  console.log(`Keep-alive: pinging ${url} every 14 minutes.`);
-}
