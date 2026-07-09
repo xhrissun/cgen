@@ -1,4 +1,5 @@
 // backend/models/Contract.js
+// backend/models/Contract.js
 
 import mongoose from 'mongoose';
 
@@ -26,6 +27,11 @@ const contractSchema = new mongoose.Schema({
   position: { type: String, required: true },
   placeOfAssignment: { type: String, required: true },
   dutiesAndResponsibilities: [{ type: String }],
+
+  // Snapshot of the position's duties-rendering choice at contract creation
+  // time (mirrors Position.dutiesNumberingStyle) — see backend/models/Position.js.
+  dutiesNumberingStyle: { type: String, enum: ['LETTER', 'NUMBERED'], default: 'LETTER' },
+  dutiesSubItems: { type: [[String]], default: [] },
   
   // Salary Grade Reference
   salaryGrade: { 

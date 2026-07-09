@@ -1,3 +1,4 @@
+// frontend/src/components/ContractDetailsModal.jsx
 import { useState } from 'react';
 import api from '../api.js';
 
@@ -520,9 +521,26 @@ function ContractDetailsModal({ contract: initialContract, onClose }) {
             <div>
               <SectionHeader>Duties and Responsibilities ({contract.dutiesAndResponsibilities.length})</SectionHeader>
               <Panel style={{ maxHeight: 220, overflowY: 'auto' }}>
-                <ol style={{ margin: 0, padding: '0 0 0 22px', display: 'flex', flexDirection: 'column', gap: 8, listStyleType: 'lower-alpha' }}>
+                <ol style={{
+                  margin: 0,
+                  padding: '0 0 0 22px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  listStyleType: contract.dutiesNumberingStyle === 'NUMBERED' ? 'decimal' : 'lower-alpha'
+                }}>
                   {contract.dutiesAndResponsibilities.map((duty, idx) => (
-                    <li key={idx} style={{ fontSize: 13, color: D.textSecondary, lineHeight: 1.6, paddingLeft: 4 }}>{duty}</li>
+                    <li key={idx} style={{ fontSize: 13, color: D.textSecondary, lineHeight: 1.6, paddingLeft: 4 }}>
+                      {duty}
+                      {contract.dutiesNumberingStyle === 'NUMBERED' &&
+                        contract.dutiesSubItems && contract.dutiesSubItems[idx] && contract.dutiesSubItems[idx].length > 0 && (
+                        <ol style={{ margin: '6px 0 0', padding: '0 0 0 20px', listStyleType: 'lower-alpha', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {contract.dutiesSubItems[idx].map((sub, subIdx) => (
+                            <li key={subIdx} style={{ fontSize: 12.5, color: D.textSecondary, lineHeight: 1.6 }}>{sub}</li>
+                          ))}
+                        </ol>
+                      )}
+                    </li>
                   ))}
                 </ol>
               </Panel>

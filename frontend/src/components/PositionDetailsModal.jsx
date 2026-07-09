@@ -1,3 +1,4 @@
+// frontend/src/components/PositionDetailsModal.jsx
 import { useState } from 'react';
 
 function PositionDetailsModal({ position, onClose }) {
@@ -65,9 +66,19 @@ function PositionDetailsModal({ position, onClose }) {
             <div>
               <h4 className="text-lg font-semibold mb-3 text-gray-700">Duties and Responsibilities</h4>
               <div className="bg-blue-50 p-4 rounded-lg">
-                <ol className="list-decimal list-inside space-y-2">
+                <ol className={position.dutiesNumberingStyle === 'NUMBERED' ? 'list-decimal list-inside space-y-2' : 'list-[lower-alpha] list-inside space-y-2'}>
                   {position.dutiesAndResponsibilities.map((duty, idx) => (
-                    <li key={idx} className="text-sm">{duty}</li>
+                    <li key={idx} className="text-sm">
+                      {duty}
+                      {position.dutiesNumberingStyle === 'NUMBERED' &&
+                        position.dutiesSubItems && position.dutiesSubItems[idx] && position.dutiesSubItems[idx].length > 0 && (
+                        <ol className="list-[lower-alpha] list-inside ml-5 mt-1 space-y-1">
+                          {position.dutiesSubItems[idx].map((sub, subIdx) => (
+                            <li key={subIdx} className="text-sm text-gray-700">{sub}</li>
+                          ))}
+                        </ol>
+                      )}
+                    </li>
                   ))}
                 </ol>
               </div>

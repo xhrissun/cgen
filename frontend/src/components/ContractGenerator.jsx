@@ -1,3 +1,4 @@
+// frontend/src/components/ContractGenerator.jsx
 import { useState, useEffect } from 'react';
 import { SkeletonTable, SectionLoader, EmptyState, Spinner, dispatchPageLoading } from './ui.jsx';
 import api from '../api.js';
@@ -24,6 +25,8 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
     positionCode: '',
     placeOfAssignment: '',
     dutiesAndResponsibilities: [],
+    dutiesNumberingStyle: 'LETTER',
+    dutiesSubItems: [],
     salaryGrade: '',
     charging: 'GENERAL APPROPRIATIONS ACT',
     approverBranch: 'MANAGEMENT',  // ADD THIS LINE
@@ -422,6 +425,8 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
         position: position.title,
         salaryGrade: position.salaryGrade,
         dutiesAndResponsibilities: position.dutiesAndResponsibilities,
+        dutiesNumberingStyle: position.dutiesNumberingStyle || 'LETTER',
+        dutiesSubItems: position.dutiesSubItems || [],
         // Only update place of assignment if not a focal person (their place is locked)
         placeOfAssignment: currentUserRole === 'FOCAL_PERSON' 
           ? prev.placeOfAssignment 
@@ -707,6 +712,8 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
       salaryGrade: '',
       placeOfAssignment: preservedPlaceOfAssignment,
       dutiesAndResponsibilities: [],
+      dutiesNumberingStyle: 'LETTER',
+      dutiesSubItems: [],
       startDate: '',
       endDate: ''
     });

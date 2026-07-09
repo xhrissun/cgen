@@ -1,3 +1,4 @@
+// backend/routes/contracts.js
 // FILE: cgen-main/backend/routes/contracts.js
 
 import express from 'express';
@@ -20,6 +21,7 @@ import { fileURLToPath } from 'url';
 import { resolveHolidaysInRange } from '../utils/holidayResolver.js';
 import { calculatePremiumBreakdown } from '../utils/salaryCalculator.js';
 import { logActivity } from '../utils/activityLogger.js';
+import { buildDutiesLatex } from '../utils/dutiesRenderer.js';
 import { resolvePositionClauses } from '../utils/clauseResolver.js';
 import Notification from '../models/Notification.js';
 
@@ -516,6 +518,8 @@ router.post('/', verifyToken, async (req, res) => {
       positionCode,
       placeOfAssignment,
       dutiesAndResponsibilities,
+      dutiesNumberingStyle,
+      dutiesSubItems,
       salaryGrade,
       charging,
       approverBranch,
@@ -660,6 +664,8 @@ router.post('/', verifyToken, async (req, res) => {
       positionCode,
       placeOfAssignment,
       dutiesAndResponsibilities,
+      dutiesNumberingStyle: dutiesNumberingStyle || 'LETTER',
+      dutiesSubItems: dutiesSubItems || [],
       salaryGrade,
       isSpecialSalaryGrade: salaryGradeData.isSpecialSalaryGrade,
       
@@ -951,20 +957,13 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
 
     // Handle duties placeholder FIRST
     if (rawContent.includes('{dutiesAndResponsibilities}')) {
-      let dutiesText = '';
-      if (contract.dutiesAndResponsibilities && contract.dutiesAndResponsibilities.length > 0) {
-        dutiesText = '\n\\begin{enumerate}[label=\\alph*),leftmargin=0.5in,itemsep=0pt,parsep=0pt,topsep=0pt]\n';
-        contract.dutiesAndResponsibilities.forEach((duty, idx) => {
-          if (duty.trim()) {
-            const wrappedDuty = wrapLongText(duty.trim(), 85);
-            let suffix = ';';
-            if (idx === contract.dutiesAndResponsibilities.length - 2) suffix = '; and';
-            else if (idx === contract.dutiesAndResponsibilities.length - 1) suffix = '.';
-            dutiesText += `\\item ${escapeLatex(wrappedDuty)}${suffix}\n`;
-          }
-        });
-        dutiesText += '\\end{enumerate}';
-      }
+      const dutiesText = buildDutiesLatex({
+        duties: contract.dutiesAndResponsibilities,
+        subItems: contract.dutiesSubItems,
+        style: contract.dutiesNumberingStyle,
+        escapeLatex,
+        wrapLongText
+      });
       rawContent = rawContent.replace(/\{dutiesAndResponsibilities\}/gi, dutiesText);
     }
     

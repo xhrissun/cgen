@@ -1,3 +1,4 @@
+// backend/utils/clauseResolver.js
 import ClauseGroup from '../models/ClauseGroup.js';
 import Clause from '../models/Clause.js';
 
@@ -99,7 +100,7 @@ export async function resolvePositionClauses(position) {
  * adds/removes clauses to match the position's current set — so if a clause
  * group gains or loses a clause, draft contracts pick that up too.
  */
-export async function refreshDraftContractClauses(contract, resolvedClauses, newDuties) {
+export async function refreshDraftContractClauses(contract, resolvedClauses, newDuties, newDutiesNumberingStyle, newDutiesSubItems) {
   let changed = false;
 
   const newClauseEntries = resolvedClauses.map(c => ({
@@ -123,6 +124,19 @@ export async function refreshDraftContractClauses(contract, resolvedClauses, new
     const dutiesChanged = JSON.stringify(contract.dutiesAndResponsibilities) !== JSON.stringify(newDuties);
     if (dutiesChanged) {
       contract.dutiesAndResponsibilities = newDuties;
+      changed = true;
+    }
+  }
+
+  if (newDutiesNumberingStyle !== undefined && contract.dutiesNumberingStyle !== newDutiesNumberingStyle) {
+    contract.dutiesNumberingStyle = newDutiesNumberingStyle;
+    changed = true;
+  }
+
+  if (newDutiesSubItems !== undefined) {
+    const subItemsChanged = JSON.stringify(contract.dutiesSubItems || []) !== JSON.stringify(newDutiesSubItems || []);
+    if (subItemsChanged) {
+      contract.dutiesSubItems = newDutiesSubItems;
       changed = true;
     }
   }
@@ -155,7 +169,9 @@ export async function cascadeRefreshDraftContractsForPosition(position) {
     const changed = await refreshDraftContractClauses(
       contract,
       resolvedClauses,
-      position.dutiesAndResponsibilities
+      position.dutiesAndResponsibilities,
+      position.dutiesNumberingStyle,
+      position.dutiesSubItems
     );
     if (changed) refreshedCount++;
   }

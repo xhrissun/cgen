@@ -1,3 +1,4 @@
+// backend/models/Position.js
 import mongoose from 'mongoose';
 
 const positionSchema = new mongoose.Schema({
@@ -21,6 +22,18 @@ const positionSchema = new mongoose.Schema({
   needsClauseAssignment: { type: Boolean, default: false },
   
   dutiesAndResponsibilities: [{ type: String }],
+
+  // How the duties list above is rendered on the generated contract:
+  //  - 'LETTER'   (default/legacy): flat a) b) c) ... list
+  //  - 'NUMBERED': 1) 2) 3) ... top-level list, where each top-level duty may
+  //    optionally have its own lettered sub-items (dutiesSubItems below).
+  dutiesNumberingStyle: { type: String, enum: ['LETTER', 'NUMBERED'], default: 'LETTER' },
+
+  // Only used when dutiesNumberingStyle === 'NUMBERED'. Parallel array to
+  // dutiesAndResponsibilities — dutiesSubItems[i] holds the lettered
+  // sub-items (a, b, c...) rendered under dutiesAndResponsibilities[i].
+  // Ignored (and safe to leave empty) in LETTER mode.
+  dutiesSubItems: { type: [[String]], default: [] },
   
   // Ad-hoc/individual clause assignments NOT coming from a clause group.
   // Clauses that arrive via a group are NOT copied in here anymore — they are

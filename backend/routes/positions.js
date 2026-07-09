@@ -1,3 +1,4 @@
+// backend/routes/positions.js
 // FILE: cgen-main/backend/routes/positions.js
 
 import mongoose from 'mongoose';
@@ -8,6 +9,7 @@ import SalaryGrade from '../models/SalaryGrade.js';
 import Clause from '../models/Clause.js';
 import ClauseGroup from '../models/ClauseGroup.js';
 import { resolvePositionClauses, cascadeRefreshDraftContractsForPosition } from '../utils/clauseResolver.js';
+import { buildDutiesLatex } from '../utils/dutiesRenderer.js';
 import User from '../models/User.js';
 import { verifyToken, requireRole } from './auth.js';
 import Notification from '../models/Notification.js';
@@ -1270,6 +1272,8 @@ router.post('/', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON'), asyn
       isSpecialSalaryGrade,
       specialSalaryAmount,
       dutiesAndResponsibilities,
+      dutiesNumberingStyle,
+      dutiesSubItems,
       assignedClauses,
       clauseGroups,
       placeOfAssignment,
@@ -1306,6 +1310,8 @@ router.post('/', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON'), asyn
       isSpecialSalaryGrade,
       specialSalaryAmount: specialSalaryAmount ? parseFloat(specialSalaryAmount) : undefined, // ← ADD THIS PARSE
       dutiesAndResponsibilities,
+      dutiesNumberingStyle: dutiesNumberingStyle || 'LETTER',
+      dutiesSubItems: dutiesSubItems || [],
       assignedClauses: finalIndividualClauses,
       assignedClauseGroups: finalClauseGroups,
       placeOfAssignment: finalPlaceOfAssignment, // Use the forced assignment for focal persons

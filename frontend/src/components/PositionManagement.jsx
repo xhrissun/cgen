@@ -1,3 +1,4 @@
+// frontend/src/components/PositionManagement.jsx
 import { useState, useEffect } from 'react';
 import api from '../api.js';
 import PositionDetailsModal from './PositionDetailsModal';
@@ -63,6 +64,8 @@ function PositionManagement() {
     isSpecialSalaryGrade: false,
     specialSalaryAmount: '',
     dutiesAndResponsibilities: [''],
+    dutiesNumberingStyle: 'LETTER', // 'LETTER' = a) b) c) ...  |  'NUMBERED' = 1) 2) 3) ... with lettered sub-items
+    dutiesSubItems: [[]], // parallel to dutiesAndResponsibilities, only used in NUMBERED style
     assignedClauses: [],
     clauseGroups: [],
     placeOfAssignment: '',
@@ -242,6 +245,10 @@ function PositionManagement() {
       dutiesAndResponsibilities: position.dutiesAndResponsibilities.length > 0 
         ? position.dutiesAndResponsibilities 
         : [''],
+      dutiesNumberingStyle: position.dutiesNumberingStyle || 'LETTER',
+      dutiesSubItems: position.dutiesAndResponsibilities.length > 0
+        ? position.dutiesAndResponsibilities.map((_, i) => (position.dutiesSubItems && position.dutiesSubItems[i]) || [])
+        : [[]],
       assignedClauses: (position.assignedClauses || []).map(c => c._id || c),
       clauseGroups: existingGroupIds,
       placeOfAssignment: position.placeOfAssignment || '',
@@ -269,6 +276,8 @@ function PositionManagement() {
       isSpecialSalaryGrade: false,
       specialSalaryAmount: '',
       dutiesAndResponsibilities: [''],
+      dutiesNumberingStyle: 'LETTER',
+      dutiesSubItems: [[]],
       assignedClauses: [],
       clauseGroups: [],
       placeOfAssignment: preservedAssignment,
@@ -285,7 +294,8 @@ function PositionManagement() {
   const addDuty = () => {
     setFormData({
       ...formData,
-      dutiesAndResponsibilities: [...formData.dutiesAndResponsibilities, '']
+      dutiesAndResponsibilities: [...formData.dutiesAndResponsibilities, ''],
+      dutiesSubItems: [...(formData.dutiesSubItems || []), []]
     });
   };
 
@@ -300,10 +310,38 @@ function PositionManagement() {
 
   const removeDuty = (index) => {
     const updated = formData.dutiesAndResponsibilities.filter((_, i) => i !== index);
+    const updatedSubItems = (formData.dutiesSubItems || []).filter((_, i) => i !== index);
     setFormData({
       ...formData,
-      dutiesAndResponsibilities: updated.length > 0 ? updated : ['']
+      dutiesAndResponsibilities: updated.length > 0 ? updated : [''],
+      dutiesSubItems: updated.length > 0 ? updatedSubItems : [[]]
     });
+  };
+
+  // ── Sub-items (lettered a, b, c... items nested under a numbered duty) ──
+  // Only relevant when dutiesNumberingStyle === 'NUMBERED'.
+  const addSubItem = (dutyIndex) => {
+    const updated = (formData.dutiesSubItems || []).map((subs, i) =>
+      i === dutyIndex ? [...(subs || []), ''] : (subs || [])
+    );
+    setFormData({ ...formData, dutiesSubItems: updated });
+  };
+
+  const updateSubItem = (dutyIndex, subIndex, value) => {
+    const updated = (formData.dutiesSubItems || []).map((subs, i) => {
+      if (i !== dutyIndex) return subs || [];
+      const newSubs = [...(subs || [])];
+      newSubs[subIndex] = value;
+      return newSubs;
+    });
+    setFormData({ ...formData, dutiesSubItems: updated });
+  };
+
+  const removeSubItem = (dutyIndex, subIndex) => {
+    const updated = (formData.dutiesSubItems || []).map((subs, i) =>
+      i === dutyIndex ? (subs || []).filter((_, si) => si !== subIndex) : (subs || [])
+    );
+    setFormData({ ...formData, dutiesSubItems: updated });
   };
 
   const toggleClause = (clauseId) => {
@@ -778,23 +816,96 @@ function PositionManagement() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Duties and Responsibilities</label>
-              {formData.dutiesAndResponsibilities.map((duty, index) => (
-                <div key={index} className="flex gap-2 mb-2">
-                  <textarea
-                    value={duty}
-                    onChange={(e) => updateDuty(index, e.target.value)}
-                    className="input flex-1"
-                    rows="2"
-                    placeholder={`Duty ${index + 1}`}
-                  />
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium">Duties and Responsibilities</label>
+                <div className="flex gap-1 rounded-md border border-gray-300 p-0.5 bg-gray-50">
                   <button
                     type="button"
-                    onClick={() => removeDuty(index)}
-                    className="btn btn-danger"
+                    onClick={() => setFormData({ ...formData, dutiesNumberingStyle: 'LETTER' })}
+                    className={`px-3 py-1 text-xs rounded ${
+                      (formData.dutiesNumberingStyle || 'LETTER') === 'LETTER'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-transparent text-gray-600'
+                    }`}
+                    title="Flat list: a) b) c) ..."
                   >
-                    Remove
+                    Letter (a, b, c)
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, dutiesNumberingStyle: 'NUMBERED' })}
+                    className={`px-3 py-1 text-xs rounded ${
+                      formData.dutiesNumberingStyle === 'NUMBERED'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-transparent text-gray-600'
+                    }`}
+                    title="Numbered top level: 1) 2) 3) ..., each with optional lettered sub-items"
+                  >
+                    Numbered (1, 2, 3)
+                  </button>
+                </div>
+              </div>
+
+              {formData.dutiesNumberingStyle === 'NUMBERED' && (
+                <p className="text-xs text-gray-500 mb-2">
+                  Each numbered item can have its own lettered sub-items (a, b, c...) underneath it.
+                </p>
+              )}
+
+              {formData.dutiesAndResponsibilities.map((duty, index) => (
+                <div key={index} className="mb-3 border border-gray-200 rounded-md p-2 bg-white">
+                  <div className="flex gap-2">
+                    <span className="text-sm text-gray-400 pt-2 w-6 text-right shrink-0">
+                      {formData.dutiesNumberingStyle === 'NUMBERED' ? `${index + 1})` : `${String.fromCharCode(97 + index)})`}
+                    </span>
+                    <textarea
+                      value={duty}
+                      onChange={(e) => updateDuty(index, e.target.value)}
+                      className="input flex-1"
+                      rows="2"
+                      placeholder={`Duty ${index + 1}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeDuty(index)}
+                      className="btn btn-danger"
+                    >
+                      Remove
+                    </button>
+                  </div>
+
+                  {formData.dutiesNumberingStyle === 'NUMBERED' && (
+                    <div className="ml-8 mt-2 space-y-1">
+                      {((formData.dutiesSubItems && formData.dutiesSubItems[index]) || []).map((subItem, subIndex) => (
+                        <div key={subIndex} className="flex gap-2">
+                          <span className="text-xs text-gray-400 pt-2 w-6 text-right shrink-0">
+                            {String.fromCharCode(97 + subIndex)})
+                          </span>
+                          <input
+                            type="text"
+                            value={subItem}
+                            onChange={(e) => updateSubItem(index, subIndex, e.target.value)}
+                            className="input flex-1 text-sm"
+                            placeholder={`Sub-item ${String.fromCharCode(97 + subIndex)}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeSubItem(index, subIndex)}
+                            className="btn btn-danger btn-sm"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => addSubItem(index)}
+                        className="btn btn-secondary btn-sm mt-1"
+                      >
+                        + Add Sub-item
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
               <button
