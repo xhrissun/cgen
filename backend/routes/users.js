@@ -435,8 +435,15 @@ router.post('/:id/documents', verifyToken, documentUpload.single('file'), async 
   }
 });
 
-// Get/Download document — redirect to R2 public URL
-// Get/Download document — redirect to R2 public URL
+// Get/Download document — stream directly from R2 using our private API
+// credentials (same approach as the /:id/photo/* proxy below). We used to
+// redirect to a public R2 URL here, which meant every document (contracts,
+// signed files, EODB ID PDFs, legacy flat-name uploads) silently depended on
+// the bucket's "Public Development URL" being enabled. If that's ever turned
+// off, a stored `document.url` pointing at pub-xxxx.r2.dev becomes a dead
+// link and this route 404s. Deriving the key and fetching it privately means
+// it keeps working (old records included) no matter what the bucket's public
+// access setting is.
 // Use wildcard to capture filenames that contain slashes (R2 keys with subfolders)
 router.get('/:id/documents/*', verifyToken, async (req, res) => {
   try {
@@ -478,22 +485,46 @@ router.get('/:id/documents/*', verifyToken, async (req, res) => {
       );
     }
 
-    if (document) {
-      // We found the document record — redirect to its R2 URL
-      const fileUrl = document.url ||
-        (document.filename?.startsWith('http') ? document.filename : null) ||
-        (document.key ? `${R2_PUBLIC_URL}/${document.key}` : null) ||
-        `${R2_PUBLIC_URL}/${rawParam}`;
-      return res.redirect(fileUrl);
+    // Pull the R2 object key out of whatever we have on record. Old rows may
+    // only have a full public URL (document.url / document.filename); newer
+    // rows have `key` directly. Either way we end up with a bare key and
+    // fetch it ourselves with our private credentials — never redirect to a
+    // public R2 URL.
+    const keyFromUrl = (value) => {
+      if (!value || !value.startsWith('http')) return null;
+      try {
+        return new URL(value).pathname.replace(/^\//, '');
+      } catch (_) {
+        return null;
+      }
+    };
+
+    const objectKey =
+      document?.key ||
+      keyFromUrl(document?.url) ||
+      keyFromUrl(document?.filename) ||
+      (document && !document.filename?.startsWith('http') ? document.filename : null) ||
+      (!rawParam.startsWith('http') ? rawParam : keyFromUrl(rawParam));
+
+    if (!objectKey) {
+      return res.status(404).json({ message: 'Document not found' });
     }
 
-    // No document record found — try constructing R2 URL directly from the param
-    // This handles legacy data where documents array wasn't updated
-    const directUrl = rawParam.startsWith('http')
-      ? rawParam
-      : `${R2_PUBLIC_URL}/${rawParam}`;
+    try {
+      const command = new GetObjectCommand({ Bucket: R2_BUCKET, Key: objectKey });
+      const r2Response = await r2Client.send(command);
 
-    return res.redirect(directUrl);
+      if (r2Response.ContentType) res.setHeader('Content-Type', r2Response.ContentType);
+      if (r2Response.ContentLength) res.setHeader('Content-Length', r2Response.ContentLength);
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+
+      r2Response.Body.pipe(res);
+    } catch (err) {
+      if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
+        return res.status(404).json({ message: 'Document not found in storage' });
+      }
+      throw err;
+    }
 
   } catch (error) {
     console.error('Error serving document:', error);
