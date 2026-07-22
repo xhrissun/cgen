@@ -46,6 +46,11 @@ export const documentUpload = multer({
   storage: multerS3({
     s3: r2Client,
     bucket: R2_BUCKET,
+    // Without this, multer-s3 stores every object as Content-Type:
+    // application/octet-stream regardless of the actual file — which is
+    // why a generated EODB PDF downloads instead of opening inline in the
+    // browser's PDF viewer when later viewed from Documents.
+    contentType: multerS3.AUTO_CONTENT_TYPE,
     key: (req, file, cb) => {
       cb(null, buildKey(file));
     },
@@ -58,6 +63,7 @@ export const profilePhotoUpload = multer({
   storage: multerS3({
     s3: r2Client,
     bucket: R2_BUCKET,
+    contentType: multerS3.AUTO_CONTENT_TYPE,
     key: (req, file, cb) => {
       const userId = req.params.id;
       const timestamp = Date.now();
@@ -76,6 +82,7 @@ export const signedContractUpload = multer({
   storage: multerS3({
     s3: r2Client,
     bucket: R2_BUCKET,
+    contentType: multerS3.AUTO_CONTENT_TYPE,
     key: (req, file, cb) => {
       cb(null, buildKey(file));
     },

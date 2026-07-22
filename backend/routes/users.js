@@ -319,6 +319,27 @@ router.delete('/:id', verifyToken, async (req, res) => {
   }
 });
 
+// Objects uploaded before the multer-s3 AUTO_CONTENT_TYPE fix are stuck on
+// R2 with Content-Type: application/octet-stream forever (R2 metadata isn't
+// retroactively fixed by a code change). Falling back to a guess from the
+// file extension means those older files also open inline instead of
+// downloading, without needing to re-upload anything.
+const EXT_CONTENT_TYPES = {
+  '.pdf': 'application/pdf',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+};
+
+const resolveContentType = (r2ContentType, key) => {
+  if (r2ContentType && r2ContentType !== 'application/octet-stream' && r2ContentType !== 'binary/octet-stream') {
+    return r2ContentType;
+  }
+  const ext = path.extname(key || '').toLowerCase();
+  return EXT_CONTENT_TYPES[ext] || r2ContentType || 'application/octet-stream';
+};
+
 // Authenticated photo proxy — streams any R2 object through the backend.
 // Use this when the R2 bucket is NOT configured for public access, or when
 // VITE_R2_PUBLIC_URL is missing. The frontend calls /api/users/:id/photo/:key
@@ -344,9 +365,10 @@ router.get('/:id/photo/*', verifyToken, async (req, res) => {
     const command = new GetObjectCommand({ Bucket: R2_BUCKET, Key: key });
     const r2Response = await r2Client.send(command);
 
-    // Forward content type and length
-    if (r2Response.ContentType) res.setHeader('Content-Type', r2Response.ContentType);
+    // Forward content type/length; render inline rather than downloading.
+    res.setHeader('Content-Type', resolveContentType(r2Response.ContentType, key));
     if (r2Response.ContentLength) res.setHeader('Content-Length', r2Response.ContentLength);
+    res.setHeader('Content-Disposition', `inline; filename="${path.basename(key)}"`);
 
     // Cache for 1 hour in browser — photos don't change often
     res.setHeader('Cache-Control', 'private, max-age=3600');
@@ -514,8 +536,9 @@ router.get('/:id/documents/*', verifyToken, async (req, res) => {
       const command = new GetObjectCommand({ Bucket: R2_BUCKET, Key: objectKey });
       const r2Response = await r2Client.send(command);
 
-      if (r2Response.ContentType) res.setHeader('Content-Type', r2Response.ContentType);
+      res.setHeader('Content-Type', resolveContentType(r2Response.ContentType, objectKey));
       if (r2Response.ContentLength) res.setHeader('Content-Length', r2Response.ContentLength);
+      res.setHeader('Content-Disposition', `inline; filename="${path.basename(objectKey)}"`);
       res.setHeader('Cache-Control', 'private, max-age=3600');
 
       r2Response.Body.pipe(res);
