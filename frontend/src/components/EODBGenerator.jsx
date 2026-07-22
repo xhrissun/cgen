@@ -56,6 +56,25 @@ function EODBGenerator({ userId, onDocumentUploaded }) {
   };
 
   useEffect(() => {
+    // IMPORTANT: this effect must also depend on `loading`.
+    //
+    // fetchEODBData() calls setEodbData(...) BEFORE the second await
+    // resolves, and only calls setLoading(false) afterwards. Those two
+    // setState calls land in separate render commits (they're on opposite
+    // sides of an `await`), so:
+    //   render #1: loading=true,  eodbData=<object>   → the component is
+    //              still on the spinner branch, so the <svg ref=...> nodes
+    //              are not mounted yet and the refs are null.
+    //   render #2: loading=false, eodbData=<SAME ref>  → the <svg> nodes
+    //              finally mount, but since `eodbData` didn't change
+    //              reference, an effect keyed only on [eodbData] never
+    //              fires again — so JsBarcode never runs against the real
+    //              nodes and the barcodes never appear.
+    // Depending on `loading` too guarantees we re-run once the refs are
+    // actually in the DOM. The old setTimeout(100) couldn't fix this: the
+    // effect body wasn't the problem, the effect never re-firing was.
+    if (loading || !eodbData) return;
+
     const generateBarcodes = () => {
       if (eodbData?.tin && eodbData.tin.length === 9 && tinBarcodeRef.current) {
         try {
@@ -91,14 +110,37 @@ function EODBGenerator({ userId, onDocumentUploaded }) {
       }
     };
 
-    if (eodbData) {
-      setTimeout(generateBarcodes, 100);
-    }
-  }, [eodbData]);
+    // A single rAF tick is enough now that we know the refs are mounted;
+    // no need for an arbitrary delay.
+    requestAnimationFrame(generateBarcodes);
+  }, [eodbData, loading]);
 
   const generateHash = (data) => {
     return CryptoJS.SHA256(data).toString(CryptoJS.enc.Hex).slice(0, 7);
   };
+
+  // html2canvas snapshots whatever is currently painted to the screen. If we
+  // call it right after mutating the DOM (drawing a barcode, appending a
+  // cloned node, etc.) there's no guarantee the browser has actually painted
+  // that change yet — that's what produced "incomplete" barcodes. Two
+  // rAFs guarantees at least one full paint has happened before we capture.
+  const waitForPaint = () =>
+    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  // The passport photo is applied as a CSS backgroundImage, which loads
+  // asynchronously. If html2canvas captures before the browser has finished
+  // fetching/decoding it, the photo comes out blank. Loading the same URL
+  // through an Image() first (browser cache makes this effectively free on
+  // the 2nd load) lets us know it's actually ready before we snapshot.
+  const waitForImage = (url) =>
+    new Promise((resolve) => {
+      if (!url) return resolve();
+      const img = new Image();
+      img.onload = () => resolve();
+      img.onerror = () => resolve(); // don't block capture on a failed/expired image
+      img.src = url;
+      if (img.complete) resolve();
+    });
 
   const handleGenerateID = async () => {
     if (!eodbData) {
@@ -133,6 +175,9 @@ function EODBGenerator({ userId, onDocumentUploaded }) {
 
     setGenerating(true);
     try {
+      await waitForImage(profilePhotoUrl);
+      await waitForPaint();
+
       const canvas = await html2canvas(idCardRef.current, {
         scale: 2,
         useCORS: true,
@@ -185,7 +230,8 @@ function EODBGenerator({ userId, onDocumentUploaded }) {
         serialBarcodeContainer.appendChild(serialBarcodeSvg);
       }
 
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await waitForImage(profilePhotoUrl);
+      await waitForPaint();
 
       const canvas = await html2canvas(idCardClone, {
         scale: 2,

@@ -88,7 +88,13 @@ const api = {
     // breaks callers that read response.headers['content-disposition'], and
     // a "generate PDF" call should always hit the server fresh anyway.
     const isBinary = config.responseType && config.responseType !== 'json';
-    if (isBinary) {
+    // EODB data (passport photo status, TIN, contract number) can change from
+    // a different tab/route (photo upload, contract edit) that doesn't touch
+    // '/api/eodb' at all, so cache invalidation-by-prefix never clears it.
+    // Always fetch it fresh rather than risk showing/generating an EODB ID
+    // with a stale "no photo" or outdated contract number.
+    const isEodb = url.includes('/api/eodb');
+    if (isBinary || isEodb) {
       return _axios.get(url, config);
     }
 
