@@ -528,7 +528,7 @@ function ContractualDashboard({ user, embedded = false }) {
             ))}
           </nav>
         </div>
-        <DashboardContent />
+        {DashboardContent()}
       </div>
     );
   }
@@ -598,7 +598,7 @@ function ContractualDashboard({ user, embedded = false }) {
       <div className="flex-1 ml-72 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto pb-14">
           <div className="p-6 md:p-8 lg:p-10" style={{ minHeight: "100%" }}>
-            <DashboardContent />
+            {DashboardContent()}
           </div>
         </div>
       </div>
@@ -616,6 +616,19 @@ function ContractualDashboard({ user, embedded = false }) {
 
   // Shared content renderer — used by both the embedded tab-strip layout
   // and the full sidebar layout above, so the tab bodies are never duplicated.
+  //
+  // IMPORTANT: this is called directly as `{DashboardContent()}`, NOT
+  // rendered as `<DashboardContent />`. It's defined inside
+  // ContractualDashboard's render body, so a fresh function reference is
+  // created on every re-render. If it were used as a JSX element
+  // (`<DashboardContent />`), React would treat that new reference as an
+  // entirely new component type each time and unmount + remount this whole
+  // subtree on every keystroke in the profile form — which is exactly what
+  // caused the "type one letter, form jumps, then can't type" bug: the
+  // focused <input> was destroyed and recreated on every character.
+  // Calling it as a plain function keeps its JSX inlined into the parent's
+  // own render output, so there's no separate component identity and no
+  // remount.
   function DashboardContent() {
     return (
     <div className="space-y-6">

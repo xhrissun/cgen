@@ -119,6 +119,19 @@ function EODBGenerator({ userId, onDocumentUploaded }) {
     return CryptoJS.SHA256(data).toString(CryptoJS.enc.Hex).slice(0, 7);
   };
 
+  // The ID card is captured by html2canvas as a fixed-resolution bitmap and
+  // then embedded into the PDF at a fixed 90mm print size. The browser
+  // renders the *live* DOM (crop preview, ID preview) at full native display
+  // resolution, which is why everything looks sharp on screen — but once
+  // flattened into one bitmap for the PDF, its sharpness is capped by
+  // whatever pixel count html2canvas captured, regardless of screen quality.
+  // The card is 9cm x 12.5cm in CSS px (~340x472 @96dpi); the old `scale: 2`
+  // only produced ~192 DPI once placed at 90mm in the PDF — noticeably
+  // below the ~300 DPI expected for print-quality output, and most visible
+  // on the photo (continuous detail) vs. the barcodes/text (vector-like,
+  // less sensitive to it). Scale 4 gets us to ~384 DPI.
+  const PRINT_CAPTURE_SCALE = 4;
+
   // html2canvas snapshots whatever is currently painted to the screen. If we
   // call it right after mutating the DOM (drawing a barcode, appending a
   // cloned node, etc.) there's no guarantee the browser has actually painted
@@ -179,7 +192,7 @@ function EODBGenerator({ userId, onDocumentUploaded }) {
       await waitForPaint();
 
       const canvas = await html2canvas(idCardRef.current, {
-        scale: 2,
+        scale: PRINT_CAPTURE_SCALE,
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false
@@ -234,7 +247,7 @@ function EODBGenerator({ userId, onDocumentUploaded }) {
       await waitForPaint();
 
       const canvas = await html2canvas(idCardClone, {
-        scale: 2,
+        scale: PRINT_CAPTURE_SCALE,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',

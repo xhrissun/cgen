@@ -22,6 +22,14 @@ function EnhancedImageCropper({ imageSrc, onConfirm, onCancel, uploading, cropTy
   const { width: CROP_WIDTH, height: CROP_HEIGHT, label: CROP_LABEL } = 
     CROP_DIMENSIONS[cropType] || CROP_DIMENSIONS.passport;
 
+  // The on-screen crop viewport (CROP_WIDTH/CROP_HEIGHT above) doubles as the
+  // saved image's pixel resolution today — but 300x450 is quite low-res for
+  // a photo that ends up printed on a physical ID card. Save at a higher
+  // resolution while keeping the crop framing/UI exactly the same size.
+  const OUTPUT_SCALE = 2;
+  const OUTPUT_WIDTH = CROP_WIDTH * OUTPUT_SCALE;
+  const OUTPUT_HEIGHT = CROP_HEIGHT * OUTPUT_SCALE;
+
   // Prevent page scroll when using wheel over crop area
   useEffect(() => {
     const preventScroll = (e) => {
@@ -92,15 +100,24 @@ function EnhancedImageCropper({ imageSrc, onConfirm, onCancel, uploading, cropTy
       return;
     }
 
-    // Set canvas to exact crop dimensions
-    canvas.width = CROP_WIDTH;
-    canvas.height = CROP_HEIGHT;
+    // Set canvas to the higher-res output dimensions (2x the on-screen crop
+    // viewport), so the saved photo has real detail to embed later instead
+    // of being capped at the small on-screen frame size.
+    canvas.width = OUTPUT_WIDTH;
+    canvas.height = OUTPUT_HEIGHT;
 
     const ctx = canvas.getContext('2d');
-    
+
+    // Canvas 2D defaults to a low-quality resampling filter for drawImage()
+    // scaling unless explicitly told otherwise — this was the direct cause
+    // of the embedded passport photo looking blurry (barcodes/text are
+    // vector-based and unaffected, which is why only the photo looked soft).
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
     // Clear and fill white background
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, CROP_WIDTH, CROP_HEIGHT);
+    ctx.fillRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
 
     // Get container bounds
     const containerRect = container.getBoundingClientRect();
@@ -108,7 +125,8 @@ function EnhancedImageCropper({ imageSrc, onConfirm, onCancel, uploading, cropTy
     // Get the actual img element position and size
     const imgRect = img.getBoundingClientRect();
     
-    // Calculate the visible crop area (centered in container)
+    // Calculate the visible crop area (centered in container) — based on the
+    // on-screen viewport size, since that's what the user actually framed.
     const cropAreaLeft = (containerRect.width - CROP_WIDTH) / 2;
     const cropAreaTop = (containerRect.height - CROP_HEIGHT) / 2;
 
@@ -120,17 +138,21 @@ function EnhancedImageCropper({ imageSrc, onConfirm, onCancel, uploading, cropTy
     const screenToOriginalX = imageDimensions.width / (imgRect.width || 1);
     const screenToOriginalY = imageDimensions.height / (imgRect.height || 1);
 
-    // Source coordinates in the ORIGINAL image
+    // Source coordinates in the ORIGINAL image (still based on the on-screen
+    // crop viewport — this determines WHICH region gets cropped, not the
+    // saved resolution)
     const sx = visibleImageLeft * screenToOriginalX;
     const sy = visibleImageTop * screenToOriginalY;
     const sWidth = CROP_WIDTH * screenToOriginalX;
     const sHeight = CROP_HEIGHT * screenToOriginalY;
 
-    // Draw the cropped portion from source image to canvas
+    // Draw the cropped portion from source image to canvas, rendering it
+    // into the larger OUTPUT canvas (this is what actually saves more real
+    // detail, rather than being capped at the on-screen viewport's own size)
     ctx.drawImage(
       img,
       sx, sy, sWidth, sHeight,
-      0, 0, CROP_WIDTH, CROP_HEIGHT
+      0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT
     );
 
     // Convert to blob
