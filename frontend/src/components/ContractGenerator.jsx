@@ -51,6 +51,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSemester, setFilterSemester] = useState('');
   const [filterAssignment, setFilterAssignment] = useState('');
+  const [filterScanned, setFilterScanned] = useState(''); // '', 'UPLOADED', 'NOT_UPLOADED'
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
   const [showInactiveStatuses, setShowInactiveStatuses] = useState(false);
 
@@ -1643,6 +1644,19 @@ const handleFileUpload = (contractId, event) => {
             </select>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium mb-1">Scanned Contract</label>
+            <select
+              value={filterScanned}
+              onChange={(e) => setFilterScanned(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            >
+              <option value="">All</option>
+              <option value="UPLOADED">Uploaded</option>
+              <option value="NOT_UPLOADED">Not Uploaded</option>
+            </select>
+          </div>
+
           <div className="flex items-center">
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
@@ -1663,6 +1677,7 @@ const handleFileUpload = (contractId, event) => {
                 setFilterStatus('');
                 setFilterSemester('');
                 setFilterAssignment('');
+                setFilterScanned('');
                 setShowDuplicatesOnly(false);
               }}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm"
@@ -1680,6 +1695,8 @@ const handleFileUpload = (contractId, event) => {
                 const matchStatus = !filterStatus || c.status === filterStatus;
                 const matchSemester = !filterSemester || c.semester.toString() === filterSemester;
                 const matchAssignment = !filterAssignment || c.placeOfAssignment === filterAssignment;
+                const matchScanned = !filterScanned ||
+                  (filterScanned === 'UPLOADED' ? !!c.signedContractFile : !c.signedContractFile);
                 
                 let matchDuplicate = true;
                 if (showDuplicatesOnly) {
@@ -1694,7 +1711,7 @@ const handleFileUpload = (contractId, event) => {
                   }
                 }
                 
-                return matchArchived && matchInactive && matchName && matchPosition && matchStatus && matchSemester && matchAssignment && matchDuplicate;
+                return matchArchived && matchInactive && matchName && matchPosition && matchStatus && matchSemester && matchAssignment && matchScanned && matchDuplicate;
               }).length} of {contracts.length} contracts
             </span>
           </div>
@@ -1731,6 +1748,8 @@ const handleFileUpload = (contractId, event) => {
                   const matchStatus = !filterStatus || c.status === filterStatus;
                   const matchSemester = !filterSemester || c.semester.toString() === filterSemester;
                   const matchAssignment = !filterAssignment || c.placeOfAssignment === filterAssignment;
+                  const matchScanned = !filterScanned ||
+                    (filterScanned === 'UPLOADED' ? !!c.signedContractFile : !c.signedContractFile);
 
                   let matchDuplicate = true;
                   if (showDuplicatesOnly) {
@@ -1745,7 +1764,7 @@ const handleFileUpload = (contractId, event) => {
                     }
                   }
                   
-                  return matchArchived && matchInactive && matchName && matchPosition && matchStatus && matchSemester && matchAssignment && matchDuplicate;
+                  return matchArchived && matchInactive && matchName && matchPosition && matchStatus && matchSemester && matchAssignment && matchScanned && matchDuplicate;
                 })
                 .sort((a, b) => {
                   // Latest contracts first — sort by createdAt descending

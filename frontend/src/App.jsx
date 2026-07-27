@@ -8,6 +8,14 @@ import FocalPersonDashboard from './components/FocalPersonDashboard';
 import FinanceOfficerDashboard from './components/FinanceOfficerDashboard';
 import { ToastProvider } from './components/ui.jsx';
 import { clearCache } from './api.js';
+import { useInactivityLogout } from './hooks/useInactivityLogout';
+import InactivityWarningModal from './components/InactivityWarningModal';
+
+// Auto-logout after this much inactivity. A warning modal appears
+// WARNING_MS before the logout actually happens, giving the user a
+// chance to stay signed in.
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+const WARNING_MS = 60 * 1000; // 60-second warning
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -61,8 +69,21 @@ function App() {
     setUser(null);
   };
 
+  const { showWarning, secondsLeft, stayLoggedIn } = useInactivityLogout({
+    enabled: !!user,
+    timeoutMs: IDLE_TIMEOUT_MS,
+    warningMs: WARNING_MS,
+    onLogout: handleLogout,
+  });
+
   return (
   <ToastProvider>
+    <InactivityWarningModal
+      open={showWarning}
+      secondsLeft={secondsLeft}
+      onStay={stayLoggedIn}
+      onLogoutNow={handleLogout}
+    />
     <Router>
       <Routes>
         <Route 
