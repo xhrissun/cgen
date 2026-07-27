@@ -12,7 +12,8 @@ import { Parser } from 'json2csv';
 import csv from 'csv-parser';
 import { signedContractUpload } from '../utils/r2Upload.js';
 import { deleteFromR2 } from '../utils/r2Delete.js';
-import { R2_PUBLIC_URL } from '../config/r2.js';
+import { R2_PUBLIC_URL, R2_BUCKET, r2Client } from '../config/r2.js';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -34,6 +35,25 @@ const sanitizeFilename = (str = '') => {
     .replace(/\s+/g, ' ')                    // Normalize spaces
     .replace(/[.\s]+$/g, '')                 // 🚨 CRITICAL: Remove trailing dots/spaces
     .trim();
+};
+
+// R2 stores everything as application/octet-stream unless multer-s3's
+// AUTO_CONTENT_TYPE guessed correctly at upload time. Fall back to the file
+// extension so the browser can render PDFs/images inline instead of always
+// prompting a download.
+const SIGNED_CONTRACT_CONTENT_TYPES = {
+  '.pdf': 'application/pdf',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+};
+const resolveSignedContractContentType = (r2ContentType, key) => {
+  if (r2ContentType && r2ContentType !== 'application/octet-stream' && r2ContentType !== 'binary/octet-stream') {
+    return r2ContentType;
+  }
+  const ext = path.extname(key || '').toLowerCase();
+  return SIGNED_CONTRACT_CONTENT_TYPES[ext] || r2ContentType || 'application/octet-stream';
 };
 
 // Some staff have typed a placeholder ("-", "N/A", "NONE", etc.) into the
@@ -251,6 +271,7 @@ router.get('/check-existing', verifyToken, async (req, res) => {
 // "monitor" as an :id value and these routes are never reached.
 const buildActiveEmployeesData = async () => {
   const contracts = await Contract.find({ status: 'ACTIVE', isArchived: false })
+    .select('-signedContractFile.url -signedContractFile.key')
     .populate('userId')
     .sort({ createdAt: -1 })
     .lean();
@@ -1353,21 +1374,65 @@ router.post('/:id/upload-signed', verifyToken, signedContractUpload.single('sign
   }
 });
 
-// Download signed contract
+// Shared access check for a contract's private files (signed contract, etc).
+// Mirrors the scoping already used by GET '/' (contract list): a CONTRACTUAL
+// user may only reach their own contract, a FOCAL_PERSON only contracts at
+// their own place of assignment, and ADMINISTRATOR/FINANCE_OFFICER may reach
+// any contract.
+const canAccessContractFile = async (reqUser, contract) => {
+  if (['ADMINISTRATOR', 'FINANCE_OFFICER'].includes(reqUser.role)) return true;
+
+  if (reqUser.role === 'CONTRACTUAL') {
+    return String(contract.userId) === String(reqUser.userId);
+  }
+
+  if (reqUser.role === 'FOCAL_PERSON') {
+    const currentUser = await User.findById(reqUser.userId).select('placeOfAssignment');
+    return !!currentUser && currentUser.placeOfAssignment === contract.placeOfAssignment;
+  }
+
+  return false;
+};
+
+// View / download signed contract.
+// Streams the file through the backend (rather than redirecting to the R2
+// object's public URL) so access control is always enforced here, even if
+// the bucket itself is configured for public read. ?disposition=inline
+// (default) opens it in-browser for the "View" button; ?disposition=attachment
+// forces a save-to-disk download.
 router.get('/:id/signed-contract', verifyToken, async (req, res) => {
   try {
     const contract = await Contract.findById(req.params.id);
-    
+
     if (!contract) {
       return res.status(404).json({ message: 'Contract not found' });
     }
 
-    if (!contract.signedContractFile?.url) {
+    const allowed = await canAccessContractFile(req.user, contract);
+    if (!allowed) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (!contract.signedContractFile?.key) {
       return res.status(404).json({ message: 'No signed contract file found' });
     }
 
-    res.redirect(contract.signedContractFile.url);
+    const command = new GetObjectCommand({ Bucket: R2_BUCKET, Key: contract.signedContractFile.key });
+    const r2Response = await r2Client.send(command);
+
+    const dispositionType = req.query.disposition === 'attachment' ? 'attachment' : 'inline';
+    const originalName = contract.signedContractFile.originalName || 'signed-contract';
+
+    res.setHeader('Content-Type', resolveSignedContractContentType(r2Response.ContentType, contract.signedContractFile.key));
+    if (r2Response.ContentLength) res.setHeader('Content-Length', r2Response.ContentLength);
+    res.setHeader('Content-Disposition', `${dispositionType}; filename="${sanitizeFilename(originalName)}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+
+    r2Response.Body.pipe(res);
   } catch (error) {
+    if (error.name === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404) {
+      return res.status(404).json({ message: 'Signed contract file not found in storage' });
+    }
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
 });

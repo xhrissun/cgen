@@ -180,6 +180,23 @@ isArchived: { type: Boolean, default: false },
   updatedAt: { type: Date, default: Date.now }
 });
 
+// Never serialize the raw R2 URL for the signed contract file. The frontend
+// always retrieves the file through GET /:id/signed-contract, which enforces
+// per-user access control before streaming it; exposing signedContractFile.url
+// directly in API responses would let anyone who can read a contract object
+// bypass that check by hitting the storage URL directly (and, if the R2
+// bucket is configured for public read, would let it leak to anyone who
+// captured a response, not just the intended user).
+contractSchema.set('toJSON', {
+  transform: (doc, ret) => {
+    if (ret.signedContractFile) {
+      delete ret.signedContractFile.url;
+      delete ret.signedContractFile.key;
+    }
+    return ret;
+  }
+});
+
 // Auto-generate contract number
 // Enhanced version with retry logic for race conditions
 

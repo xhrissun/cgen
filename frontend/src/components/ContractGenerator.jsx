@@ -833,7 +833,7 @@ const uploadSignedContract = async (contractId, file) => {
   }
 };
 
-const downloadSignedContract = async (contractId) => {
+const viewSignedContract = async (contractId) => {
   try {
     const token = localStorage.getItem('token');
     const response = await api.get(`/api/contracts/${contractId}/signed-contract`, {
@@ -841,7 +841,30 @@ const downloadSignedContract = async (contractId) => {
       responseType: 'blob'
     });
 
-    const url = window.URL.createObjectURL(new Blob([response.data]));
+    // response.data is already a Blob carrying the server's Content-Type
+    // (application/pdf, image/jpeg, etc.), so the new tab renders it inline
+    // instead of prompting a download.
+    const blobUrl = window.URL.createObjectURL(response.data);
+    const viewerTab = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+    if (!viewerTab) {
+      alert('Please allow pop-ups to view the signed contract.');
+    }
+    // Give the new tab time to load the blob before revoking it.
+    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
+  } catch (error) {
+    alert('Error: ' + (error.response?.data?.message || error.message));
+  }
+};
+
+const downloadSignedContract = async (contractId) => {
+  try {
+    const token = localStorage.getItem('token');
+    const response = await api.get(`/api/contracts/${contractId}/signed-contract?disposition=attachment`, {
+      headers: { Authorization: `Bearer ${token}` },
+      responseType: 'blob'
+    });
+
+    const url = window.URL.createObjectURL(response.data);
     const link = document.createElement('a');
     link.href = url;
     link.setAttribute('download', `signed_contract_${contractId}.pdf`);
@@ -1862,12 +1885,20 @@ const handleFileUpload = (contractId, event) => {
                   </td>
                   <td className="px-4 py-2">
                     {contract.signedContractFile ? (
-                      <button
-                        onClick={() => downloadSignedContract(contract._id)}
-                        className="text-green-600 hover:text-green-800 text-xs"
-                      >
-                        📄 Download
-                      </button>
+                      <div className="flex flex-col space-y-1">
+                        <button
+                          onClick={() => viewSignedContract(contract._id)}
+                          className="text-blue-600 hover:text-blue-800 text-xs"
+                        >
+                          👁️ View
+                        </button>
+                        <button
+                          onClick={() => downloadSignedContract(contract._id)}
+                          className="text-green-600 hover:text-green-800 text-xs"
+                        >
+                          📄 Download
+                        </button>
+                      </div>
                     ) : (
                       <span className="text-gray-400 text-xs">No file</span>
                     )}
