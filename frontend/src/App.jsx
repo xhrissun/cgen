@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginForm from './components/LoginForm';
 import Layout from './components/Layout';
-import ForcePasswordChange from './components/ForcePasswordChange';
+import ForcePasswordChange from './components/ForcePasswordChanges.jsx';
 import AdminDashboard from './components/AdminDashboard';
 import ContractualDashboard from './components/ContractualDashboard';
 import FocalPersonDashboard from './components/FocalPersonDashboard';
