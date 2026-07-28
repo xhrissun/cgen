@@ -112,5 +112,5 @@ export default function ForcePasswordChange({ onChanged, onLogout }) {
         </form>
       </div>
     </div>
-  );
+  ); 
 }
