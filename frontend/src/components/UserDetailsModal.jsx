@@ -17,8 +17,8 @@ function UserDetailsModal({ user, onClose, onUpdate, isAdmin }) {
       return;
     }
 
-    if (newPassword.length < 6) {
-      alert('Password must be at least 6 characters long!');
+    if (newPassword.length < 8) {
+      alert('Password must be at least 8 characters long!');
       return;
     }
 
@@ -115,7 +115,7 @@ function UserDetailsModal({ user, onClose, onUpdate, isAdmin }) {
                         className="input w-full"
                         placeholder="Enter new password"
                         required
-                        minLength={6}
+                        minLength={8}
                       />
                     </div>
                     <div>
@@ -127,7 +127,7 @@ function UserDetailsModal({ user, onClose, onUpdate, isAdmin }) {
                         className="input w-full"
                         placeholder="Confirm new password"
                         required
-                        minLength={6}
+                        minLength={8}
                       />
                     </div>
                     <div className="flex space-x-2">

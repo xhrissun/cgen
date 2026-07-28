@@ -75,7 +75,8 @@ router.post('/login', loginLimiter, async (req, res) => {
         username: user.username,
         role: user.role,
         personalInfo: user.personalInfo,
-        placeOfAssignment: user.placeOfAssignment
+        placeOfAssignment: user.placeOfAssignment,
+        mustChangePassword: !!user.mustChangePassword
       }
     });
   } catch (error) {
@@ -115,6 +116,7 @@ router.post('/change-password', loginLimiter, async (req, res) => {
     
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
+    user.mustChangePassword = false;
     user.updatedAt = new Date();
     await user.save();
     

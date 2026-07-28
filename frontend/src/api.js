@@ -176,5 +176,5 @@ export const getDocumentUrl = (filenameOrUrl, userId, token) => {
 
 export const openDocument = (filenameOrUrl, userId, token) => {
   const url = getDocumentUrl(filenameOrUrl, userId, token);
-  if (url) window.open(url, '_blank');
+  if (url) window.open(url, '_blank', 'noopener,noreferrer');
 };

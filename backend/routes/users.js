@@ -143,6 +143,7 @@ router.post('/', verifyToken, async (req, res) => {
     const newUser = new User({
       username,
       password: hashedPassword,
+      mustChangePassword: true,
       role,
       status: status || 'ACTIVE',  // ✅ Use provided status or default to ACTIVE
       placeOfAssignment: finalPlaceOfAssignment,
@@ -344,8 +345,8 @@ router.post('/:id/reset-password', verifyToken, async (req, res) => {
 
     const { newPassword } = req.body;
 
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters long' });
     }
 
     const user = await User.findById(req.params.id);
@@ -355,6 +356,9 @@ router.post('/:id/reset-password', verifyToken, async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
+    // The user didn't choose this password — force them to set their own
+    // on next login, same as a brand-new account.
+    user.mustChangePassword = true;
     user.updatedAt = new Date();
     await user.save();
 

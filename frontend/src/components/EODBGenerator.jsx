@@ -317,7 +317,7 @@ function EODBGenerator({ userId, onDocumentUploaded }) {
       }
 
       pdf.autoPrint();
-      window.open(pdf.output('bloburl'), '_blank');
+      window.open(pdf.output('bloburl'), '_blank', 'noopener,noreferrer');
 
       alert('EODB ID generated successfully! The PDF has been saved to your documents and opened for printing.');
 

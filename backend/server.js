@@ -23,6 +23,16 @@ import eodbRoutes from './routes/eodb.js';
 import { getLocalIP } from './utils/getLocalIP.js';
 
 const app = express();
+
+// Render (and most PaaS hosts) sit the app behind a reverse proxy that sets
+// X-Forwarded-For. Without this, Express refuses to trust that header by
+// default, which breaks express-rate-limit's ability to identify clients by
+// IP (it was falling back to misidentifying every request, logging an
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR warning on every single request in
+// production). `1` means "trust exactly one hop" — i.e. the platform's own
+// load balancer — which matches Render's setup and avoids blindly trusting
+// an arbitrary chain of forwarded headers a client could spoof.
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
 const LOCAL_IP = getLocalIP();

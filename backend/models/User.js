@@ -3,6 +3,14 @@ import mongoose from 'mongoose';
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true, select: false },
+  // Set to true whenever an account is given a password the user didn't
+  // choose themselves (new-account creation, admin password reset) — see
+  // POST /api/users and POST /api/users/:id/reset-password. New accounts
+  // default to a predictable password (the employee's own TIN, or '123456'
+  // if none is on file), so this is what actually closes that gap: the
+  // frontend blocks access to the rest of the app until the user sets a
+  // password only they know.
+  mustChangePassword: { type: Boolean, default: true },
   role: { 
     type: String, 
     enum: ['ADMINISTRATOR', 'CONTRACTUAL', 'FOCAL_PERSON', 'FINANCE_OFFICER'],

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginForm from './components/LoginForm';
 import Layout from './components/Layout';
+import ForcePasswordChange from './components/ForcePasswordChange';
 import AdminDashboard from './components/AdminDashboard';
 import ContractualDashboard from './components/ContractualDashboard';
 import FocalPersonDashboard from './components/FocalPersonDashboard';
@@ -69,6 +70,12 @@ function App() {
     setUser(null);
   };
 
+  const handlePasswordChanged = () => {
+    const updated = { ...user, mustChangePassword: false };
+    localStorage.setItem('user', JSON.stringify(updated));
+    setUser(updated);
+  };
+
   const { showWarning, secondsLeft, stayLoggedIn } = useInactivityLogout({
     enabled: !!user,
     timeoutMs: IDLE_TIMEOUT_MS,
@@ -97,7 +104,9 @@ function App() {
           path="/"
           element={
             user ? (
-              user.role === 'ADMINISTRATOR' ? (
+              user.mustChangePassword ? (
+                <ForcePasswordChange onChanged={handlePasswordChanged} onLogout={handleLogout} />
+              ) : user.role === 'ADMINISTRATOR' ? (
                 <Layout user={user} onLogout={handleLogout} fullWidth={true}>
                   <AdminDashboard user={user} />
                 </Layout>
