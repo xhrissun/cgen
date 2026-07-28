@@ -31,7 +31,15 @@ const loginLimiter = rateLimit({
 router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
-    
+
+    // Defense-in-depth alongside the global mongo-sanitize middleware:
+    // reject anything that isn't a plain string outright, so a crafted
+    // body like { "username": { "$gt": "" } } can never reach the query
+    // even if the sanitizer were ever removed or misconfigured.
+    if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
     const user = await User.findOne({ username }).select('+password');
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -76,7 +84,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 });
 
 // Change Password
-router.post('/change-password', async (req, res) => {
+router.post('/change-password', loginLimiter, async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
@@ -85,8 +93,20 @@ router.post('/change-password', async (req, res) => {
     
     const decoded = jwt.verify(token, JWT_SECRET);
     const { currentPassword, newPassword } = req.body;
-    
+
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' || !currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Invalid request' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: 'New password must be at least 8 characters long' });
+    }
+
     const user = await User.findById(decoded.userId).select('+password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
     const isValidPassword = await bcrypt.compare(currentPassword, user.password);
     
     if (!isValidPassword) {

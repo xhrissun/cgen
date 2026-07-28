@@ -3,6 +3,9 @@ import { errDetail } from './utils/errors.js';
 import express from 'express';
 import cors from 'cors';
 import compression from 'compression';
+import helmet from 'helmet';
+import mongoSanitize from 'express-mongo-sanitize';
+import rateLimit from 'express-rate-limit';
 import connectDB from './database.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
@@ -26,6 +29,20 @@ const LOCAL_IP = getLocalIP();
 
 // Middleware
 app.use(compression()); // gzip all responses
+
+// Security headers. contentSecurityPolicy is disabled because this process
+// only ever serves JSON/API responses and proxied files — CSP is meant for
+// HTML documents, which the separately-hosted frontend serves, not this API.
+// crossOriginResourcePolicy is relaxed to 'cross-origin' because the
+// frontend and this API intentionally live on different origins (see the
+// CORS config below) — helmet's 'same-origin' default would otherwise block
+// the frontend from loading proxied files (photos, signed contracts, etc.)
+// straight out of the box.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
 app.use(cors({
   origin: [
     process.env.FRONTEND_URL,
@@ -36,6 +53,25 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Strips any request key starting with '$' or containing '.' from
+// body/query/params, so a value like { "$ne": null } can never be
+// interpreted as a MongoDB query operator instead of a literal string —
+// closes off NoSQL operator-injection attempts on any route that builds a
+// query directly from user input (e.g. login's `findOne({ username })`).
+app.use(mongoSanitize());
+
+// General API-wide rate limit — a coarser, higher-ceiling backstop on top
+// of the tighter per-route limiter already on /api/auth/login. Slows down
+// brute-force/enumeration attempts and basic scripted abuse across every
+// endpoint, not just login.
+app.use('/api', rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500,                 // requests per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests. Please try again later.' },
+}));
 
 // Initialize default admin user
 // Credentials are taken from ADMIN_USERNAME/ADMIN_PASSWORD env vars so no

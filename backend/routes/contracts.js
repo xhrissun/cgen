@@ -444,6 +444,15 @@ router.get('/:id', verifyToken, async (req, res) => {
     if (!contract) {
       return res.status(404).json({ message: 'Contract not found' });
     }
+
+    // This previously had no access control at all — any authenticated
+    // user (including a CONTRACTUAL employee) could pull any other user's
+    // full contract detail by ID. Reuses the same rule already enforced on
+    // the signed-contract file route.
+    const allowed = await canAccessContractFile(req.user, contract);
+    if (!allowed) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
     
     res.json(contract);
   } catch (error) {
@@ -573,6 +582,17 @@ router.post('/', verifyToken, async (req, res) => {
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Focal persons could otherwise create a contract for ANY user
+    // system-wide, not just their own office — every other contract
+    // mutation route in this file scopes focal persons this way, this one
+    // was missing the check.
+    if (req.user.role === 'FOCAL_PERSON') {
+      const currentUser = await User.findById(req.user.userId).select('placeOfAssignment');
+      if (!currentUser || user.placeOfAssignment !== currentUser.placeOfAssignment) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
     }
 
     const pi = user.personalInfo || {};
@@ -782,6 +802,21 @@ router.put('/:id', verifyToken, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    // Focal persons could otherwise edit ANY contract in the system, not
+    // just their own office's — the list endpoint (GET /) and the
+    // signed-contract file route both already scope focal persons to their
+    // own placeOfAssignment; this route was missing the equivalent check.
+    if (req.user.role === 'FOCAL_PERSON') {
+      const existingContract = await Contract.findById(req.params.id).select('placeOfAssignment');
+      if (!existingContract) {
+        return res.status(404).json({ message: 'Contract not found' });
+      }
+      const currentUser = await User.findById(req.user.userId).select('placeOfAssignment');
+      if (!currentUser || existingContract.placeOfAssignment !== currentUser.placeOfAssignment) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+
     const contract = await Contract.findByIdAndUpdate(
       req.params.id,
       { ...req.body, updatedAt: new Date() },
@@ -798,24 +833,13 @@ router.put('/:id', verifyToken, async (req, res) => {
   }
 });
 
-// Delete contract
-router.delete('/:id', verifyToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ADMINISTRATOR') {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-    
-    const contract = await Contract.findByIdAndDelete(req.params.id);
-    if (!contract) {
-      return res.status(404).json({ message: 'Contract not found' });
-    }
-    
-    res.json({ message: 'Contract deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: errDetail(error) });
-  }
-});
-
+// Delete contract — NOTE: the fuller version of this route (with audit
+// logging + R2 signed-file cleanup) lives further down this file. This
+// route used to be duplicated here with a bare-bones version that ran
+// INSTEAD of it (Express uses the first matching route registration for a
+// given path), silently skipping the audit log entry and leaving orphaned
+// signed-contract files in R2 on every deletion. Removed to let the
+// complete version run.
 // Fixed PDF Generation Route - Replace the GET /:id/generate route
 
 router.get('/:id/generate', verifyToken, async (req, res) => {
@@ -829,6 +853,15 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
    
     if (!contract) {
       return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    // This had no access control at all — any authenticated user could
+    // render the full contract PDF (salary, TIN, personal info, signatures)
+    // for any other user's contract just by ID. Same rule as the other
+    // contract-file/detail routes in this file.
+    const allowed = await canAccessContractFile(req.user, contract);
+    if (!allowed) {
+      return res.status(403).json({ message: 'Access denied' });
     }
 
     // EXPIRED, TERMINATED, and CANCELLED contracts can no longer be
@@ -1194,11 +1227,29 @@ router.get('/:id/generate', verifyToken, async (req, res) => {
 // Update the export CSV route to include more fields
 router.get('/export/csv', verifyToken, async (req, res) => {
   try {
+    // This had no role restriction at all — any authenticated user,
+    // including a plain CONTRACTUAL employee, could download a CSV of
+    // every contract in the system (names, TIN, PhilHealth, Pag-IBIG,
+    // salary) across every office. Scope it the same way the main contract
+    // list (GET /) already is.
+    if (!['ADMINISTRATOR', 'FOCAL_PERSON', 'FINANCE_OFFICER'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
     const { includeArchived } = req.query;
     
     let query = {};
     if (!includeArchived || includeArchived === 'false') {
       query.isArchived = false;
+    }
+
+    if (req.user.role === 'FOCAL_PERSON') {
+      const currentUser = await User.findById(req.user.userId).select('placeOfAssignment');
+      const officeUsers = await User.find({
+        placeOfAssignment: currentUser?.placeOfAssignment,
+        role: { $in: ['CONTRACTUAL', 'FOCAL_PERSON'] }
+      }).select('_id');
+      query.userId = { $in: officeUsers.map(u => u._id) };
     }
 
     const contracts = await Contract.find(query)
@@ -1284,6 +1335,16 @@ router.patch('/:id/status', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'Contract not found' });
     }
 
+    // Focal persons could otherwise change the status of ANY contract
+    // system-wide — scope them to their own office, consistent with every
+    // other contract-mutating route in this file.
+    if (req.user.role === 'FOCAL_PERSON') {
+      const currentUser = await User.findById(req.user.userId).select('placeOfAssignment');
+      if (!currentUser || contract.placeOfAssignment !== currentUser.placeOfAssignment) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+
     // Store old status before updating
     const oldStatus = contract.status;
     const newStatus = status;
@@ -1324,6 +1385,25 @@ router.post('/:id/upload-signed', verifyToken, signedContractUpload.single('sign
       // Delete uploaded R2 file if contract not found
       await deleteFromR2(req.file.key);
       return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    // This had no access control at all — any authenticated user (even a
+    // CONTRACTUAL account with no relation to the contract) could upload a
+    // file here and overwrite the legally signed contract on record for
+    // anyone. The frontend only ever shows this action to Administrators
+    // and Focal Persons (see ContractGenerator.jsx), so enforce that here
+    // too, with Focal Persons scoped to their own office like every other
+    // contract-mutating route.
+    if (!['ADMINISTRATOR', 'FOCAL_PERSON'].includes(req.user.role)) {
+      await deleteFromR2(req.file.key);
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    if (req.user.role === 'FOCAL_PERSON') {
+      const currentUser = await User.findById(req.user.userId).select('placeOfAssignment');
+      if (!currentUser || contract.placeOfAssignment !== currentUser.placeOfAssignment) {
+        await deleteFromR2(req.file.key);
+        return res.status(403).json({ message: 'Access denied' });
+      }
     }
 
     // Delete old signed contract file from R2 if exists
@@ -1449,6 +1529,13 @@ router.patch('/:id/archive', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'Contract not found' });
     }
 
+    if (req.user.role === 'FOCAL_PERSON') {
+      const currentUser = await User.findById(req.user.userId).select('placeOfAssignment');
+      if (!currentUser || contract.placeOfAssignment !== currentUser.placeOfAssignment) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+
     // Only allow archiving expired, terminated, or cancelled contracts
     if (!['EXPIRED', 'TERMINATED', 'CANCELLED'].includes(contract.status)) {
       return res.status(400).json({ 
@@ -1473,6 +1560,17 @@ router.patch('/:id/unarchive', verifyToken, async (req, res) => {
   try {
     if (!['ADMINISTRATOR', 'FOCAL_PERSON'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (req.user.role === 'FOCAL_PERSON') {
+      const existingContract = await Contract.findById(req.params.id).select('placeOfAssignment');
+      if (!existingContract) {
+        return res.status(404).json({ message: 'Contract not found' });
+      }
+      const currentUser = await User.findById(req.user.userId).select('placeOfAssignment');
+      if (!currentUser || existingContract.placeOfAssignment !== currentUser.placeOfAssignment) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
     }
 
     const contract = await Contract.findByIdAndUpdate(

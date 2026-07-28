@@ -1404,6 +1404,17 @@ router.put('/:id', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON', 'FI
       return res.status(404).json({ message: 'Position not found' });
     }
 
+    // Focal persons may only update positions in their own office — GET and
+    // POST already scope this way; PUT was missing the equivalent check, so
+    // a focal person could otherwise edit any position system-wide, not
+    // just their own.
+    if (req.user.role === 'FOCAL_PERSON') {
+      const currentUser = await User.findById(req.user.userId);
+      if (!currentUser || existingPosition.placeOfAssignment !== currentUser.placeOfAssignment) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+
     // Finance Officers may ONLY assign/update the `charging` field — nothing
     // else they send (duties, clauses, title, salary grade, etc.) is honored.
     if (req.user.role === 'FINANCE_OFFICER') {
@@ -1427,6 +1438,14 @@ router.put('/:id', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON', 'FI
     
     // Preserve placeOfAssignment if admin is only updating clauses
     if (req.user.role === 'ADMINISTRATOR' && !req.body.placeOfAssignment) {
+      updateData.placeOfAssignment = existingPosition.placeOfAssignment;
+    }
+
+    // Focal persons are scoped to their own office above, but without this
+    // they could still reassign a position TO a different office by simply
+    // including a different placeOfAssignment in the request body. Force it
+    // back to the existing value for anyone who isn't an admin.
+    if (req.user.role !== 'ADMINISTRATOR') {
       updateData.placeOfAssignment = existingPosition.placeOfAssignment;
     }
     

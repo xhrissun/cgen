@@ -181,7 +181,7 @@ router.post('/log-print', verifyToken, async (req, res) => {
     if (error.code === 11000) {
       res.status(400).json({ error: 'Duplicate serial number' });
     } else {
-      res.status(500).json({ error: 'Error logging print', details: error.message });
+      res.status(500).json({ error: 'Error logging print', details: errDetail(error) });
     }
   }
 });
@@ -200,7 +200,7 @@ router.get('/print-logs', verifyToken, async (req, res) => {
     res.status(200).json(logs);
   } catch (error) {
     console.error('Error fetching print logs:', error);
-    res.status(500).json({ error: 'Error fetching print logs', details: error.message });
+    res.status(500).json({ error: 'Error fetching print logs', details: errDetail(error) });
   }
 });
 
@@ -244,7 +244,7 @@ router.post('/validate-id', verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Error validating ID:', error);
-    res.status(500).json({ error: 'Error validating ID', details: error.message });
+    res.status(500).json({ error: 'Error validating ID', details: errDetail(error) });
   }
 });
 

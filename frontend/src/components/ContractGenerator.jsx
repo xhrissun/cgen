@@ -1589,12 +1589,14 @@ const handleFileUpload = (contractId, event) => {
               />
               <span className="text-sm">Show Archived</span>
             </label>
-            <button
-              onClick={exportToCSV}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
-            >
-              Export to CSV
-            </button>
+            {userRole !== 'CONTRACTUAL' && (
+              <button
+                onClick={exportToCSV}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
+              >
+                Export to CSV
+              </button>
+            )}
           </div>
         </div>
 

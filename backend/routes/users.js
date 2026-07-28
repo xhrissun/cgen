@@ -18,16 +18,39 @@ router.get('/', verifyToken, async (req, res) => {
   try {
     const { role, placeOfAssignment } = req.query;
     let query = {};
-    
+
     // Focal persons can only see users in their place of assignment
     if (req.user.role === 'FOCAL_PERSON') {
       const currentUser = await User.findById(req.user.userId);
       query.placeOfAssignment = currentUser.placeOfAssignment;
       query.role = { $in: ['CONTRACTUAL', 'FOCAL_PERSON'] };
+    } else if (req.user.role === 'CONTRACTUAL') {
+      // A contractual employee has no legitimate reason to browse the full
+      // personnel directory (every admin/finance officer's PII, every other
+      // office's staff, etc). The frontend only ever needs their own office's
+      // contractual/focal-person colleagues (e.g. the duplicate-name check on
+      // contract creation), so scope the query the same way it's scoped for
+      // focal persons rather than defaulting to "everyone".
+      const currentUser = await User.findById(req.user.userId);
+      query.placeOfAssignment = currentUser.placeOfAssignment;
+      query.role = { $in: ['CONTRACTUAL', 'FOCAL_PERSON'] };
+    } else if (!['ADMINISTRATOR', 'FINANCE_OFFICER'].includes(req.user.role)) {
+      // Unknown/unhandled role — deny by default rather than falling through
+      // to an unscoped query.
+      return res.status(403).json({ message: 'Access denied' });
     }
 
     
-    if (role) query.role = role;
+    if (role) {
+      if (req.user.role === 'ADMINISTRATOR' || req.user.role === 'FINANCE_OFFICER') {
+        query.role = role;
+      } else if (['CONTRACTUAL', 'FOCAL_PERSON'].includes(role)) {
+        // Narrow within the already-enforced { $in: [...] } scope above —
+        // never let a scoped requester use this param to widen it (e.g. a
+        // contractual employee passing ?role=ADMINISTRATOR).
+        query.role = role;
+      }
+    }
     if (placeOfAssignment && req.user.role === 'ADMINISTRATOR') {
       query.placeOfAssignment = placeOfAssignment;
     }
@@ -79,7 +102,18 @@ router.get('/:id', verifyToken, async (req, res) => {
 router.post('/', verifyToken, async (req, res) => {
   try {
     const { username, role, placeOfAssignment, personalInfo, status } = req.body;  // ✅ ADD status here
-    
+
+    // Only administrators and focal persons may create accounts at all.
+    // Without this, any authenticated user (e.g. CONTRACTUAL, the lowest
+    // privilege role) could call this endpoint directly with
+    // { role: 'ADMINISTRATOR' } and create themselves a brand-new admin
+    // account — the check below only ever restricted what a FOCAL_PERSON
+    // could do, it never restricted who could reach this route in the
+    // first place.
+    if (!['ADMINISTRATOR', 'FOCAL_PERSON'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
     // Focal persons can only create contractual users
     if (req.user.role === 'FOCAL_PERSON' && role !== 'CONTRACTUAL') {
       return res.status(403).json({ message: 'Focal persons can only create contractual users' });
@@ -171,6 +205,33 @@ router.put('/:id', verifyToken, async (req, res) => {
     // Only admins can change role or username
     const isAdmin = req.user.role === 'ADMINISTRATOR';
     const isFocalPerson = req.user.role === 'FOCAL_PERSON';
+    const isSelf = req.user.userId === req.params.id;
+
+    // Fetch old user state for audit log AND for the access check below —
+    // moved up because a focal person's authorization depends on the
+    // target user's current place of assignment.
+    const oldUser = await User.findById(req.params.id).select('-password');
+    if (!oldUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Access control: previously this endpoint let ANY authenticated user
+    // edit ANY other user's personalInfo/placeOfAssignment — role/username/
+    // status were gated below, but nothing stopped e.g. a CONTRACTUAL user
+    // from calling PUT /api/users/<someone-else's-id> with a new
+    // personalInfo blob and silently overwriting another employee's TIN,
+    // PhilHealth number, address, etc. Only self, admins, or a focal person
+    // updating someone in their own office may proceed past this point.
+    if (!isSelf && !isAdmin) {
+      if (isFocalPerson) {
+        const requester = await User.findById(req.user.userId).select('placeOfAssignment');
+        if (!requester || oldUser.placeOfAssignment !== requester.placeOfAssignment) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+      } else {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
 
     // Role changes: admin only
     if (role && !isAdmin) {
@@ -187,6 +248,13 @@ router.put('/:id', verifyToken, async (req, res) => {
       return res.status(403).json({ message: 'Access denied. Only administrators can change usernames.' });
     }
 
+    // Place-of-assignment (office reassignment) changes: admin or focal
+    // person only — a user should never be able to reassign their own
+    // office by including it in a self-service profile update.
+    if (placeOfAssignment && !isAdmin && !isFocalPerson) {
+      return res.status(403).json({ message: 'Access denied. Only administrators or focal persons can change place of assignment.' });
+    }
+
     // If username is being changed, check uniqueness (exclude current user)
     if (username) {
       const existingUser = await User.findOne({ username, _id: { $ne: req.params.id } });
@@ -195,11 +263,6 @@ router.put('/:id', verifyToken, async (req, res) => {
       }
     }
 
-    // Fetch old user state for audit log
-    const oldUser = await User.findById(req.params.id).select('-password');
-    if (!oldUser) {
-      return res.status(404).json({ message: 'User not found' });
-    }
 
     const updateData = {
       updatedAt: new Date()
@@ -349,12 +412,14 @@ router.get('/:id/photo/*', verifyToken, async (req, res) => {
     const user = await User.findById(req.params.id).select('placeOfAssignment');
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // Access control: own profile, admin, or same-assignment focal person
+    // Access control: own profile, admin/finance officer, or same-assignment
+    // focal person. Previously any FOCAL_PERSON could view any user's photo
+    // regardless of office — scoped to match the rest of this file.
     const canView =
       req.user.userId === req.params.id ||
       req.user.role === 'ADMINISTRATOR' ||
-      req.user.role === 'FOCAL_PERSON' ||
-      req.user.role === 'FINANCE_OFFICER';
+      req.user.role === 'FINANCE_OFFICER' ||
+      (req.user.role === 'FOCAL_PERSON' && user.placeOfAssignment === req.user.placeOfAssignment);
 
     if (!canView) return res.status(403).json({ message: 'Access denied' });
 
@@ -398,6 +463,18 @@ router.post('/:id/documents', verifyToken, documentUpload.single('file'), async 
     if (!user) {
       await deleteFromR2(req.file.key);
       return res.status(404).json({ message: 'User not found' });
+    }
+
+    // This had no ownership check at all — any authenticated user could
+    // upload (and, for profile/passport photos, silently overwrite) a file
+    // onto ANY other user's record. Same rule as the rest of this file:
+    // self, admin, or a focal person acting within their own office.
+    const isSelf = req.user.userId === userId;
+    const isAdmin = req.user.role === 'ADMINISTRATOR';
+    const isFocalPerson = req.user.role === 'FOCAL_PERSON' && user.placeOfAssignment === req.user.placeOfAssignment;
+    if (!isSelf && !isAdmin && !isFocalPerson) {
+      await deleteFromR2(req.file.key);
+      return res.status(403).json({ message: 'Access denied' });
     }
 
     if (!user.personalInfo) user.personalInfo = {};
@@ -602,6 +679,29 @@ router.delete('/:id/documents/*', verifyToken, async (req, res) => {
 // Get user history
 router.get('/:id/history', verifyToken, async (req, res) => {
   try {
+    // This had no access control at all — any authenticated user could pull
+    // any other user's full contract history by ID. Mirror the same rule
+    // already used for GET /:id: self, admin, finance officer, or a focal
+    // person for someone in their own office.
+    const isSelf = req.user.userId === req.params.id;
+    const isAdmin = req.user.role === 'ADMINISTRATOR';
+    const isFinance = req.user.role === 'FINANCE_OFFICER';
+
+    if (!isSelf && !isAdmin && !isFinance) {
+      if (req.user.role === 'FOCAL_PERSON') {
+        const requester = await User.findById(req.user.userId).select('placeOfAssignment');
+        const target = await User.findById(req.params.id).select('placeOfAssignment');
+        if (!target) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+        if (!requester || target.placeOfAssignment !== requester.placeOfAssignment) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+      } else {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+
     const user = await User.findById(req.params.id)
       .populate('contractHistory.contractId')
       .select('contractHistory');
