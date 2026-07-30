@@ -14,6 +14,23 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
+// Can req.user view/generate EODB data for targetUserId (someone other than
+// themselves)? Administrators may act on anyone; a focal person may only
+// act on someone in their own office. Everyone else (Contractual, Finance
+// Officer) may only ever act on their own record.
+const canActOnEodbFor = async (reqUser, targetUserId) => {
+  if (reqUser.role === 'ADMINISTRATOR') return true;
+  if (reqUser.role === 'FOCAL_PERSON') {
+    const [requester, target] = await Promise.all([
+      User.findById(reqUser.userId).select('placeOfAssignment'),
+      User.findById(targetUserId).select('placeOfAssignment')
+    ]);
+    return !!requester && !!target && requester.placeOfAssignment === target.placeOfAssignment;
+  }
+  return false;
+};
+
+
 // Some staff have typed a placeholder ("-", "N/A", "NONE", etc.) into the
 // Middle Name field to get past an old required-field check, since a person
 // can legitimately have no middle name. Treat any placeholder-only value the
@@ -46,7 +63,20 @@ const generateHash = (data) => {
 // Check if EODB ID already exists for current contract
 router.get('/check-existing', verifyToken, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    // Defaults to the caller's own record (unchanged self-service
+    // behavior). An admin — or a focal person for someone in their own
+    // office — may pass ?userId= to check this for someone else, e.g. when
+    // generating an EODB ID on a contractual employee's behalf.
+    const targetUserId = req.query.userId || req.user.userId;
+
+    if (targetUserId !== req.user.userId) {
+      const allowed = await canActOnEodbFor(req.user, targetUserId);
+      if (!allowed) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+
+    const userId = targetUserId;
 
     // Parallel queries — neither depends on the other
     const [user, latestContract] = await Promise.all([
@@ -78,10 +108,20 @@ router.get('/check-existing', verifyToken, async (req, res) => {
   }
 });
 
-// Get EODB data for current user
+// Get EODB data for current user (or, for an admin/same-office focal
+// person, another user via ?userId=)
 router.get('/user-data', verifyToken, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const targetUserId = req.query.userId || req.user.userId;
+
+    if (targetUserId !== req.user.userId) {
+      const allowed = await canActOnEodbFor(req.user, targetUserId);
+      if (!allowed) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+
+    const userId = targetUserId;
 
     // Parallel queries — neither depends on the other
     const [user, latestContract] = await Promise.all([

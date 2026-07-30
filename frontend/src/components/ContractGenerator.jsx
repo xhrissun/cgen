@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { SkeletonTable, SectionLoader, EmptyState, Spinner, dispatchPageLoading } from './ui.jsx';
 import api from '../api.js';
 import ContractDetailsModal from './ContractDetailsModal';
+import SignedContractViewerModal from './SignedContractViewerModal';
 import Select from 'react-select';
 
 function ContractGenerator({ userRole, userId, viewOnly = false }) {
@@ -40,6 +41,7 @@ function ContractGenerator({ userRole, userId, viewOnly = false }) {
   });
 
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [viewingContractId, setViewingContractId] = useState(null);
   const [selectedContract, setSelectedContract] = useState(null);
   const [newStatus, setNewStatus] = useState('');
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -833,27 +835,8 @@ const uploadSignedContract = async (contractId, file) => {
   }
 };
 
-const viewSignedContract = async (contractId) => {
-  try {
-    const token = localStorage.getItem('token');
-    const response = await api.get(`/api/contracts/${contractId}/signed-contract`, {
-      headers: { Authorization: `Bearer ${token}` },
-      responseType: 'blob'
-    });
-
-    // response.data is already a Blob carrying the server's Content-Type
-    // (application/pdf, image/jpeg, etc.), so the new tab renders it inline
-    // instead of prompting a download.
-    const blobUrl = window.URL.createObjectURL(response.data);
-    const viewerTab = window.open(blobUrl, '_blank', 'noopener,noreferrer');
-    if (!viewerTab) {
-      alert('Please allow pop-ups to view the signed contract.');
-    }
-    // Give the new tab time to load the blob before revoking it.
-    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
-  } catch (error) {
-    alert('Error: ' + (error.response?.data?.message || error.message));
-  }
+const viewSignedContract = (contractId) => {
+  setViewingContractId(contractId);
 };
 
 const downloadSignedContract = async (contractId) => {
@@ -2060,6 +2043,12 @@ const handleFileUpload = (contractId, event) => {
         <ContractDetailsModal
           contract={selectedContract}
           onClose={() => setSelectedContract(null)}
+        />
+      )}
+      {viewingContractId && (
+        <SignedContractViewerModal
+          contractId={viewingContractId}
+          onClose={() => setViewingContractId(null)}
         />
       )}
     </div>

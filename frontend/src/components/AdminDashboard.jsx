@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../api.js';
 import { 
   LayoutDashboard, Users, Briefcase, FileText, FolderOpen,
-  DollarSign, FileCheck, Layers, Calendar, PenTool, ScrollText, Activity
+  DollarSign, FileCheck, Layers, Calendar, PenTool, ScrollText, Activity, IdCard
 } from 'lucide-react';
 import { SkeletonStatCard, SkeletonTable, SectionLoader, dispatchPageLoading } from './ui.jsx';
 import UserManagement from './UserManagement';
@@ -18,6 +18,7 @@ import { findPreviousPeriod, buildPreviousGradeMap, TrendBadge, NewGradeBadge } 
 import DocumentViewer from './DocumentViewer';
 import ActivityLog from './ActivityLog';
 import ActiveEmployeesMonitor from './ActiveEmployeesMonitor';
+import AdminEODBManager from './AdminEODBManager';
 
 function AdminDashboard({ user }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -135,6 +136,13 @@ function AdminDashboard({ user }) {
       icon: FolderOpen, 
       group: 'management',
       description: 'Document repository'
+    },
+    { 
+      id: 'eodb', 
+      name: 'EODB ID', 
+      icon: IdCard, 
+      group: 'management',
+      description: 'Generate EODB IDs and upload ID photos for contractual employees'
     },
     { 
       id: 'salaryGrades', 
@@ -2045,6 +2053,7 @@ function AdminDashboard({ user }) {
           {activeTab === 'holidays' && <HolidayManagement />}
           {activeTab === 'signatories' && <SignatoryManagement />}
           {activeTab === 'documents' && <DocumentViewer userRole="ADMINISTRATOR" />}
+          {activeTab === 'eodb' && <AdminEODBManager />}
           {activeTab === 'contracts' && <ContractGenerator userRole="ADMINISTRATOR" />}
           {activeTab === 'activityLog' && <ActivityLog />}
           {activeTab === 'activeEmployees' && <ActiveEmployeesMonitor />}

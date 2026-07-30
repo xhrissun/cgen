@@ -26,14 +26,14 @@ function EODBGenerator({ userId, onDocumentUploaded }) {
   const fetchEODBData = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await api.get('/api/eodb/user-data', {
+      const response = await api.get(`/api/eodb/user-data?userId=${userId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       console.log('EODB Data received:', response.data);
       setEodbData(response.data);
 
-      const checkResponse = await api.get('/api/eodb/check-existing', {
+      const checkResponse = await api.get(`/api/eodb/check-existing?userId=${userId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
