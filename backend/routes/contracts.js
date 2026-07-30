@@ -1463,7 +1463,14 @@ const canAccessContractFile = async (reqUser, contract) => {
   if (['ADMINISTRATOR', 'FINANCE_OFFICER'].includes(reqUser.role)) return true;
 
   if (reqUser.role === 'CONTRACTUAL') {
-    return String(contract.userId) === String(reqUser.userId);
+    // contract.userId may be a plain ObjectId (e.g. on the signed-contract
+    // route, which doesn't populate it) or a populated User document (e.g.
+    // GET /:id and GET /:id/generate, which do). Comparing a populated
+    // document directly against reqUser.userId with String(...) never
+    // matches even for the contract's own owner, since it stringifies the
+    // whole object instead of just its id — pull out ._id first when present.
+    const ownerId = contract.userId?._id || contract.userId;
+    return String(ownerId) === String(reqUser.userId);
   }
 
   if (reqUser.role === 'FOCAL_PERSON') {
