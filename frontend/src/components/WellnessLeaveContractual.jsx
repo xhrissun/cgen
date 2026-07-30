@@ -22,6 +22,7 @@ const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'n
 function WellnessLeaveContractual({ user }) {
   const [balances, setBalances] = useState([]);
   const [applications, setApplications] = useState([]);
+  const [hasActiveContract, setHasActiveContract] = useState(true); // optimistic default until eligibility loads, avoids a flash of "disabled"
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -35,12 +36,14 @@ function WellnessLeaveContractual({ user }) {
     try {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
-      const [balRes, appRes] = await Promise.all([
+      const [balRes, appRes, eligRes] = await Promise.all([
         api.get('/api/wellness-leave/credits/me', { headers }),
         api.get('/api/wellness-leave/applications/me', { headers }),
+        api.get('/api/wellness-leave/eligibility/me', { headers }),
       ]);
       setBalances(balRes.data || []);
       setApplications(appRes.data || []);
+      setHasActiveContract(!!eligRes.data?.hasActiveContract);
     } catch (err) {
       console.error('Error loading Wellness Leave data:', err);
       toast.error(err.response?.data?.message || 'Failed to load Wellness Leave data.');
@@ -109,14 +112,18 @@ function WellnessLeaveContractual({ user }) {
         </div>
         <button
           onClick={() => setShowForm(v => !v)}
-          disabled={currentBalance.balance <= 0}
+          disabled={currentBalance.balance <= 0 || !hasActiveContract}
           className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {showForm ? 'Close Form' : 'Apply for Wellness Leave'}
         </button>
       </div>
 
-      {currentBalance.balance <= 0 && currentBalance.granted === 0 && (
+      {!hasActiveContract && (
+        <p className="text-xs text-gray-500">You need a current active contract to apply for Wellness Leave.</p>
+      )}
+
+      {hasActiveContract && currentBalance.balance <= 0 && currentBalance.granted === 0 && (
         <p className="text-xs text-gray-500">No Wellness Leave credits have been granted for {currentYear} yet. Credits are granted automatically based on your contract status and history.</p>
       )}
 

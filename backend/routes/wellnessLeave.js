@@ -83,6 +83,22 @@ router.get('/credits/me', verifyToken, async (req, res) => {
   }
 });
 
+// Whether the caller currently has a contract in force. Used by the
+// frontend to disable "Apply for Wellness Leave" up front, mirroring the
+// same ACTIVE-contract safeguard enforced server-side on POST /applications.
+router.get('/eligibility/me', verifyToken, async (req, res) => {
+  try {
+    const activeContract = await Contract.findOne({
+      userId: req.user.userId,
+      status: 'ACTIVE',
+      isArchived: false
+    }).select('_id').lean();
+    res.json({ hasActiveContract: !!activeContract });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
+  }
+});
+
 // Monitoring list for FOCAL_PERSON (own office only) / ADMINISTRATOR (all).
 // Query: ?year=2026&placeOfAssignment=... (placeOfAssignment ignored/forced for focal persons)
 router.get('/credits', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON'), async (req, res) => {
@@ -175,6 +191,20 @@ router.post('/applications', verifyToken, requireRole('CONTRACTUAL'), async (req
     const days = parseFloat(daysRequested);
     if (!(days > 0)) {
       return res.status(400).json({ message: 'Days requested must be greater than zero.' });
+    }
+
+    // Safeguard: only contractuals with a currently-in-force contract may
+    // apply. `status: 'ACTIVE'` is kept accurate by the contractExpiry cron
+    // (utils/contractExpiry.js), which flips ACTIVE -> EXPIRED the moment
+    // endDate passes, so this is a reliable "as of right now" check rather
+    // than re-deriving it from raw dates here.
+    const activeContract = await Contract.findOne({
+      userId: req.user.userId,
+      status: 'ACTIVE',
+      isArchived: false
+    }).lean();
+    if (!activeContract) {
+      return res.status(403).json({ message: 'You need a current active contract to apply for Wellness Leave.' });
     }
 
     const year = calendarYear(startDate);
