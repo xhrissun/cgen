@@ -507,9 +507,11 @@ const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'n
 // deployed standalone without the frontend checkout), the form still
 // renders correctly with the text-only letterhead instead of failing.
 const LOGO_SOURCE_PATH = path.join(process.cwd(), '..', 'frontend', 'public', 'denr-logo.png');
+const HTML_TEMPLATE_PATH = path.join(process.cwd(), 'templates', 'wellness_leave.html');
+const PDF_SCRIPT_PATH = path.join(process.cwd(), 'scripts', 'html_to_pdf.py');
 
 router.get('/applications/:id/form', verifyToken, async (req, res) => {
-  let texPath, pdfPath, qrPngPath, logoPngPath, tempDir, baseFile;
+  let pdfPath, qrPngPath, logoPngPath, tempDir, baseFile;
   try {
     const application = await WellnessLeaveApplication.findById(req.params.id)
       .populate('userId', 'username personalInfo placeOfAssignment');
@@ -523,19 +525,18 @@ router.get('/applications/:id/form', verifyToken, async (req, res) => {
 
     const timestamp = Date.now();
     baseFile = `wellness_leave_${application.applicationNumber}_${timestamp}`;
-    texPath = path.join(tempDir, `${baseFile}.tex`);
     pdfPath = path.join(tempDir, `${baseFile}.pdf`);
     qrPngPath = path.join(tempDir, `${baseFile}_qr.png`);
     logoPngPath = path.join(tempDir, `${baseFile}_logo.png`);
 
     const hasLogo = fs.existsSync(LOGO_SOURCE_PATH);
-    if (hasLogo) fs.copyFileSync(LOGO_SOURCE_PATH, logoPngPath);
+    if (hasLogo) {
+      fs.copyFileSync(LOGO_SOURCE_PATH, logoPngPath);
+    } else {
+      // Fallback or empty if logo missing
+      logoPngPath = '';
+    }
 
-    // QR encodes the scan-approve landing page for this specific application.
-    // (Also scannable straight into the admin dashboard's "Scan to Approve"
-    // panel by any handheld keyboard-wedge QR scanner, which just types the
-    // decoded URL — no navigation or separate login on the scanner itself
-    // required, since that panel runs inside the admin's own session.)
     const scanUrl = `${FRONTEND_URL}/wellness-scan/${application._id}/${application.qrToken}`;
     await QRCode.toFile(qrPngPath, scanUrl, { width: 300, margin: 1 });
 
@@ -543,178 +544,41 @@ router.get('/applications/:id/form', verifyToken, async (req, res) => {
     const sup = application.supervisor || {};
     const app = application.approver || {};
 
-    const logoCell = hasLogo
-      ? `\\includegraphics[width=0.78in]{${logoPngPath.replace(/\\/g, '/')}}`
-      : '';
+    const replacements = [
+      `logo_path=${logoPngPath}`,
+      `qr_path=${qrPngPath}`,
+      `application_number=${application.applicationNumber}`,
+      `employee_name=${emp.fullName}`,
+      `employee_position=${emp.position}`,
+      `place_of_assignment=${emp.placeOfAssignment}`,
+      `inclusive_dates=${formatDate(application.startDate)} to ${formatDate(application.endDate)}`,
+      `days_requested=${application.daysRequested}`,
+      `reason=${application.reason || 'N/A'}`,
+      `supervisor_status=${sup.action || 'Pending'}`,
+      `supervisor_remarks=${sup.remarks ? `— ${sup.remarks}` : ''}`,
+      `approver_status=${app.action || 'Pending'}`,
+      `approver_remarks=${app.remarks ? `— ${app.remarks}` : ''}`
+    ];
 
-    const supStatusLine = `Status: \\textbf{${escapeLatex(sup.action || 'Pending')}}${sup.remarks ? ` --- ${escapeLatex(sup.remarks)}` : ''}`;
-    const appStatusLine = `Status: \\textbf{${escapeLatex(app.action || 'Pending')}}${app.remarks ? ` --- ${escapeLatex(app.remarks)}` : ''}`;
+    const args = [PDF_SCRIPT_PATH, HTML_TEMPLATE_PATH, pdfPath, ...replacements.map(r => `"${r}"`)];
+    
+    await execPromise(`python3 ${args.join(' ')}`, { timeout: 60000 });
 
-    const latexDoc = `\\documentclass[10pt]{article}
-\\usepackage[utf8]{inputenc}
-\\usepackage[T1]{fontenc}
-\\usepackage{times}
-\\usepackage[paperwidth=11in,paperheight=8.5in,top=0.45in,bottom=0.45in,left=0.55in,right=0.55in]{geometry}
-\\usepackage{graphicx}
-\\usepackage{array}
-\\usepackage{tabularx}
-\\usepackage{colortbl}
-\\usepackage{xcolor}
-\\usepackage[skins]{tcolorbox}
-\\usepackage{setspace}
-\\usepackage{ragged2e}
-\\pagestyle{empty}
-
-\\definecolor{denrgreen}{HTML}{15803D}
-\\definecolor{hairline}{HTML}{999999}
-\\definecolor{labelbg}{HTML}{F0F3EF}
-\\definecolor{boxline}{HTML}{16A34A}
-
-\\newcolumntype{L}[1]{>{\\raggedright\\arraybackslash}p{#1}}
-
-\\setlength{\\parindent}{0pt}
-\\renewcommand{\\arraystretch}{1.15}
-
-\\begin{document}
-
-% ── Letterhead ──────────────────────────────────────────────────────────
-\\noindent
-\\begin{minipage}[c]{0.9in}
-${logoCell}
-\\end{minipage}%
-\\begin{minipage}[c]{6.7in}
-\\centering
-{\\fontsize{9}{11}\\selectfont Republic of the Philippines}\\\\
-{\\bfseries\\fontsize{10.5}{12}\\selectfont DEPARTMENT OF ENVIRONMENT AND NATURAL RESOURCES}\\\\
-{\\fontsize{9}{11}\\selectfont Region IV-A --- CALABARZON}
-\\end{minipage}%
-\\begin{minipage}[c]{1.9in}
-\\raggedleft
-{\\fontsize{7.5}{9}\\selectfont\\color{gray} APPLICATION NO.}\\\\[1pt]
-{\\bfseries\\fontsize{11}{13}\\selectfont\\color{denrgreen} ${escapeLatex(application.applicationNumber)}}
-\\end{minipage}
-
-\\vspace{4pt}
-{\\color{denrgreen}\\hrule height 1.4pt}
-\\vspace{6pt}
-
-\\begin{center}
-{\\bfseries\\fontsize{15}{17}\\selectfont WELLNESS LEAVE APPLICATION}\\\\[2pt]
-{\\fontsize{7.7}{9}\\selectfont\\itshape\\color[HTML]{555555} Pursuant to CSC Resolution No. 2501292 dated 13 November 2025 and CSC Memorandum Circular No. 01, s. 2026 (Wellness Leave Policy)}
-\\end{center}
-
-\\vspace{8pt}
-
-% ── Two-column body ────────────────────────────────────────────────────
-\\noindent
-\\begin{minipage}[t]{4.95in}
-
-{\\bfseries\\fontsize{8.5}{10}\\selectfont\\color{denrgreen} APPLICANT DETAILS}\\\\[1pt]
-{\\color{hairline}\\hrule height 0.6pt}
-\\vspace{5pt}
-
-\\renewcommand{\\arraystretch}{1.35}
-\\begin{tabularx}{4.95in}{>{\\columncolor{labelbg}}L{1.35in} X}
-\\textbf{\\footnotesize Name} & \\footnotesize ${escapeLatex(emp.fullName)} \\\\
-\\textbf{\\footnotesize Position} & \\footnotesize ${escapeLatex(emp.position)} \\\\
-\\textbf{\\footnotesize Place of Assignment} & \\footnotesize ${escapeLatex(emp.placeOfAssignment)} \\\\
-\\textbf{\\footnotesize Inclusive Dates} & \\footnotesize ${escapeLatex(formatDate(application.startDate))} to ${escapeLatex(formatDate(application.endDate))} \\\\
-\\textbf{\\footnotesize Days Requested} & \\footnotesize ${escapeLatex(application.daysRequested)} working day(s) \\\\
-\\textbf{\\footnotesize Reason} & \\footnotesize ${escapeLatex(application.reason || 'N/A')} \\\\
-\\end{tabularx}
-
-\\vspace{10pt}
-{\\fontsize{7.8}{10}\\selectfont I certify that the above information is true and correct.}
-
-\\vspace{22pt}
-\\begin{tabularx}{4.95in}{X X}
-\\hrulefill & \\hrulefill \\\\[1pt]
-{\\fontsize{7}{8.5}\\selectfont Signature of Employee over Printed Name} & {\\fontsize{7}{8.5}\\selectfont Date} \\\\
-\\end{tabularx}
-
-\\end{minipage}%
-\\hfill
-\\begin{minipage}[t]{2.85in}
-
-{\\bfseries\\fontsize{8.5}{10}\\selectfont\\color{denrgreen} APPROVAL WORKFLOW}\\\\[1pt]
-{\\color{hairline}\\hrule height 0.6pt}
-\\vspace{6pt}
-
-\\begin{tcolorbox}[
-  colback=white, colframe=boxline, boxrule=0.6pt, arc=1.5pt,
-  left=6pt, right=6pt, top=5pt, bottom=5pt, width=2.85in
-]
-{\\bfseries\\fontsize{7.8}{9.5}\\selectfont RECOMMENDING APPROVAL}\\\\[3pt]
-{\\fontsize{7.3}{9}\\selectfont ${supStatusLine}}
-\\vspace{16pt}
-
-\\hrulefill\\\\
-{\\fontsize{6.6}{8}\\selectfont Signature of Immediate Supervisor over Printed Name}\\\\[3pt]
-{\\fontsize{6.6}{8}\\selectfont Date: \\hrulefill}
-\\end{tcolorbox}
-
-\\vspace{6pt}
-
-\\begin{tcolorbox}[
-  colback=white, colframe=boxline, boxrule=0.6pt, arc=1.5pt,
-  left=6pt, right=6pt, top=5pt, bottom=5pt, width=2.85in
-]
-{\\bfseries\\fontsize{7.8}{9.5}\\selectfont APPROVAL}\\\\[3pt]
-{\\fontsize{7.3}{9}\\selectfont ${appStatusLine}}
-\\vspace{16pt}
-
-\\hrulefill\\\\
-{\\fontsize{6.6}{8}\\selectfont Assistant Regional Director for Management Services}\\\\[3pt]
-{\\fontsize{6.6}{8}\\selectfont Date: \\hrulefill}
-\\end{tcolorbox}
-
-\\vspace{6pt}
-\\begin{center}
-\\includegraphics[width=0.68in]{${qrPngPath.replace(/\\/g, '/')}}\\\\[1pt]
-{\\fontsize{6}{7.3}\\selectfont\\color[HTML]{555555} Scan to log approval in CGEN}
-\\end{center}
-
-\\end{minipage}
-
-\\vspace{6pt}
-{\\color{hairline}\\hrule height 0.5pt}
-\\vspace{3pt}
-{\\fontsize{6.6}{8}\\selectfont\\itshape\\color[HTML]{555555} Wellness Leave is non-cumulative, non-commutable to its monetary equivalent, and shall be forfeited if not availed of within the contract period.}
-
-\\end{document}
-`;
-
-    fs.writeFileSync(texPath, latexDoc, 'utf8');
-
-    await execPromise(
-      `pdflatex -interaction=nonstopmode -output-directory="${tempDir}" "${texPath}"`,
-      { cwd: tempDir, timeout: 60000 }
-    );
-
-    if (!fs.existsSync(pdfPath)) throw new Error('PDF not created by pdflatex.');
+    if (!fs.existsSync(pdfPath)) throw new Error('PDF not created by conversion script.');
 
     res.setHeader('Content-Disposition', `inline; filename="${application.applicationNumber}.pdf"`);
     res.sendFile(pdfPath, (err) => {
-      [texPath, pdfPath, qrPngPath, logoPngPath,
-        path.join(tempDir, `${baseFile}.aux`),
-        path.join(tempDir, `${baseFile}.log`),
-        path.join(tempDir, `${baseFile}.out`),
-      ].forEach(f => { try { if (f && fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {} });
+      [pdfPath, qrPngPath, logoPngPath].forEach(f => { 
+        try { if (f && fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {} 
+      });
       if (err) console.error('Error sending Wellness Leave form PDF:', err);
     });
   } catch (error) {
-    [texPath, pdfPath, qrPngPath, logoPngPath].forEach(f => { try { if (f && fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {} });
-    let details = error.message;
-    try {
-      const logPath = path.join(tempDir, `${baseFile}.log`);
-      if (fs.existsSync(logPath)) {
-        const log = fs.readFileSync(logPath, 'utf8');
-        const errs = log.match(/! .+/g);
-        if (errs) details = errs.join('\n');
-      }
-    } catch (_) {}
+    [pdfPath, qrPngPath, logoPngPath].forEach(f => { 
+      try { if (f && fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {} 
+    });
     console.error('Error generating Wellness Leave form PDF:', error);
-    res.status(500).json({ message: 'Failed to generate Wellness Leave form.', error: errDetail(new Error(details)) });
+    res.status(500).json({ message: 'Failed to generate Wellness Leave form.', error: errDetail(error) });
   }
 });
 
