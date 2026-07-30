@@ -19,7 +19,8 @@ import DocumentViewer from './DocumentViewer';
 import ActivityLog from './ActivityLog';
 import ActiveEmployeesMonitor from './ActiveEmployeesMonitor';
 import AdminEODBManager from './AdminEODBManager';
-import WellnessLeaveMonitor from './WellnessLeaveMonitor';
+import WellnessCreditsMonitor from './WellnessCreditsMonitor';
+import WellnessLeaveApprovals from './WellnessLeaveApprovals';
 
 function AdminDashboard({ user }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -195,11 +196,18 @@ function AdminDashboard({ user }) {
       description: 'Monitor active employees, salary and charging metrics'
     },
     { 
-      id: 'wellnessLeave', 
-      name: 'Wellness Leave', 
+      id: 'wellnessCredits', 
+      name: 'Wellness Credits', 
       icon: Leaf, 
       group: 'monitoring',
-      description: 'Monitor credits and approve applications'
+      description: 'Monitor Wellness Leave credit balances'
+    },
+    { 
+      id: 'wellnessApprovals', 
+      name: 'Leave Applications', 
+      icon: FileCheck, 
+      group: 'monitoring',
+      description: 'Review, approve, and scan-approve applications'
     }
   ];
 
@@ -2065,7 +2073,8 @@ function AdminDashboard({ user }) {
           {activeTab === 'contracts' && <ContractGenerator userRole="ADMINISTRATOR" />}
           {activeTab === 'activityLog' && <ActivityLog />}
           {activeTab === 'activeEmployees' && <ActiveEmployeesMonitor />}
-          {activeTab === 'wellnessLeave' && <WellnessLeaveMonitor userRole="ADMINISTRATOR" />}
+          {activeTab === 'wellnessCredits' && <WellnessCreditsMonitor userRole="ADMINISTRATOR" />}
+          {activeTab === 'wellnessApprovals' && <WellnessLeaveApprovals userRole="ADMINISTRATOR" />}
 
           {/* Modal */}
           {selectedSalaryGrade && (

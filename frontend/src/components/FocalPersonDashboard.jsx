@@ -14,7 +14,8 @@ import ContractGenerator from './ContractGenerator';
 import ContractualDashboard from './ContractualDashboard';
 import DocumentViewer from './DocumentViewer';
 import EODBGenerator from './EODBGenerator';
-import WellnessLeaveMonitor from './WellnessLeaveMonitor';
+import WellnessCreditsMonitor from './WellnessCreditsMonitor';
+import WellnessLeaveApprovals from './WellnessLeaveApprovals';
 
 // All data fetched here is already scoped server-side to the Focal Person's
 // own placeOfAssignment (see backend/routes/users.js, positions.js,
@@ -82,11 +83,18 @@ function FocalPersonDashboard({ user }) {
       description: 'Document repository'
     },
     {
-      id: 'wellnessLeave',
-      name: 'Wellness Leave',
+      id: 'wellnessCredits',
+      name: 'Wellness Credits',
       icon: Leaf,
       group: 'management',
-      description: 'Monitor credits and recommend applications'
+      description: 'Monitor Wellness Leave credit balances'
+    },
+    {
+      id: 'wellnessApprovals',
+      name: 'Leave Applications',
+      icon: FileText,
+      group: 'management',
+      description: 'Recommend applications for your office'
     },
     {
       id: 'salaryGrades',
@@ -464,7 +472,8 @@ function FocalPersonDashboard({ user }) {
 
             {/* CONTRACTS */}
             {activeTab === 'contracts' && <ContractGenerator userRole="FOCAL_PERSON" />}
-            {activeTab === 'wellnessLeave' && <WellnessLeaveMonitor userRole="FOCAL_PERSON" />}
+            {activeTab === 'wellnessCredits' && <WellnessCreditsMonitor userRole="FOCAL_PERSON" />}
+            {activeTab === 'wellnessApprovals' && <WellnessLeaveApprovals userRole="FOCAL_PERSON" />}
 
             {/* DOCUMENTS */}
             {activeTab === 'documents' && <DocumentViewer userRole="FOCAL_PERSON" />}
