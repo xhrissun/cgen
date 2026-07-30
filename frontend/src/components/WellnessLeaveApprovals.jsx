@@ -272,7 +272,7 @@ function WellnessLeaveApprovals({ userRole }) {
   const [statusFilter, setStatusFilter] = useState('');
   const [appSearch, setAppSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null); // { type: 'recommend'|'approve', application, action }
+  const [modal, setModal] = useState(null); // { type: 'approve', application, action } — manual ARDMS approve/disapprove without a scan
   const [cancelTarget, setCancelTarget] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -296,20 +296,6 @@ function WellnessLeaveApprovals({ userRole }) {
 
   const openForm = (id) => {
     window.open(`${API_BASE}/api/wellness-leave/applications/${id}/form?token=${token}`, '_blank', 'noopener,noreferrer');
-  };
-
-  const submitRecommend = async ({ name, remarks }, action) => {
-    setSubmitting(true);
-    try {
-      await api.patch(`/api/wellness-leave/applications/${modal.application._id}/recommend`, { action, name, remarks }, { headers });
-      toast.success(action === 'RECOMMENDED' ? 'Application recommended.' : 'Application disapproved.');
-      setModal(null);
-      fetchData();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Action failed.');
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   const submitApprove = async ({ name, remarks }, action) => {
@@ -446,16 +432,6 @@ function WellnessLeaveApprovals({ userRole }) {
                       <button onClick={() => openForm(a._id)} title="Print form (landscape, one page)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md">
                         <Printer className="w-3.5 h-3.5" />
                       </button>
-                      {a.status === 'PENDING' && (
-                        <>
-                          <button onClick={() => setModal({ type: 'recommend', application: a, action: 'RECOMMENDED' })} title="Recommend" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-green-700 hover:bg-green-50 rounded-md">
-                            <Check className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => setModal({ type: 'recommend', application: a, action: 'DISAPPROVED' })} title="Disapprove" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-700 hover:bg-red-50 rounded-md">
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      )}
                       {a.status === 'RECOMMENDED' && userRole === 'ADMINISTRATOR' && (
                         <>
                           <button onClick={() => setModal({ type: 'approve', application: a, action: 'APPROVED' })} title="Approve (ARDMS)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-green-700 hover:bg-green-50 rounded-md">
@@ -482,14 +458,10 @@ function WellnessLeaveApprovals({ userRole }) {
 
       {modal && (
         <ActionModal
-          title={
-            modal.type === 'recommend'
-              ? (modal.action === 'RECOMMENDED' ? 'Recommend Application (Immediate Supervisor)' : 'Disapprove Application (Immediate Supervisor)')
-              : (modal.action === 'APPROVED' ? 'Approve Application (Assistant Regional Director for Management Services)' : 'Disapprove Application (Assistant Regional Director for Management Services)')
-          }
+          title={modal.action === 'APPROVED' ? 'Approve Application (Assistant Regional Director for Management Services)' : 'Disapprove Application (Assistant Regional Director for Management Services)'}
           submitting={submitting}
           onClose={() => setModal(null)}
-          onSubmit={(vals) => modal.type === 'recommend' ? submitRecommend(vals, modal.action) : submitApprove(vals, modal.action)}
+          onSubmit={(vals) => submitApprove(vals, modal.action)}
         />
       )}
 
