@@ -25,6 +25,7 @@ import { logActivity } from '../utils/activityLogger.js';
 import { buildDutiesLatex } from '../utils/dutiesRenderer.js';
 import { resolvePositionClauses } from '../utils/clauseResolver.js';
 import Notification from '../models/Notification.js';
+import { grantWellnessLeaveCredits } from '../utils/wellnessLeaveCredits.js';
 
 // Add this AFTER your imports, BEFORE router.get('/:id/generate')
 const sanitizeFilename = (str = '') => {
@@ -787,7 +788,21 @@ router.post('/', verifyToken, async (req, res) => {
         }
       }
     });
-    
+
+    // Wellness Leave credits (CSC Resolution No. 2501292 / CSC MC No. 01,
+    // s. 2026) — grant/top-up for the contract's calendar year. Failure here
+    // must never block contract creation itself, so it's logged, not thrown.
+    try {
+      await grantWellnessLeaveCredits({
+        userId,
+        mode,
+        year: parseInt(year, 10),
+        contractId: newContract._id
+      });
+    } catch (wlErr) {
+      console.error('⚠️ Wellness Leave credit grant failed for contract', newContract.contractNumber, errDetail(wlErr));
+    }
+
     res.status(201).json(newContract);
   } catch (error) {
     console.error('❌ Contract creation error:', error);

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../api.js';
 import { 
   LayoutDashboard, Users, Briefcase, FileText, FolderOpen,
-  DollarSign, FileCheck, Layers, Calendar, PenTool, ScrollText, Activity, IdCard
+  DollarSign, FileCheck, Layers, Calendar, PenTool, ScrollText, Activity, IdCard, Leaf
 } from 'lucide-react';
 import { SkeletonStatCard, SkeletonTable, SectionLoader, dispatchPageLoading } from './ui.jsx';
 import UserManagement from './UserManagement';
@@ -19,6 +19,7 @@ import DocumentViewer from './DocumentViewer';
 import ActivityLog from './ActivityLog';
 import ActiveEmployeesMonitor from './ActiveEmployeesMonitor';
 import AdminEODBManager from './AdminEODBManager';
+import WellnessLeaveMonitor from './WellnessLeaveMonitor';
 
 function AdminDashboard({ user }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -192,6 +193,13 @@ function AdminDashboard({ user }) {
       icon: Activity, 
       group: 'monitoring',
       description: 'Monitor active employees, salary and charging metrics'
+    },
+    { 
+      id: 'wellnessLeave', 
+      name: 'Wellness Leave', 
+      icon: Leaf, 
+      group: 'monitoring',
+      description: 'Monitor credits and approve applications'
     }
   ];
 
@@ -2057,6 +2065,7 @@ function AdminDashboard({ user }) {
           {activeTab === 'contracts' && <ContractGenerator userRole="ADMINISTRATOR" />}
           {activeTab === 'activityLog' && <ActivityLog />}
           {activeTab === 'activeEmployees' && <ActiveEmployeesMonitor />}
+          {activeTab === 'wellnessLeave' && <WellnessLeaveMonitor userRole="ADMINISTRATOR" />}
 
           {/* Modal */}
           {selectedSalaryGrade && (

@@ -11,6 +11,7 @@ import { ToastProvider } from './components/ui.jsx';
 import { clearCache } from './api.js';
 import { useInactivityLogout } from './hooks/useInactivityLogout';
 import InactivityWarningModal from './components/InactivityWarningModal';
+import WellnessLeaveScanApprove from './components/WellnessLeaveScanApprove';
 
 // Auto-logout after this much inactivity. A warning modal appears
 // WARNING_MS before the logout actually happens, giving the user a
@@ -101,6 +102,11 @@ function App() {
         />
         
         <Route
+          path="/wellness-scan/:id/:token"
+          element={<WellnessLeaveScanApprove user={user} />}
+        />
+
+        <Route
           path="/"
           element={
             user ? (
@@ -135,4 +141,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;

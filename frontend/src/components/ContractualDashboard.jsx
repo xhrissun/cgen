@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { UserCircle, FileText, FolderOpen, IdCard, KeyRound } from 'lucide-react';
+import { UserCircle, FileText, FolderOpen, IdCard, KeyRound, Leaf } from 'lucide-react';
 import { SectionLoader, EmptyState, Spinner, SkeletonTable, dispatchPageLoading } from './ui.jsx';
 import api, { openDocument, getDocumentUrl, API_BASE } from '../api.js';
 import ContractGenerator from './ContractGenerator';
 import DocumentViewerModal from './DocumentViewerModal';
 import EnhancedImageCropper from './EnhancedImageCropper';
 import EODBGenerator from './EODBGenerator';
+import WellnessLeaveContractual from './WellnessLeaveContractual';
 
 
 // Use the centralized getDocumentUrl from api.js (always uses correct backend BASE_URL)
@@ -173,6 +174,7 @@ function ContractualDashboard({ user, embedded = false }) {
   const tabs = [
     { id: 'profile', name: 'Personal Information', icon: UserCircle, group: 'main', description: 'Your profile and details' },
     { id: 'contracts', name: 'My Contracts', icon: FileText, group: 'main', description: 'View your contract history' },
+    { id: 'wellnessLeave', name: 'Wellness Leave', icon: Leaf, group: 'main', description: 'View credits and apply for leave' },
     { id: 'documents', name: 'Documents', icon: FolderOpen, group: 'main', description: 'Upload and manage documents' },
     { id: 'eodb', name: 'EODB ID', icon: IdCard, group: 'settings', description: 'Generate EODB identification' },
     { id: 'password', name: 'Change Password', icon: KeyRound, group: 'settings', description: 'Update your password' }
@@ -1003,6 +1005,10 @@ function ContractualDashboard({ user, embedded = false }) {
             )}
           </div>
         </div>
+      )}
+
+      {activeTab === 'wellnessLeave' && (
+        <WellnessLeaveContractual user={user} />
       )}
 
       {activeTab === 'eodb' && (

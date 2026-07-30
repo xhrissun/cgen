@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../api.js';
 import {
   LayoutDashboard, Users, Briefcase, FileText, FolderOpen,
-  IdCard, UserCircle, DollarSign
+  IdCard, UserCircle, DollarSign, Leaf
 } from 'lucide-react';
 import { SkeletonStatCard, dispatchPageLoading } from './ui.jsx';
 import SalaryGradeViewer from './SalaryGradeViewer';
@@ -14,6 +14,7 @@ import ContractGenerator from './ContractGenerator';
 import ContractualDashboard from './ContractualDashboard';
 import DocumentViewer from './DocumentViewer';
 import EODBGenerator from './EODBGenerator';
+import WellnessLeaveMonitor from './WellnessLeaveMonitor';
 
 // All data fetched here is already scoped server-side to the Focal Person's
 // own placeOfAssignment (see backend/routes/users.js, positions.js,
@@ -79,6 +80,13 @@ function FocalPersonDashboard({ user }) {
       icon: FolderOpen,
       group: 'management',
       description: 'Document repository'
+    },
+    {
+      id: 'wellnessLeave',
+      name: 'Wellness Leave',
+      icon: Leaf,
+      group: 'management',
+      description: 'Monitor credits and recommend applications'
     },
     {
       id: 'salaryGrades',
@@ -456,6 +464,7 @@ function FocalPersonDashboard({ user }) {
 
             {/* CONTRACTS */}
             {activeTab === 'contracts' && <ContractGenerator userRole="FOCAL_PERSON" />}
+            {activeTab === 'wellnessLeave' && <WellnessLeaveMonitor userRole="FOCAL_PERSON" />}
 
             {/* DOCUMENTS */}
             {activeTab === 'documents' && <DocumentViewer userRole="FOCAL_PERSON" />}

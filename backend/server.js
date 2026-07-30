@@ -20,6 +20,7 @@ import { startContractExpiryChecker } from './utils/contractExpiry.js';
 import notificationRoutes from './routes/notifications.js';
 import changeLogRoutes from './routes/changeLogs.js';
 import eodbRoutes from './routes/eodb.js';
+import wellnessLeaveRoutes from './routes/wellnessLeave.js';
 import { getLocalIP } from './utils/getLocalIP.js';
 
 const app = express();
@@ -132,6 +133,7 @@ app.use('/api/signatories', signatoryRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/change-logs', changeLogRoutes);
 app.use('/api/eodb', eodbRoutes);
+app.use('/api/wellness-leave', wellnessLeaveRoutes);
 
 // Health check — also exposes the detected IP to the frontend
 app.get('/api/health', (req, res) => {
