@@ -4,8 +4,10 @@
 // (see backend/routes/wellnessLeave.js GET .../form). An administrator
 // scans the code with their phone AFTER the paper has been physically
 // signed by the employee, recommended by the supervisor, and approved by
-// the Assistant Regional Director for Management Services — scanning here
-// is what logs that approval in the system and deducts the credit.
+// the Assistant Regional Director for Management Services — all on the
+// same paper, in one signing round. Scanning here is what logs both the
+// supervisor's recommendation and the ARDMS approval in the system in a
+// single action and deducts the credit.
 
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
@@ -104,10 +106,10 @@ function WellnessLeaveScanApprove({ user }) {
                   {done ? 'Approval logged successfully. The credit has been deducted.' : 'This application was already marked as approved.'}
                 </p>
               </div>
-            ) : application.status !== 'RECOMMENDED' ? (
+            ) : !['PENDING', 'RECOMMENDED'].includes(application.status) ? (
               <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-md p-3">
                 <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-700">This application must be recommended by the immediate supervisor before it can be approved here.</p>
+                <p className="text-sm text-amber-700">This application has status "{application.status}" and can no longer be approved here.</p>
               </div>
             ) : (
               <button
@@ -115,7 +117,7 @@ function WellnessLeaveScanApprove({ user }) {
                 disabled={approving}
                 className="w-full px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50"
               >
-                {approving ? 'Approving…' : 'Confirm Approval (ARDMS Signed)'}
+                {approving ? 'Approving…' : 'Confirm Approval (Supervisor & ARDMS Signed)'}
               </button>
             )}
           </div>

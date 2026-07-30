@@ -453,13 +453,32 @@ router.post('/applications/:id/scan-approve', verifyToken, requireRole('ADMINIST
     if (application.status === 'APPROVED') {
       return res.status(400).json({ message: 'This application has already been marked as approved.' });
     }
-    if (application.status !== 'RECOMMENDED') {
-      return res.status(400).json({ message: `Application must be recommended by the immediate supervisor first (current status: ${application.status}).` });
+    // The paper form carries the supervisor's recommendation and the ARDMS
+    // approval as one physical signing round — the scan is what logs both
+    // into the system at once, so PENDING (not yet acted on digitally) is
+    // just as scannable as RECOMMENDED (already acted on digitally, e.g.
+    // via the manual PATCH .../recommend path for applications not printed).
+    if (!['PENDING', 'RECOMMENDED'].includes(application.status)) {
+      return res.status(400).json({ message: `Cannot log approval for an application with status ${application.status}.` });
     }
 
     const { balance } = await getBalance(application.userId, application.year);
     if (application.daysRequested > balance) {
       return res.status(400).json({ message: `Insufficient remaining balance for ${application.year} (${balance} day(s) left).` });
+    }
+
+    // If no digital recommendation was ever recorded (the normal case for a
+    // printed-and-signed form), the paper signature stands in for it — log
+    // it here so the record and printed history stay accurate.
+    if (application.status === 'PENDING') {
+      application.supervisor = {
+        name: application.supervisor?.name || '',
+        position: application.supervisor?.position || 'Immediate Supervisor',
+        action: 'RECOMMENDED',
+        remarks: application.supervisor?.remarks || 'Recommended via signed paper form (verified at QR approval scan).',
+        actionBy: req.user.userId,
+        actionDate: new Date()
+      };
     }
 
     application.approver = {
