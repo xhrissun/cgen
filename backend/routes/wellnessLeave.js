@@ -55,13 +55,22 @@ async function canManageUser(req, targetUser) {
 }
 
 async function canViewApplication(req, application) {
-  const ownerId = String(application.userId);
+  // application.userId may be a populated User document (has ._id and
+  // .placeOfAssignment already loaded) or a plain ObjectId, depending on
+  // the caller. String(populatedDoc) does NOT give back the hex id — it
+  // stringifies to "[object Object]" — so that case must be unwrapped
+  // explicitly, or every comparison below silently fails.
+  const isPopulated = application.userId && typeof application.userId === 'object' && application.userId._id;
+  const ownerId = String(isPopulated ? application.userId._id : application.userId);
+
   if (req.user.userId === ownerId) return true;
   if (req.user.role === 'ADMINISTRATOR') return true;
   if (req.user.role === 'FOCAL_PERSON') {
-    const owner = await User.findById(ownerId).select('placeOfAssignment').lean();
+    const ownerPlace = isPopulated
+      ? application.userId.placeOfAssignment
+      : (await User.findById(ownerId).select('placeOfAssignment').lean())?.placeOfAssignment;
     const me = await User.findById(req.user.userId).select('placeOfAssignment').lean();
-    return !!owner && !!me && owner.placeOfAssignment === me.placeOfAssignment;
+    return !!ownerPlace && !!me && ownerPlace === me.placeOfAssignment;
   }
   return false;
 }
