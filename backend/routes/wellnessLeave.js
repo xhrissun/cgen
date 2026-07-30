@@ -10,8 +10,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+// Python/WeasyPrint removed — PDF generation is now done in Node.js via Puppeteer
 import QRCode from 'qrcode';
 import { errDetail } from '../utils/errors.js';
 import { verifyToken, requireRole } from './auth.js';
@@ -20,15 +19,14 @@ import Contract from '../models/Contract.js';
 import WellnessLeaveApplication from '../models/WellnessLeaveApplication.js';
 import WellnessLeaveCredit from '../models/WellnessLeaveCredit.js';
 import { grantWellnessLeaveCredits } from '../utils/wellnessLeaveCredits.js';
-
-const execPromise = promisify(exec);
+import { generateWellnessLeavePdf } from '../utils/pdfGenerator.js';
 const router = express.Router();
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3001';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
-// Balance is computed on the fly: granted (from the year's ledger) minus the
+// Balance is computed on the fly: granted (from the year's ledger ) minus the
 // sum of APPROVED applications for that year. This is what makes "shall not
 // be deducted unless approved" automatic — PENDING/RECOMMENDED/DISAPPROVED/
 // CANCELLED applications never subtract from it.
@@ -508,7 +506,6 @@ const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'n
 // renders correctly with the text-only letterhead instead of failing.
 const LOGO_SOURCE_PATH = path.join(process.cwd(), '..', 'frontend', 'public', 'denr-logo.png');
 const HTML_TEMPLATE_PATH = path.join(process.cwd(), 'templates', 'wellness_leave.html');
-const PDF_SCRIPT_PATH = path.join(process.cwd(), 'scripts', 'html_to_pdf.py');
 
 router.get('/applications/:id/form', verifyToken, async (req, res) => {
   let pdfPath, qrPngPath, logoPngPath, tempDir, baseFile;
@@ -533,7 +530,6 @@ router.get('/applications/:id/form', verifyToken, async (req, res) => {
     if (hasLogo) {
       fs.copyFileSync(LOGO_SOURCE_PATH, logoPngPath);
     } else {
-      // Fallback or empty if logo missing
       logoPngPath = '';
     }
 
@@ -544,38 +540,39 @@ router.get('/applications/:id/form', verifyToken, async (req, res) => {
     const sup = application.supervisor || {};
     const app = application.approver || {};
 
-    const replacements = [
-      `logo_path=${logoPngPath}`,
-      `qr_path=${qrPngPath}`,
-      `application_number=${application.applicationNumber}`,
-      `employee_name=${emp.fullName}`,
-      `employee_position=${emp.position}`,
-      `place_of_assignment=${emp.placeOfAssignment}`,
-      `inclusive_dates=${formatDate(application.startDate)} to ${formatDate(application.endDate)}`,
-      `days_requested=${application.daysRequested}`,
-      `reason=${application.reason || 'N/A'}`,
-      `supervisor_status=${sup.action || 'Pending'}`,
-      `supervisor_remarks=${sup.remarks ? `— ${sup.remarks}` : ''}`,
-      `approver_status=${app.action || 'Pending'}`,
-      `approver_remarks=${app.remarks ? `— ${app.remarks}` : ''}`
-    ];
+    // Generate PDF using Node.js (Puppeteer) instead of Python/WeasyPrint
+    await generateWellnessLeavePdf({
+      htmlTemplatePath: HTML_TEMPLATE_PATH,
+      outputPdfPath: pdfPath,
+      logoPath: logoPngPath,
+      qrPath: qrPngPath,
+      data: {
+        applicationNumber: application.applicationNumber,
+        employeeName: emp.fullName || '',
+        employeePosition: emp.position || '',
+        placeOfAssignment: emp.placeOfAssignment || '',
+        inclusiveDates: `${formatDate(application.startDate)} to ${formatDate(application.endDate)}`,
+        daysRequested: application.daysRequested,
+        reason: application.reason || 'N/A',
+        supervisorStatus: sup.action || 'Pending',
+        supervisorRemarks: sup.remarks ? `— ${sup.remarks}` : '',
+        approverStatus: app.action || 'Pending',
+        approverRemarks: app.remarks ? `— ${app.remarks}` : '',
+      },
+    });
 
-    const args = [PDF_SCRIPT_PATH, HTML_TEMPLATE_PATH, pdfPath, ...replacements.map(r => `"${r}"`)];
-    
-    await execPromise(`python3 ${args.join(' ')}`, { timeout: 60000 });
-
-    if (!fs.existsSync(pdfPath)) throw new Error('PDF not created by conversion script.');
+    if (!fs.existsSync(pdfPath)) throw new Error('PDF not created by Puppeteer.');
 
     res.setHeader('Content-Disposition', `inline; filename="${application.applicationNumber}.pdf"`);
     res.sendFile(pdfPath, (err) => {
-      [pdfPath, qrPngPath, logoPngPath].forEach(f => { 
-        try { if (f && fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {} 
+      [pdfPath, qrPngPath, logoPngPath].forEach(f => {
+        try { if (f && fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {}
       });
       if (err) console.error('Error sending Wellness Leave form PDF:', err);
     });
   } catch (error) {
-    [pdfPath, qrPngPath, logoPngPath].forEach(f => { 
-      try { if (f && fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {} 
+    [pdfPath, qrPngPath, logoPngPath].forEach(f => {
+      try { if (f && fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {}
     });
     console.error('Error generating Wellness Leave form PDF:', error);
     res.status(500).json({ message: 'Failed to generate Wellness Leave form.', error: errDetail(error) });
