@@ -243,10 +243,10 @@ function ScanToApprovePanel({ headers, onApproved }) {
                 <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-green-700">This application was already marked as approved.</p>
               </div>
-            ) : application.status !== 'RECOMMENDED' ? (
+            ) : !['PENDING', 'RECOMMENDED'].includes(application.status) ? (
               <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-md p-3">
                 <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-700">This application must be recommended by the immediate supervisor before it can be approved here.</p>
+                <p className="text-sm text-amber-700">This application has status "{application.status}" and can no longer be approved here.</p>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -255,7 +255,7 @@ function ScanToApprovePanel({ headers, onApproved }) {
                   onClick={handleApprove}
                   className="flex-1 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700"
                 >
-                  Confirm Approval (ARDMS Signed)
+                  Confirm Approval (Supervisor & ARDMS Signed)
                 </LoadingButton>
                 <button onClick={reset} className="px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
               </div>
