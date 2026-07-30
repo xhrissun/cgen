@@ -74,6 +74,7 @@ const wellnessLeaveApplicationSchema = new mongoose.Schema({
 
   cancelledAt: Date,
   cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  cancelReason: String,
 
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
@@ -81,7 +82,14 @@ const wellnessLeaveApplicationSchema = new mongoose.Schema({
 
 // Auto-generate a human-readable application number, same retry pattern as
 // Contract.contractNumber (backend/models/Contract.js).
-wellnessLeaveApplicationSchema.pre('save', async function (next) {
+//
+// IMPORTANT: this must be pre('validate'), not pre('save'). Mongoose's
+// document save pipeline runs validation *before* 'save' hooks, so setting
+// a required field (qrToken) inside pre('save') is always too late — the
+// required-field validator sees `undefined` and rejects the document before
+// this hook ever runs. Contract.contractNumber doesn't have this problem
+// because it isn't marked `required`, so pre('save') happened to work there.
+wellnessLeaveApplicationSchema.pre('validate', async function (next) {
   try {
     if (!this.qrToken) {
       this.qrToken = crypto.randomBytes(16).toString('hex');

@@ -101,11 +101,16 @@ router.get('/eligibility/me', verifyToken, async (req, res) => {
 
 // Monitoring list for FOCAL_PERSON (own office only) / ADMINISTRATOR (all).
 // Query: ?year=2026&placeOfAssignment=... (placeOfAssignment ignored/forced for focal persons)
+// Only contractuals with a currently in-force contract are listed — someone
+// whose last contract lapsed no longer needs active monitoring here (their
+// historical ledger is still reachable via GET /credits/:userId if needed).
 router.get('/credits', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON'), async (req, res) => {
   try {
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
 
-    let userQuery = { role: 'CONTRACTUAL' };
+    const activeContractUserIds = await Contract.find({ status: 'ACTIVE', isArchived: false }).distinct('userId');
+
+    let userQuery = { role: 'CONTRACTUAL', _id: { $in: activeContractUserIds } };
     if (req.user.role === 'FOCAL_PERSON') {
       const me = await User.findById(req.user.userId).select('placeOfAssignment').lean();
       userQuery.placeOfAssignment = me?.placeOfAssignment;
@@ -369,21 +374,40 @@ router.patch('/applications/:id/approve', verifyToken, requireRole('ADMINISTRATO
   }
 });
 
-// Applicant cancels their own not-yet-approved application.
+// Cancel an application.
+//   - PENDING / RECOMMENDED: the applicant themself, their scoped
+//     FOCAL_PERSON, or an ADMINISTRATOR may cancel.
+//   - APPROVED: ADMINISTRATOR only (this is the one case that actually
+//     reverses a credit deduction — balance is computed on the fly from
+//     APPROVED applications, so flipping status to CANCELLED restores the
+//     balance automatically, no ledger edit needed).
+//   - DISAPPROVED / CANCELLED: nothing to cancel.
 router.patch('/applications/:id/cancel', verifyToken, async (req, res) => {
   try {
-    const application = await WellnessLeaveApplication.findById(req.params.id);
+    const { reason } = req.body;
+    const application = await WellnessLeaveApplication.findById(req.params.id).populate('userId', 'placeOfAssignment');
     if (!application) return res.status(404).json({ message: 'Application not found' });
-    if (String(application.userId) !== req.user.userId) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-    if (!['PENDING', 'RECOMMENDED'].includes(application.status)) {
+
+    const isOwner = String(application.userId?._id || application.userId) === req.user.userId;
+    const isAdmin = req.user.role === 'ADMINISTRATOR';
+    const isScopedFocal = req.user.role === 'FOCAL_PERSON' && await canManageUser(req, application.userId);
+
+    if (application.status === 'APPROVED') {
+      if (!isAdmin) {
+        return res.status(403).json({ message: 'Only an administrator can cancel an approved Wellness Leave application.' });
+      }
+    } else if (['PENDING', 'RECOMMENDED'].includes(application.status)) {
+      if (!isOwner && !isAdmin && !isScopedFocal) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    } else {
       return res.status(400).json({ message: `Cannot cancel an application with status ${application.status}.` });
     }
 
     application.status = 'CANCELLED';
     application.cancelledAt = new Date();
     application.cancelledBy = req.user.userId;
+    if (reason) application.cancelReason = reason;
     await application.save();
 
     res.json(application);
