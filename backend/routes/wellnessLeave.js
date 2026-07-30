@@ -518,12 +518,15 @@ const escapeLatex = (text) => {
 
 const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
 
-// Source logo lives in the frontend's public assets; backend and frontend
-// are sibling directories (see start.js), so process.cwd() (backend/) plus
-// ../frontend/public reaches it. If it's ever missing (e.g. backend
-// deployed standalone without the frontend checkout), the form still
-// renders correctly with the text-only letterhead instead of failing.
-const LOGO_SOURCE_PATH = path.join(process.cwd(), '..', 'frontend', 'public', 'denr-logo.png');
+// The logo is bundled inside backend/assets so form generation works
+// regardless of deployment topology (e.g. frontend on Netlify, backend on
+// Render as separate services — the backend never has a `frontend/`
+// directory on its filesystem in that setup, which is why this used to
+// silently fall back to no logo). The old sibling-frontend path is kept as
+// a fallback for anyone still running everything from one checkout via
+// start.js with an out-of-date backend/assets copy.
+const LOGO_SOURCE_PATH = path.join(process.cwd(), 'assets', 'denr-logo.png');
+const LOGO_FALLBACK_PATH = path.join(process.cwd(), '..', 'frontend', 'public', 'denr-logo.png');
 const HTML_TEMPLATE_PATH = path.join(process.cwd(), 'templates', 'wellness_leave.html');
 
 router.get('/applications/:id/form', verifyToken, async (req, res) => {
@@ -545,9 +548,11 @@ router.get('/applications/:id/form', verifyToken, async (req, res) => {
     qrPngPath = path.join(tempDir, `${baseFile}_qr.png`);
     logoPngPath = path.join(tempDir, `${baseFile}_logo.png`);
 
-    const hasLogo = fs.existsSync(LOGO_SOURCE_PATH);
-    if (hasLogo) {
-      fs.copyFileSync(LOGO_SOURCE_PATH, logoPngPath);
+    const logoSource = fs.existsSync(LOGO_SOURCE_PATH)
+      ? LOGO_SOURCE_PATH
+      : (fs.existsSync(LOGO_FALLBACK_PATH) ? LOGO_FALLBACK_PATH : null);
+    if (logoSource) {
+      fs.copyFileSync(logoSource, logoPngPath);
     } else {
       logoPngPath = '';
     }
