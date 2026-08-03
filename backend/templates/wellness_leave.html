@@ -39,51 +39,54 @@
             width: 100%;
         }
         .header {
-            display: flex;
-            justify-content: space-between;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
             align-items: center;
-            border-bottom: 1.5pt solid var(--denr-green);
-            padding-bottom: 4pt;
-            margin-bottom: 5pt;
+            border-bottom: 2pt solid var(--denr-green);
+            padding-bottom: 6pt;
+            margin-bottom: 6pt;
             flex-shrink: 0;
         }
+        .logo-wrap {
+            display: flex;
+            align-items: center;
+        }
         .logo {
-            width: 35pt; /* Smaller logo */
+            width: 52pt;
             height: auto;
         }
         .agency-info {
             text-align: center;
-            flex-grow: 1;
-            margin: 0 8pt;
         }
         .agency-name {
             font-weight: 800;
-            font-size: 9pt; /* Smaller font */
+            font-size: 11pt;
             text-transform: uppercase;
             color: var(--denr-green);
+            line-height: 1.25;
         }
         .agency-sub {
-            font-size: 6.5pt; /* Smaller font */
+            font-size: 7.5pt;
             color: var(--text-muted);
         }
         .app-qr-section {
             display: flex;
             flex-direction: column;
             align-items: flex-end;
-            min-width: 110pt;
+            justify-self: end;
         }
         .app-no {
             text-align: right;
-            margin-bottom: 2pt;
+            margin-bottom: 3pt;
         }
         .app-no-label {
-            font-size: 5pt; /* Smaller font */
+            font-size: 5.5pt;
             text-transform: uppercase;
             color: var(--text-tiny);
         }
         .app-no-value {
             font-weight: 700;
-            font-size: 9pt; /* Smaller font */
+            font-size: 10pt;
             color: var(--denr-green);
         }
         .qr-code {
@@ -91,24 +94,24 @@
             height: 65pt;
         }
         .qr-label {
-            font-size: 5pt;
+            font-size: 5.5pt;
             color: var(--text-tiny);
             text-align: center;
             margin-top: 1pt;
         }
         .title-section {
             text-align: center;
-            margin-bottom: 6pt;
+            margin-bottom: 7pt;
             flex-shrink: 0;
         }
         .title {
             font-weight: 800;
-            font-size: 11pt; /* Smaller font */
+            font-size: 13pt;
             margin: 0;
             letter-spacing: -0.02em;
         }
         .subtitle {
-            font-size: 5.5pt; /* Smaller font */
+            font-size: 6pt;
             font-style: italic;
             color: var(--text-muted);
             max-width: 90%;
@@ -124,7 +127,13 @@
             flex: 2;
             display: flex;
             flex-direction: column;
-            gap: 6pt;
+            gap: 7pt;
+        }
+        .left-top {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
         }
         .right-column {
             flex: 1;
@@ -134,31 +143,33 @@
         }
         .section-title {
             font-weight: 700;
-            font-size: 7pt; /* Smaller font */
+            font-size: 7.5pt;
             text-transform: uppercase;
             color: var(--denr-green);
             border-bottom: 0.5pt solid var(--border-gray);
             margin-bottom: 4pt;
-            padding-bottom: 1pt;
+            padding-bottom: 2pt;
+            flex-shrink: 0;
         }
         .details-grid {
             display: grid;
             grid-template-columns: 1fr 2fr;
-            gap: 1.5pt;
+            gap: 2pt;
+            flex-shrink: 0;
         }
         .label {
             font-weight: 600;
             color: var(--text-muted);
             background-color: var(--denr-light-green);
-            padding: 2pt 4pt;
+            padding: 3pt 5pt;
             border-radius: 2pt;
-            font-size: 6.5pt; /* Smaller font */
+            font-size: 7pt;
             display: flex;
             align-items: center;
         }
         .value {
-            padding: 2pt 4pt;
-            font-size: 7pt; /* Smaller font */
+            padding: 3pt 5pt;
+            font-size: 7.5pt;
             display: flex;
             align-items: center;
         }
@@ -169,35 +180,40 @@
             color: var(--denr-green);
         }
         .reason-block {
-            margin-top: 5pt;
+            margin-top: 6pt;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
         }
         .reason-label {
             font-weight: 600;
             color: var(--text-muted);
             background-color: var(--denr-light-green);
-            padding: 2pt 4pt;
+            padding: 3pt 5pt;
             border-radius: 2pt 2pt 0 0;
-            font-size: 6.5pt;
+            font-size: 7pt;
+            flex-shrink: 0;
         }
         .reason-box {
             border: 0.5pt solid var(--border-gray);
             border-top: none;
             border-radius: 0 0 2pt 2pt;
-            padding: 3pt 4pt;
-            font-size: 7pt;
-            min-height: 20pt;
-            line-height: 1.35;
+            padding: 5pt 6pt;
+            font-size: 7.5pt;
+            line-height: 1.4;
+            flex: 1;
         }
         .cert-block {
-            margin-top: auto;
+            flex-shrink: 0;
         }
         .certification {
-            font-size: 6pt; /* Smaller font */
+            font-size: 6.5pt;
         }
         .signature-row {
             display: flex;
             justify-content: space-between;
-            padding-top: 5pt;
+            padding-top: 6pt;
         }
         .signature-box {
             width: 48%;
@@ -205,41 +221,39 @@
         }
         .sig-line {
             border-top: 0.5pt solid var(--text-main);
-            margin-top: 8pt;
-            padding-top: 1pt;
-            font-size: 5.5pt; /* Smaller font */
+            margin-top: 10pt;
+            padding-top: 2pt;
+            font-size: 6pt;
             font-weight: 600;
         }
         .approval-card {
             border: 0.8pt solid var(--denr-green);
-            border-radius: 4pt;
-            padding: 5pt;
+            border-radius: 5pt;
+            padding: 8pt 6pt;
             flex: 1;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            gap: 10pt;
+            justify-content: space-between;
             text-align: center; /* Center content within approval card */
         }
         .card-title {
             font-weight: 700;
-            font-size: 6.5pt; /* Smaller font */
-            margin-bottom: 2pt;
+            font-size: 7.5pt;
             color: var(--denr-green);
             text-align: center;
         }
         .card-sig-line {
             border-top: 0.5pt solid var(--text-main);
-            padding-top: 1pt;
-            font-size: 5.5pt; /* Smaller font */
+            padding-top: 2pt;
+            font-size: 6pt;
             font-weight: 600;
-            width: 80%; /* Adjust width for centering */
+            width: 85%; /* Adjust width for centering */
             margin-left: auto;
             margin-right: auto;
         }
         .card-date-line {
-            font-size: 5.5pt; /* Smaller font */
-            margin-top: 1pt;
+            font-size: 6pt;
+            margin-top: 2pt;
         }
         .footer {
             border-top: 0.5pt solid var(--border-gray);
@@ -261,7 +275,9 @@
 <body>
     <div class="container">
         <div class="header">
-            <img src="{{logo_path}}" alt="DENR Logo" class="logo">
+            <div class="logo-wrap">
+                <img src="{{logo_path}}" alt="DENR Logo" class="logo">
+            </div>
             <div class="agency-info">
                 <div class="agency-sub">Republic of the Philippines</div>
                 <div class="agency-name">Department of Environment and Natural Resources</div>
@@ -284,7 +300,7 @@
 
         <div class="main-content">
             <div class="left-column">
-                <div>
+                <div class="left-top">
                     <div class="section-title">Applicant Details</div>
                     <div class="details-grid">
                         <div class="label">Name</div>
