@@ -31,7 +31,6 @@
             height: 148mm; /* A5 landscape height */
             display: flex;
             flex-direction: column;
-            justify-content: space-between; /* Distribute content vertically */
         }
         .container {
             display: flex;
@@ -45,7 +44,8 @@
             align-items: center;
             border-bottom: 1.5pt solid var(--denr-green);
             padding-bottom: 4pt;
-            margin-bottom: 6pt;
+            margin-bottom: 5pt;
+            flex-shrink: 0;
         }
         .logo {
             width: 35pt; /* Smaller logo */
@@ -98,7 +98,8 @@
         }
         .title-section {
             text-align: center;
-            margin-bottom: 8pt;
+            margin-bottom: 6pt;
+            flex-shrink: 0;
         }
         .title {
             font-weight: 800;
@@ -116,20 +117,20 @@
         .main-content {
             display: flex;
             flex-grow: 1;
-            gap: 8pt; /* Reduced gap */
-            margin-bottom: 6pt;
+            gap: 10pt;
+            min-height: 0;
         }
         .left-column {
             flex: 2;
             display: flex;
             flex-direction: column;
-            justify-content: space-between; /* Distribute content vertically */
+            gap: 6pt;
         }
         .right-column {
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 5pt; /* Reduced gap */
+            gap: 6pt;
         }
         .section-title {
             font-weight: 700;
@@ -143,29 +144,60 @@
         .details-grid {
             display: grid;
             grid-template-columns: 1fr 2fr;
-            gap: 2pt; /* Reduced gap */
-            margin-bottom: 6pt;
+            gap: 1.5pt;
         }
         .label {
             font-weight: 600;
             color: var(--text-muted);
             background-color: var(--denr-light-green);
-            padding: 1.5pt 4pt; /* Reduced padding */
+            padding: 2pt 4pt;
             border-radius: 2pt;
             font-size: 6.5pt; /* Smaller font */
+            display: flex;
+            align-items: center;
         }
         .value {
-            padding: 1.5pt 4pt; /* Reduced padding */
+            padding: 2pt 4pt;
             font-size: 7pt; /* Smaller font */
+            display: flex;
+            align-items: center;
+        }
+        .label.credits-row,
+        .value.credits-row {
+            background-color: #dcfce7;
+            font-weight: 700;
+            color: var(--denr-green);
+        }
+        .reason-block {
+            margin-top: 5pt;
+        }
+        .reason-label {
+            font-weight: 600;
+            color: var(--text-muted);
+            background-color: var(--denr-light-green);
+            padding: 2pt 4pt;
+            border-radius: 2pt 2pt 0 0;
+            font-size: 6.5pt;
+        }
+        .reason-box {
+            border: 0.5pt solid var(--border-gray);
+            border-top: none;
+            border-radius: 0 0 2pt 2pt;
+            padding: 3pt 4pt;
+            font-size: 7pt;
+            min-height: 20pt;
+            line-height: 1.35;
+        }
+        .cert-block {
+            margin-top: auto;
         }
         .certification {
             font-size: 6pt; /* Smaller font */
-            margin-bottom: 8pt;
         }
         .signature-row {
             display: flex;
             justify-content: space-between;
-            padding-top: 8pt;
+            padding-top: 5pt;
         }
         .signature-box {
             width: 48%;
@@ -173,7 +205,7 @@
         }
         .sig-line {
             border-top: 0.5pt solid var(--text-main);
-            margin-top: 10pt;
+            margin-top: 8pt;
             padding-top: 1pt;
             font-size: 5.5pt; /* Smaller font */
             font-weight: 600;
@@ -181,11 +213,12 @@
         .approval-card {
             border: 0.8pt solid var(--denr-green);
             border-radius: 4pt;
-            padding: 4pt; /* Reduced padding */
-            flex-grow: 1;
+            padding: 5pt;
+            flex: 1;
             display: flex;
             flex-direction: column;
-            justify-content: space-between; /* Distribute content vertically */
+            justify-content: center;
+            gap: 10pt;
             text-align: center; /* Center content within approval card */
         }
         .card-title {
@@ -197,7 +230,6 @@
         }
         .card-sig-line {
             border-top: 0.5pt solid var(--text-main);
-            margin-top: auto;
             padding-top: 1pt;
             font-size: 5.5pt; /* Smaller font */
             font-weight: 600;
@@ -211,11 +243,12 @@
         }
         .footer {
             border-top: 0.5pt solid var(--border-gray);
-            padding-top: 4pt;
+            padding-top: 3pt;
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            margin-top: 6pt;
+            margin-top: 5pt;
+            flex-shrink: 0;
         }
         .policy-note {
             font-size: 5pt; /* Smaller font */
@@ -256,25 +289,30 @@
                     <div class="details-grid">
                         <div class="label">Name</div>
                         <div class="value">{{employee_name}}</div>
-                        
+
                         <div class="label">Position</div>
                         <div class="value">{{employee_position}}</div>
-                        
+
                         <div class="label">Place of Assignment</div>
                         <div class="value">{{place_of_assignment}}</div>
-                        
+
                         <div class="label">Inclusive Dates</div>
                         <div class="value">{{inclusive_dates}}</div>
-                        
+
                         <div class="label">Days Requested</div>
                         <div class="value">{{days_requested}} working day(s)</div>
-                        
-                        <div class="label">Reason</div>
-                        <div class="value">{{reason}}</div>
+
+                        <div class="label credits-row">Wellness Leave Credits Left if Approved</div>
+                        <div class="value credits-row">{{credits_left_if_approved}}</div>
+                    </div>
+
+                    <div class="reason-block">
+                        <div class="reason-label">Reason</div>
+                        <div class="reason-box">{{reason}}</div>
                     </div>
                 </div>
 
-                <div>
+                <div class="cert-block">
                     <div class="certification">I certify that the above information is true and correct.</div>
 
                     <div class="signature-row">

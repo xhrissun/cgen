@@ -30,6 +30,7 @@ export async function generateWellnessLeavePdf({ htmlTemplatePath, outputPdfPath
     place_of_assignment: data.placeOfAssignment || '',
     inclusive_dates: data.inclusiveDates || '',
     days_requested: String(data.daysRequested || ''),
+    credits_left_if_approved: data.creditsLeftIfApproved != null ? String(data.creditsLeftIfApproved) : 'N/A',
     reason: data.reason || 'N/A',
     supervisor_status: data.supervisorStatus || 'Pending',
     supervisor_remarks: data.supervisorRemarks || '',

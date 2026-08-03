@@ -564,6 +564,14 @@ router.get('/applications/:id/form', verifyToken, async (req, res) => {
     const sup = application.supervisor || {};
     const app = application.approver || {};
 
+    // Credits left "if approved": current on-the-fly balance minus this
+    // application's days. If it's already APPROVED, getBalance() has already
+    // subtracted it, so the current balance IS the post-approval figure.
+    const { balance } = await getBalance(application.userId._id, application.year);
+    const creditsLeftIfApproved = application.status === 'APPROVED'
+      ? balance
+      : Math.round((balance - application.daysRequested) * 100) / 100;
+
     // Generate PDF using Node.js (Puppeteer) instead of Python/WeasyPrint
     await generateWellnessLeavePdf({
       htmlTemplatePath: HTML_TEMPLATE_PATH,
@@ -577,6 +585,7 @@ router.get('/applications/:id/form', verifyToken, async (req, res) => {
         placeOfAssignment: emp.placeOfAssignment || '',
         inclusiveDates: `${formatDate(application.startDate)} to ${formatDate(application.endDate)}`,
         daysRequested: application.daysRequested,
+        creditsLeftIfApproved,
         reason: application.reason || 'N/A',
         supervisorStatus: sup.action || 'Pending',
         supervisorRemarks: sup.remarks ? `— ${sup.remarks}` : '',
