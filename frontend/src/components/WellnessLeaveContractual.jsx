@@ -29,7 +29,9 @@ function WellnessLeaveContractual({ user }) {
   const [form, setForm] = useState({ startDate: '', endDate: '', daysRequested: '', reason: '' });
 
   const currentYear = new Date().getFullYear();
-  const currentBalance = balances.find(b => b.year === currentYear) || { year: currentYear, granted: 0, used: 0, balance: 0 };
+  const currentBalance = balances.find(b => b.year === currentYear) || { year: currentYear, granted: 0, used: 0, pending: 0, balance: 0, projectedBalance: 0 };
+  const requestedDays = parseFloat(form.daysRequested);
+  const exceedsProjected = Number.isFinite(requestedDays) && requestedDays > 0 && requestedDays > currentBalance.projectedBalance;
 
   const fetchData = async () => {
     setLoading(true);
@@ -58,6 +60,10 @@ function WellnessLeaveContractual({ user }) {
     e.preventDefault();
     if (!form.startDate || !form.endDate || !form.daysRequested) {
       toast.error('Please fill in the inclusive dates and days requested.');
+      return;
+    }
+    if (exceedsProjected) {
+      toast.error(`Only ${Math.max(currentBalance.projectedBalance, 0)} day(s) are available to request${currentBalance.pending > 0 ? ` (${currentBalance.pending} day(s) already pending approval)` : ''}.`);
       return;
     }
     setSubmitting(true);
@@ -106,13 +112,16 @@ function WellnessLeaveContractual({ user }) {
           <Leaf className="w-8 h-8 text-green-600" />
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-green-700">Wellness Leave Balance — {currentYear}</p>
-            <p className="text-2xl font-bold text-green-800">{currentBalance.balance} day(s) available</p>
-            <p className="text-xs text-green-700 mt-0.5">Granted: {currentBalance.granted} • Used: {currentBalance.used}</p>
+            <p className="text-2xl font-bold text-green-800">{currentBalance.projectedBalance} day(s) available to request</p>
+            <p className="text-xs text-green-700 mt-0.5">
+              Granted: {currentBalance.granted} • Used (approved): {currentBalance.used}
+              {currentBalance.pending > 0 && <> • Pending approval: {currentBalance.pending}</>}
+            </p>
           </div>
         </div>
         <button
           onClick={() => setShowForm(v => !v)}
-          disabled={currentBalance.balance <= 0 || !hasActiveContract}
+          disabled={currentBalance.projectedBalance <= 0 || !hasActiveContract}
           className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {showForm ? 'Close Form' : 'Apply for Wellness Leave'}
@@ -125,6 +134,12 @@ function WellnessLeaveContractual({ user }) {
 
       {hasActiveContract && currentBalance.balance <= 0 && currentBalance.granted === 0 && (
         <p className="text-xs text-gray-500">No Wellness Leave credits have been granted for {currentYear} yet. Credits are granted automatically based on your contract status and history.</p>
+      )}
+
+      {hasActiveContract && currentBalance.pending > 0 && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          You already have {currentBalance.pending} day(s) pending approval for {currentYear}. Only {Math.max(currentBalance.projectedBalance, 0)} day(s) remain available to request until those are acted on.
+        </p>
       )}
 
       {showForm && (
@@ -148,6 +163,12 @@ function WellnessLeaveContractual({ user }) {
             <input type="number" step="0.5" min="0.5" required value={form.daysRequested}
               onChange={e => setForm(f => ({ ...f, daysRequested: e.target.value }))}
               className="w-full sm:w-40 border border-gray-300 rounded-md px-3 py-2 text-sm" />
+            {exceedsProjected && (
+              <p className="text-xs text-amber-700 mt-1.5">
+                Only {Math.max(currentBalance.projectedBalance, 0)} day(s) are available to request
+                {currentBalance.pending > 0 ? ` (${currentBalance.pending} day(s) already pending approval).` : '.'}
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Reason (optional)</label>
@@ -155,7 +176,7 @@ function WellnessLeaveContractual({ user }) {
               onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
           </div>
-          <LoadingButton loading={submitting} type="submit" className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700">
+          <LoadingButton loading={submitting} disabled={exceedsProjected} type="submit" className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
             File Application
           </LoadingButton>
         </form>
@@ -189,9 +210,11 @@ function WellnessLeaveContractual({ user }) {
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[a.status]}`}>{a.status}</span>
                     </td>
                     <td className="px-4 py-2 text-right space-x-2 whitespace-nowrap">
-                      <button onClick={() => openForm(a._id)} title="Print form (CS Form No. 6)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md">
-                        <Printer className="w-3.5 h-3.5" /> Print
-                      </button>
+                      {a.status !== 'APPROVED' && (
+                        <button onClick={() => openForm(a._id)} title="Print form (CS Form No. 6)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md">
+                          <Printer className="w-3.5 h-3.5" /> Print
+                        </button>
+                      )}
                       {['PENDING', 'RECOMMENDED'].includes(a.status) && (
                         <button onClick={() => handleCancel(a._id)} title="Cancel" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-700 hover:bg-red-50 rounded-md">
                           <XCircle className="w-3.5 h-3.5" /> Cancel

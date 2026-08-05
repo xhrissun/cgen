@@ -316,7 +316,7 @@ function WellnessCreditsMonitor({ userRole }) {
           </div>
         </div>
         {loading ? (
-          <SkeletonTable rows={4} cols={6} />
+          <SkeletonTable rows={4} cols={7} />
         ) : filteredCredits.length === 0 ? (
           <EmptyState icon="🌿" title="No credits on record" description={creditSearch ? 'No employee matches this search.' : `No employees with an active contract have credits for ${year}.`} />
         ) : (
@@ -328,6 +328,7 @@ function WellnessCreditsMonitor({ userRole }) {
                   <th className="text-left px-4 py-2.5 font-semibold">Place of Assignment</th>
                   <th className="text-right px-4 py-2.5 font-semibold">Granted</th>
                   <th className="text-right px-4 py-2.5 font-semibold">Used</th>
+                  <th className="text-right px-4 py-2.5 font-semibold">Pending</th>
                   <th className="text-right px-4 py-2.5 font-semibold">Balance</th>
                   <th className="text-right px-4 py-2.5 font-semibold">Actions</th>
                 </tr>
@@ -339,6 +340,7 @@ function WellnessCreditsMonitor({ userRole }) {
                     <td className="px-4 py-2.5 text-gray-500">{c.placeOfAssignment}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{c.granted}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{c.used}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-amber-700">{c.pending > 0 ? c.pending : '—'}</td>
                     <td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${c.balance <= 0 ? 'text-gray-400' : 'text-green-700'}`}>{c.balance}</td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap space-x-1">
                       <button onClick={() => setHistoryTarget(c)} title="View credit history" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded-md">

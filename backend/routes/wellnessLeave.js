@@ -28,20 +28,39 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3001';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
-// Balance is computed on the fly: granted (from the year's ledger ) minus the
+// Balance is computed on the fly: granted (from the year's ledger) minus the
 // sum of APPROVED applications for that year. This is what makes "shall not
 // be deducted unless approved" automatic — PENDING/RECOMMENDED/DISAPPROVED/
 // CANCELLED applications never subtract from it.
+//
+// `pending` additionally sums PENDING/RECOMMENDED applications — days
+// already committed but not yet approved/deducted — and `projectedBalance`
+// is `balance` minus that, i.e. what's realistically left to request once
+// everything currently in flight gets approved. `balance` alone still
+// governs actual approval (PATCH /applications/:id/approve unchanged,
+// correctly checking only what's already been approved), but filing a NEW
+// application is checked against `projectedBalance` so an applicant can't
+// stack several requests that individually look fine against `balance` but
+// together exceed what they actually have — see POST /applications below.
 async function getBalance(userId, year) {
   const ledger = await WellnessLeaveCredit.findOne({ userId, year }).lean();
   const granted = ledger?.granted || 0;
 
-  const approvedApps = await WellnessLeaveApplication.find({
-    userId, year, status: 'APPROVED'
-  }).select('daysRequested').lean();
+  const apps = await WellnessLeaveApplication.find({
+    userId, year, status: { $in: ['APPROVED', 'PENDING', 'RECOMMENDED'] }
+  }).select('daysRequested status').lean();
 
-  const used = approvedApps.reduce((sum, a) => sum + (a.daysRequested || 0), 0);
-  return { year, granted, used, balance: Math.round((granted - used) * 100) / 100 };
+  const used = apps
+    .filter(a => a.status === 'APPROVED')
+    .reduce((sum, a) => sum + (a.daysRequested || 0), 0);
+  const pending = apps
+    .filter(a => a.status !== 'APPROVED')
+    .reduce((sum, a) => sum + (a.daysRequested || 0), 0);
+
+  const balance = Math.round((granted - used) * 100) / 100;
+  const projectedBalance = Math.round((balance - pending) * 100) / 100;
+
+  return { year, granted, used, pending, balance, projectedBalance };
 }
 
 // Focal persons may only see/act on users in their own office; admins see all.
@@ -331,9 +350,13 @@ router.post('/applications', verifyToken, requireRole('CONTRACTUAL', 'FOCAL_PERS
     }
 
     const year = calendarYear(startDate);
-    const { balance } = await getBalance(req.user.userId, year);
-    if (days > balance) {
-      return res.status(400).json({ message: `Insufficient Wellness Leave balance for ${year}. Available: ${balance} day(s).` });
+    const { balance, pending, projectedBalance } = await getBalance(req.user.userId, year);
+    if (days > projectedBalance) {
+      return res.status(400).json({
+        message: pending > 0
+          ? `Insufficient Wellness Leave balance for ${year}. Available: ${balance} day(s), but ${pending} day(s) from other application(s) are already pending approval — only ${Math.max(projectedBalance, 0)} day(s) remain available to request.`
+          : `Insufficient Wellness Leave balance for ${year}. Available: ${balance} day(s).`
+      });
     }
 
     const user = await User.findById(req.user.userId);
@@ -717,11 +740,23 @@ router.post('/applications/:id/scan-approve', verifyToken, requireRole('ADMINIST
 
 const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
 
-// Matches the reference form's "M/D/YYYY HH:MM" 24-hour timestamp style.
+// Matches the reference form's "M/D/YYYY HH:MM AM/PM" timestamp style, in
+// Manila time regardless of the server's host timezone (e.g. UTC in
+// production) — same approach as the "Generated on" stamp in contracts.js.
 const formatGeneratedOn = (d) => {
   const dt = new Date(d);
-  const datePart = `${dt.getMonth() + 1}/${dt.getDate()}/${dt.getFullYear()}`;
-  const timePart = dt.toTimeString().slice(0, 5);
+  const datePart = dt.toLocaleDateString('en-US', {
+    timeZone: 'Asia/Manila',
+    month: 'numeric',
+    day: 'numeric',
+    year: 'numeric'
+  });
+  const timePart = dt.toLocaleTimeString('en-US', {
+    timeZone: 'Asia/Manila',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
   return `${datePart} ${timePart}`;
 };
 

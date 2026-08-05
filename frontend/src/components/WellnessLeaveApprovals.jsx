@@ -570,9 +570,11 @@ function WellnessLeaveApprovals({ userRole }) {
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap space-x-1">
-                      <button onClick={() => openForm(a._id)} title="Print form (CS Form No. 6)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md">
-                        <Printer className="w-3.5 h-3.5" />
-                      </button>
+                      {a.status !== 'APPROVED' && (
+                        <button onClick={() => openForm(a._id)} title="Print form (CS Form No. 6)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md">
+                          <Printer className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {a.status === 'RECOMMENDED' && userRole === 'ADMINISTRATOR' && (
                         <>
                           <button onClick={() => setModal({ type: 'approve', application: a, action: 'APPROVED' })} title="Approve (ARDMS)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-green-700 hover:bg-green-50 rounded-md">
