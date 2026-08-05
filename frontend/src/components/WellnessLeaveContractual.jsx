@@ -2,7 +2,7 @@
 //
 // Contractual-facing Wellness Leave view: current-year credit balance,
 // an application form (blocked once balance is 0), and a history of the
-// user's own applications with status and a link to the printable A5 form.
+// user's own applications with status and a link to the printable CS Form No. 6.
 
 import { useState, useEffect } from 'react';
 import { Leaf, Printer, XCircle } from 'lucide-react';
@@ -189,7 +189,7 @@ function WellnessLeaveContractual({ user }) {
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[a.status]}`}>{a.status}</span>
                     </td>
                     <td className="px-4 py-2 text-right space-x-2 whitespace-nowrap">
-                      <button onClick={() => openForm(a._id)} title="Print form (A5)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md">
+                      <button onClick={() => openForm(a._id)} title="Print form (CS Form No. 6)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md">
                         <Printer className="w-3.5 h-3.5" /> Print
                       </button>
                       {['PENDING', 'RECOMMENDED'].includes(a.status) && (

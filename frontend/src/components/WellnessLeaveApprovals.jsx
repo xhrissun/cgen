@@ -2,7 +2,7 @@
 //
 // Wellness Leave APPLICATIONS & APPROVALS tab — the workflow queue
 // (recommend, approve/ARDMS, cancel, print) plus a "Scan to Approve" panel
-// for the printed A5 form's QR code.
+// for the printed CS Form No. 6 (A4) QR code.
 //
 // Why the scan panel lives here instead of only at /wellness-scan/:id/:token:
 // that standalone route needs its own logged-in browser session on whatever
@@ -429,7 +429,7 @@ function WellnessLeaveApprovals({ userRole }) {
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[a.status]}`}>{a.status}</span>
                     </td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap space-x-1">
-                      <button onClick={() => openForm(a._id)} title="Print form (landscape, one page)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md">
+                      <button onClick={() => openForm(a._id)} title="Print form (CS Form No. 6)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md">
                         <Printer className="w-3.5 h-3.5" />
                       </button>
                       {a.status === 'RECOMMENDED' && userRole === 'ADMINISTRATOR' && (

@@ -5,13 +5,14 @@
 //   - credit balances (contractual self-view, focal/admin monitoring)
 //   - filing an application (no deduction until APPROVED)
 //   - supervisor/focal recommendation, ARDMS approval (manual or QR scan)
-//   - the printable A5 form (LaTeX -> pdflatex, same approach as
-//     contracts.js/positions.js) carrying a QR code for the scan-approve flow
+//   - the printable form: official Civil Service Form No. 6 "Application for
+//     Leave" (A4), rendered via a pdf-lib overlay onto a blank master copy
+//     of the real CSC form (see utils/csForm6WellnessLeave.js), carrying a
+//     QR code for the scan-approve flow in place of the tenured-employee
+//     system's barcode
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-// Python/WeasyPrint removed — PDF generation is now done in Node.js via Puppeteer
-import QRCode from 'qrcode';
 import { errDetail } from '../utils/errors.js';
 import { verifyToken, requireRole } from './auth.js';
 import User from '../models/User.js';
@@ -19,7 +20,7 @@ import Contract from '../models/Contract.js';
 import WellnessLeaveApplication from '../models/WellnessLeaveApplication.js';
 import WellnessLeaveCredit from '../models/WellnessLeaveCredit.js';
 import { grantWellnessLeaveCredits } from '../utils/wellnessLeaveCredits.js';
-import { generateWellnessLeavePdf } from '../utils/pdfGenerator.js';
+import { generateWellnessLeaveCsForm6Pdf } from '../utils/csForm6WellnessLeave.js';
 const router = express.Router();
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3001';
@@ -500,37 +501,24 @@ router.post('/applications/:id/scan-approve', verifyToken, requireRole('ADMINIST
   }
 });
 
-// ─── Printable form (landscape, one page) ────────────────────────────────
-// Styled after standard CSC leave-form conventions: agency letterhead,
-// boxed approval sections, single page. Landscape short-bond (11in x 8.5in)
-// gives room for a two-column layout — applicant details on the left,
-// the two-step approval workflow + QR on the right — without spilling to
-// a second page.
-
-const escapeLatex = (text) => {
-  if (text === null || text === undefined) return '';
-  return String(text)
-    .replace(/\\/g, '\\textbackslash{}')
-    .replace(/[&%$#_{}]/g, '\\$&')
-    .replace(/~/g, '\\textasciitilde{}')
-    .replace(/\^/g, '\\textasciicircum{}');
-};
+// ─── Printable form (CS Form No. 6, A4 portrait, one page) ──────────────
+// Overlaid onto the official Civil Service "Application for Leave" layout
+// via csForm6WellnessLeave.js — see that file for the field-by-field
+// mapping and why certain fields (Salary, VL/SL credit certification) are
+// rendered as N/A for Contract of Service personnel.
 
 const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
 
-// The logo is bundled inside backend/assets so form generation works
-// regardless of deployment topology (e.g. frontend on Netlify, backend on
-// Render as separate services — the backend never has a `frontend/`
-// directory on its filesystem in that setup, which is why this used to
-// silently fall back to no logo). The old sibling-frontend path is kept as
-// a fallback for anyone still running everything from one checkout via
-// start.js with an out-of-date backend/assets copy.
-const LOGO_SOURCE_PATH = path.join(process.cwd(), 'assets', 'denr-logo.png');
-const LOGO_FALLBACK_PATH = path.join(process.cwd(), '..', 'frontend', 'public', 'denr-logo.png');
-const HTML_TEMPLATE_PATH = path.join(process.cwd(), 'templates', 'wellness_leave.html');
+// Matches the reference form's "M/D/YYYY HH:MM" 24-hour timestamp style.
+const formatGeneratedOn = (d) => {
+  const dt = new Date(d);
+  const datePart = `${dt.getMonth() + 1}/${dt.getDate()}/${dt.getFullYear()}`;
+  const timePart = dt.toTimeString().slice(0, 5);
+  return `${datePart} ${timePart}`;
+};
 
 router.get('/applications/:id/form', verifyToken, async (req, res) => {
-  let pdfPath, qrPngPath, logoPngPath, tempDir, baseFile;
+  let pdfPath, tempDir, baseFile;
   try {
     const application = await WellnessLeaveApplication.findById(req.params.id)
       .populate('userId', 'username personalInfo placeOfAssignment');
@@ -545,68 +533,48 @@ router.get('/applications/:id/form', verifyToken, async (req, res) => {
     const timestamp = Date.now();
     baseFile = `wellness_leave_${application.applicationNumber}_${timestamp}`;
     pdfPath = path.join(tempDir, `${baseFile}.pdf`);
-    qrPngPath = path.join(tempDir, `${baseFile}_qr.png`);
-    logoPngPath = path.join(tempDir, `${baseFile}_logo.png`);
-
-    const logoSource = fs.existsSync(LOGO_SOURCE_PATH)
-      ? LOGO_SOURCE_PATH
-      : (fs.existsSync(LOGO_FALLBACK_PATH) ? LOGO_FALLBACK_PATH : null);
-    if (logoSource) {
-      fs.copyFileSync(logoSource, logoPngPath);
-    } else {
-      logoPngPath = '';
-    }
-
-    const scanUrl = `${FRONTEND_URL}/wellness-scan/${application._id}/${application.qrToken}`;
-    await QRCode.toFile(qrPngPath, scanUrl, { width: 300, margin: 1 });
 
     const emp = application.employeeSnapshot || {};
     const sup = application.supervisor || {};
     const app = application.approver || {};
 
-    // Credits left "if approved": current on-the-fly balance minus this
-    // application's days. If it's already APPROVED, getBalance() has already
-    // subtracted it, so the current balance IS the post-approval figure.
-    const { balance } = await getBalance(application.userId._id, application.year);
-    const creditsLeftIfApproved = application.status === 'APPROVED'
-      ? balance
-      : Math.round((balance - application.daysRequested) * 100) / 100;
+    // CS Form 6 wants "LAST, FIRST, MIDDLE" specifically — build that from
+    // the live user record's structured name rather than the snapshot's
+    // space-joined fullName, falling back to the snapshot if the user was
+    // since deleted.
+    const info = application.userId?.personalInfo;
+    const nameLastFirstMiddle = info?.lastName
+      ? [info.lastName, [info.firstName, info.middleName].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+      : (emp.fullName || '');
 
-    // Generate PDF using Node.js (Puppeteer) instead of Python/WeasyPrint
-    await generateWellnessLeavePdf({
-      htmlTemplatePath: HTML_TEMPLATE_PATH,
+    const scanUrl = `${FRONTEND_URL}/wellness-scan/${application._id}/${application.qrToken}`;
+
+    await generateWellnessLeaveCsForm6Pdf({
       outputPdfPath: pdfPath,
-      logoPath: logoPngPath,
-      qrPath: qrPngPath,
       data: {
-        applicationNumber: application.applicationNumber,
-        employeeName: emp.fullName || '',
-        employeePosition: emp.position || '',
-        placeOfAssignment: emp.placeOfAssignment || '',
-        inclusiveDates: `${formatDate(application.startDate)} to ${formatDate(application.endDate)}`,
+        officeDept: emp.placeOfAssignment || application.userId?.placeOfAssignment || '',
+        name: nameLastFirstMiddle,
+        dateOfFiling: formatDate(application.createdAt),
+        position: emp.position || '',
         daysRequested: application.daysRequested,
-        creditsLeftIfApproved,
-        reason: application.reason || 'N/A',
-        supervisorStatus: sup.action || 'Pending',
-        supervisorRemarks: sup.remarks ? `— ${sup.remarks}` : '',
-        approverStatus: app.action || 'Pending',
-        approverRemarks: app.remarks ? `— ${app.remarks}` : '',
+        inclusiveDates: `${formatDate(application.startDate)} - ${formatDate(application.endDate)}`,
+        applicationNumber: application.applicationNumber,
+        generatedOn: formatGeneratedOn(new Date()),
+        scanUrl,
+        supervisor: { name: sup.name, position: sup.position, action: sup.action || null, remarks: sup.remarks },
+        approver: { name: app.name, position: app.position, action: app.action || null, remarks: app.remarks },
       },
     });
 
-    if (!fs.existsSync(pdfPath)) throw new Error('PDF not created by Puppeteer.');
+    if (!fs.existsSync(pdfPath)) throw new Error('PDF not created.');
 
     res.setHeader('Content-Disposition', `inline; filename="${application.applicationNumber}.pdf"`);
     res.sendFile(pdfPath, (err) => {
-      [pdfPath, qrPngPath, logoPngPath].forEach(f => {
-        try { if (f && fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {}
-      });
+      try { if (pdfPath && fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath); } catch (_) {}
       if (err) console.error('Error sending Wellness Leave form PDF:', err);
     });
   } catch (error) {
-    [pdfPath, qrPngPath, logoPngPath].forEach(f => {
-      try { if (f && fs.existsSync(f)) fs.unlinkSync(f); } catch (_) {}
-    });
+    try { if (pdfPath && fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath); } catch (_) {}
     console.error('Error generating Wellness Leave form PDF:', error);
     res.status(500).json({ message: 'Failed to generate Wellness Leave form.', error: errDetail(error) });
   }

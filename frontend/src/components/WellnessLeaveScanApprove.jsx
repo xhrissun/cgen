@@ -1,6 +1,6 @@
 // FILE: cgen-main/frontend/src/components/WellnessLeaveScanApprove.jsx
 //
-// Landing page for the QR code printed on the Wellness Leave A5 form
+// Landing page for the QR code printed on the Wellness Leave CS Form No. 6
 // (see backend/routes/wellnessLeave.js GET .../form). An administrator
 // scans the code with their phone AFTER the paper has been physically
 // signed by the employee, recommended by the supervisor, and approved by

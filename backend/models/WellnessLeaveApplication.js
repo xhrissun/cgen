@@ -63,7 +63,7 @@ const wellnessLeaveApplicationSchema = new mongoose.Schema({
     actionDate: Date
   },
 
-  // The printed A5 form carries a QR code encoding
+  // The printed CS Form No. 6 (A4) carries a QR code encoding
   // {FRONTEND_URL}/wellness-scan/:id/:qrToken. After the paper has been
   // physically signed by the employee, recommended by the supervisor, and
   // approved by the ARD for Management Services, an admin scans the code to
