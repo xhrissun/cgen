@@ -535,8 +535,6 @@ router.get('/applications/:id/form', verifyToken, async (req, res) => {
     pdfPath = path.join(tempDir, `${baseFile}.pdf`);
 
     const emp = application.employeeSnapshot || {};
-    const sup = application.supervisor || {};
-    const app = application.approver || {};
 
     // CS Form 6 wants "LAST, FIRST, MIDDLE" specifically — build that from
     // the live user record's structured name rather than the snapshot's
@@ -546,6 +544,14 @@ router.get('/applications/:id/form', verifyToken, async (req, res) => {
     const nameLastFirstMiddle = info?.lastName
       ? [info.lastName, [info.firstName, info.middleName].filter(Boolean).join(' ')].filter(Boolean).join(', ')
       : (emp.fullName || '');
+
+    // Recommendation/approval happen by hand on the printed paper, not in
+    // the system, so this form is always generated as a pre-filing (or
+    // just-filed) snapshot: available credits = current balance, remaining
+    // = balance minus the days being requested here. No status branching.
+    const { balance } = await getBalance(application.userId._id, application.year);
+    const availableCredits = balance;
+    const remainingCredits = Math.round((balance - application.daysRequested) * 1000) / 1000;
 
     const scanUrl = `${FRONTEND_URL}/wellness-scan/${application._id}/${application.qrToken}`;
 
@@ -558,11 +564,11 @@ router.get('/applications/:id/form', verifyToken, async (req, res) => {
         position: emp.position || '',
         daysRequested: application.daysRequested,
         inclusiveDates: `${formatDate(application.startDate)} - ${formatDate(application.endDate)}`,
+        availableCredits,
+        remainingCredits,
         applicationNumber: application.applicationNumber,
         generatedOn: formatGeneratedOn(new Date()),
         scanUrl,
-        supervisor: { name: sup.name, position: sup.position, action: sup.action || null, remarks: sup.remarks },
-        approver: { name: app.name, position: app.position, action: app.action || null, remarks: app.remarks },
       },
     });
 
