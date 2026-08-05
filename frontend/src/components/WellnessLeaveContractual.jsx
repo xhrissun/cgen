@@ -210,7 +210,7 @@ function WellnessLeaveContractual({ user }) {
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[a.status]}`}>{a.status}</span>
                     </td>
                     <td className="px-4 py-2 text-right space-x-2 whitespace-nowrap">
-                      {a.status !== 'APPROVED' && (
+                      {!['APPROVED', 'CANCELLED'].includes(a.status) && (
                         <button onClick={() => openForm(a._id)} title="Print form (CS Form No. 6)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md">
                           <Printer className="w-3.5 h-3.5" /> Print
                         </button>

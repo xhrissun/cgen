@@ -570,7 +570,7 @@ function WellnessLeaveApprovals({ userRole }) {
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap space-x-1">
-                      {a.status !== 'APPROVED' && (
+                      {!['APPROVED', 'CANCELLED'].includes(a.status) && (
                         <button onClick={() => openForm(a._id)} title="Print form (CS Form No. 6)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md">
                           <Printer className="w-3.5 h-3.5" />
                         </button>
