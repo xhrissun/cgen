@@ -21,6 +21,7 @@ import WellnessLeaveApplication from '../models/WellnessLeaveApplication.js';
 import WellnessLeaveCredit from '../models/WellnessLeaveCredit.js';
 import { grantWellnessLeaveCredits } from '../utils/wellnessLeaveCredits.js';
 import { generateWellnessLeaveCsForm6Pdf } from '../utils/csForm6WellnessLeave.js';
+import { logActivity } from '../utils/activityLogger.js';
 const router = express.Router();
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3001';
@@ -109,16 +110,25 @@ router.get('/eligibility/me', verifyToken, async (req, res) => {
 
 // Monitoring list for FOCAL_PERSON (own office only) / ADMINISTRATOR (all).
 // Query: ?year=2026&placeOfAssignment=... (placeOfAssignment ignored/forced for focal persons)
-// Only contractuals with a currently in-force contract are listed — someone
+// Only employees with a currently in-force contract are listed — someone
 // whose last contract lapsed no longer needs active monitoring here (their
 // historical ledger is still reachable via GET /credits/:userId if needed).
+//
+// Role filter covers both CONTRACTUAL and FOCAL_PERSON: both are
+// Contract-of-Service personnel who accrue Wellness Leave credits the
+// moment a qualifying contract is created (see utils/wellnessLeaveCredits.js,
+// which isn't role-gated at all). This previously filtered to role:
+// 'CONTRACTUAL' only, so focal persons with a perfectly valid active
+// contract and a granted ledger simply never showed up here — it looked
+// like their credits were never granted when they actually were, just not
+// displayed.
 router.get('/credits', verifyToken, requireRole('ADMINISTRATOR', 'FOCAL_PERSON'), async (req, res) => {
   try {
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
 
     const activeContractUserIds = await Contract.find({ status: 'ACTIVE', isArchived: false }).distinct('userId');
 
-    let userQuery = { role: 'CONTRACTUAL', _id: { $in: activeContractUserIds } };
+    let userQuery = { role: { $in: ['CONTRACTUAL', 'FOCAL_PERSON'] }, _id: { $in: activeContractUserIds } };
     if (req.user.role === 'FOCAL_PERSON') {
       const me = await User.findById(req.user.userId).select('placeOfAssignment').lean();
       userQuery.placeOfAssignment = me?.placeOfAssignment;
@@ -189,12 +199,112 @@ router.post('/admin/backfill-credits', verifyToken, requireRole('ADMINISTRATOR')
   }
 });
 
+// Manual override of a user's granted Wellness Leave credits for a given
+// year — corrections, exceptions outside the automatic NEW/RENEWAL grant
+// rules, migrating a pre-system balance, etc. `amount` is a signed delta
+// applied on top of whatever `granted` already is (negative to deduct); a
+// non-empty reason is mandatory. Every adjustment is appended to
+// adjustmentHistory rather than overwriting anything, so the ledger keeps a
+// permanent, attributable record of who changed the figure, when, by how
+// much, and why — separate from (and never touching) grantHistory, which
+// stays a pure record of the automatic contract-driven grants.
+router.post('/credits/:userId/adjust', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
+  try {
+    const { year, amount, reason } = req.body;
+    const y = parseInt(year, 10);
+    const amt = parseFloat(amount);
+
+    if (!y) return res.status(400).json({ message: 'Year is required.' });
+    if (!Number.isFinite(amt) || amt === 0) {
+      return res.status(400).json({ message: 'A non-zero adjustment amount is required.' });
+    }
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: 'A reason is required for manual credit adjustments.' });
+    }
+
+    const targetUser = await User.findById(req.params.userId).select('username personalInfo').lean();
+    if (!targetUser) return res.status(404).json({ message: 'User not found' });
+
+    let ledger = await WellnessLeaveCredit.findOne({ userId: req.params.userId, year: y });
+    if (!ledger) {
+      ledger = new WellnessLeaveCredit({ userId: req.params.userId, year: y, granted: 0 });
+    }
+
+    const before = ledger.granted;
+    const after = Math.round((before + amt) * 1000) / 1000;
+    if (after < 0) {
+      return res.status(400).json({ message: `This adjustment would bring granted credits below zero (currently ${before}).` });
+    }
+
+    ledger.granted = after;
+    ledger.adjustmentHistory.push({
+      amount: amt,
+      before,
+      after,
+      reason: reason.trim(),
+      adjustedBy: req.user.userId,
+      date: new Date()
+    });
+    await ledger.save();
+
+    const targetName = [targetUser.personalInfo?.firstName, targetUser.personalInfo?.lastName].filter(Boolean).join(' ') || targetUser.username;
+    await logActivity({
+      actionType: 'UPDATE',
+      entityType: 'WellnessLeaveCredit',
+      entityId: ledger._id,
+      entityName: `Wellness Leave credits — ${targetName} (${y})`,
+      performedBy: req.user.userId,
+      changesBefore: { granted: before },
+      changesAfter: { granted: after, adjustment: amt, reason: reason.trim() },
+      req
+    });
+
+    res.json(ledger);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
+  }
+});
+
+// Full audit trail (automatic contract-driven grants + manual adjustments)
+// for one user's one-year ledger — self, scoped focal, or admin. Kept
+// separate from GET /credits/:userId (which only returns the on-the-fly
+// balance summary) since the history arrays are only needed when someone
+// actually wants to see the audit trail.
+router.get('/credits/:userId/:year/history', verifyToken, async (req, res) => {
+  try {
+    const targetUser = await User.findById(req.params.userId).select('placeOfAssignment').lean();
+    if (!targetUser) return res.status(404).json({ message: 'User not found' });
+
+    if (req.user.userId !== req.params.userId && !(await canManageUser(req, targetUser))) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const ledger = await WellnessLeaveCredit.findOne({ userId: req.params.userId, year: parseInt(req.params.year, 10) })
+      .populate('grantHistory.contractId', 'contractNumber')
+      .populate('adjustmentHistory.adjustedBy', 'username personalInfo.firstName personalInfo.lastName')
+      .lean();
+    if (!ledger) return res.status(404).json({ message: 'No ledger found for that year.' });
+
+    res.json(ledger);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
+  }
+});
+
 // ─── Applications ─────────────────────────────────────────────────────────
 
 // File a new application. Does NOT touch credits — only validates that
 // enough balance exists for the requested year so an obviously-invalid
 // application can't even be filed.
-router.post('/applications', verifyToken, requireRole('CONTRACTUAL'), async (req, res) => {
+//
+// FOCAL_PERSON is included alongside CONTRACTUAL because focal persons are
+// themselves Contract-of-Service personnel (see contracts.js, which
+// generates contracts for role: { $in: ['CONTRACTUAL', 'FOCAL_PERSON'] })
+// — they're just additionally given office-scoped recommend/monitor
+// permissions in this system. Excluding them here meant a focal person
+// with their own active contract had no way to apply for their own
+// Wellness Leave at all.
+router.post('/applications', verifyToken, requireRole('CONTRACTUAL', 'FOCAL_PERSON'), async (req, res) => {
   try {
     const { startDate, endDate, daysRequested, reason } = req.body;
 
@@ -248,6 +358,100 @@ router.post('/applications', verifyToken, requireRole('CONTRACTUAL'), async (req
     });
 
     await application.save();
+    res.status(201).json(application);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: errDetail(error) });
+  }
+});
+
+// Backfills a Wellness Leave application that was actually filed and acted
+// on entirely on paper before this module existed, so credit balances and
+// history stay accurate for leave the system never saw. Always created
+// already APPROVED — it already happened — and always flagged
+// `manualEntry.isManual` so it's clearly distinguishable everywhere (the
+// applications queue, the employee's own history, the printable form) from
+// anything the online workflow produced. `note` (e.g. the paper form's
+// reference number/date, or why it's being logged now) is mandatory and,
+// together with who logged it and when, is permanent — this route never
+// edits an existing application, only creates new ones.
+router.post('/applications/manual', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
+  try {
+    const { userId, startDate, endDate, daysRequested, reason, note } = req.body;
+
+    if (!userId || !startDate || !endDate || !daysRequested) {
+      return res.status(400).json({ message: 'Employee, inclusive dates, and days requested are required.' });
+    }
+    const days = parseFloat(daysRequested);
+    if (!(days > 0)) {
+      return res.status(400).json({ message: 'Days requested must be greater than zero.' });
+    }
+    if (!note || !note.trim()) {
+      return res.status(400).json({ message: 'A note explaining this manual entry (e.g. the paper form reference) is required.' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const year = calendarYear(startDate);
+    const { balance } = await getBalance(userId, year);
+    if (days > balance) {
+      return res.status(400).json({
+        message: `Insufficient Wellness Leave balance for ${year}. Available: ${balance} day(s). ` +
+          `If this pre-system leave predates the ledger's granted credits, adjust the credits first (POST /credits/:userId/adjust).`
+      });
+    }
+
+    const fullName = [user.personalInfo?.firstName, user.personalInfo?.middleName, user.personalInfo?.lastName].filter(Boolean).join(' ') || user.username;
+    const latestContract = [...(user.contractHistory || [])].sort((a, b) => new Date(b.startDate) - new Date(a.startDate))[0];
+
+    const application = new WellnessLeaveApplication({
+      userId: user._id,
+      year,
+      startDate,
+      endDate,
+      daysRequested: days,
+      reason: reason || '',
+      employeeSnapshot: {
+        fullName,
+        position: latestContract?.position || '',
+        placeOfAssignment: user.placeOfAssignment || '',
+        contractMode: latestContract?.mode || ''
+      },
+      status: 'APPROVED',
+      approver: {
+        name: 'Manual entry',
+        position: 'Assistant Regional Director for Management Services',
+        action: 'APPROVED',
+        remarks: 'Filed and approved on paper prior to this system; entered manually for record-keeping.',
+        actionBy: req.user.userId,
+        actionDate: new Date()
+      },
+      manualEntry: {
+        isManual: true,
+        loggedBy: req.user.userId,
+        loggedAt: new Date(),
+        note: note.trim()
+      }
+    });
+
+    await application.save();
+
+    await logActivity({
+      actionType: 'CREATE',
+      entityType: 'WellnessLeaveApplication',
+      entityId: application._id,
+      entityName: `${application.applicationNumber} - ${fullName} (manual entry, pre-system)`,
+      performedBy: req.user.userId,
+      changesAfter: {
+        userId: application.userId,
+        startDate: application.startDate,
+        endDate: application.endDate,
+        daysRequested: application.daysRequested,
+        note: note.trim()
+      },
+      req
+    });
+
     res.status(201).json(application);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
@@ -504,8 +708,12 @@ router.post('/applications/:id/scan-approve', verifyToken, requireRole('ADMINIST
 // ─── Printable form (CS Form No. 6, A4 portrait, one page) ──────────────
 // Overlaid onto the official Civil Service "Application for Leave" layout
 // via csForm6WellnessLeave.js — see that file for the field-by-field
-// mapping and why certain fields (Salary, VL/SL credit certification) are
-// rendered as N/A for Contract of Service personnel.
+// mapping and why the VL/SL credit certification is rendered as N/A for
+// Contract of Service personnel. Salary Grade is pulled live from the
+// employee's current active contract (there is only ever one) rather than
+// from the filing-time snapshot, since Contract — not User — is where
+// salaryGrade actually lives (see models/User.js contractHistory, which
+// only stores a contractId ref, and models/Contract.js salaryGrade).
 
 const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
 
@@ -555,6 +763,21 @@ router.get('/applications/:id/form', verifyToken, async (req, res) => {
 
     const scanUrl = `${FRONTEND_URL}/wellness-scan/${application._id}/${application.qrToken}`;
 
+    // Salary Grade isn't on the User/snapshot at all — it lives on Contract.
+    // Pull it from the employee's current active contract (guaranteed at
+    // most one, same invariant the filing-time check in POST /applications
+    // relies on).
+    const activeContractForForm = application.userId
+      ? await Contract.findOne({
+          userId: application.userId._id,
+          status: 'ACTIVE',
+          isArchived: false
+        }).select('salaryGrade isSpecialSalaryGrade').lean()
+      : null;
+    const salaryGrade = activeContractForForm
+      ? `SG ${activeContractForForm.salaryGrade}${activeContractForForm.isSpecialSalaryGrade ? ' (Special)' : ''}`
+      : undefined;
+
     await generateWellnessLeaveCsForm6Pdf({
       outputPdfPath: pdfPath,
       data: {
@@ -562,6 +785,7 @@ router.get('/applications/:id/form', verifyToken, async (req, res) => {
         name: nameLastFirstMiddle,
         dateOfFiling: formatDate(application.createdAt),
         position: emp.position || '',
+        salaryGrade,
         daysRequested: application.daysRequested,
         inclusiveDates: `${formatDate(application.startDate)} - ${formatDate(application.endDate)}`,
         availableCredits,

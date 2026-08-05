@@ -7,9 +7,157 @@
 // credits is a ledger/monitoring view, approvals is a queue you act on.
 
 import { useState, useEffect, useMemo } from 'react';
-import { Leaf, RefreshCw, Search, Users, Coins, TrendingDown, Wallet } from 'lucide-react';
+import { Leaf, RefreshCw, Search, Users, Coins, TrendingDown, Wallet, SlidersHorizontal, History, X } from 'lucide-react';
 import api from '../api.js';
 import { EmptyState, SkeletonTable, SkeletonStatCard, LoadingButton, toast } from './ui.jsx';
+
+const formatHistoryDate = (d) => d ? new Date(d).toLocaleString('en-US', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+
+// Manual credit override — additive delta (negative to deduct), reason
+// mandatory. Every submission is appended to the ledger's adjustmentHistory
+// server-side (backend/routes/wellnessLeave.js POST /credits/:userId/adjust)
+// so the "why" behind any figure that affects real leave/pay stays
+// attributable, not just the number that resulted from it.
+function AdjustCreditsModal({ employee, year, onSubmit, onClose, submitting }) {
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  const parsedAmount = parseFloat(amount);
+  const valid = Number.isFinite(parsedAmount) && parsedAmount !== 0 && reason.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-sm font-semibold text-gray-800">Adjust Wellness Leave Credits</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">{employee.fullName} — {year} · Currently granted: <span className="font-medium">{employee.granted}</span> day(s)</p>
+
+        <div className="mb-3">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Adjustment (days)</label>
+          <input
+            type="number"
+            step="0.5"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            placeholder="e.g. 2.5 to add, -1 to deduct"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+          />
+        </div>
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Reason (required)</label>
+          <textarea
+            rows={3}
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            placeholder="Why is this adjustment being made?"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+          />
+        </div>
+
+        {Number.isFinite(parsedAmount) && parsedAmount !== 0 && (
+          <p className="text-xs text-gray-500 mb-4">
+            New granted total: <span className="font-semibold text-gray-800">{Math.round((employee.granted + parsedAmount) * 1000) / 1000}</span> day(s)
+          </p>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
+          <LoadingButton
+            loading={submitting}
+            disabled={!valid}
+            onClick={() => onSubmit({ amount: parsedAmount, reason: reason.trim() })}
+            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Apply Adjustment
+          </LoadingButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Read-only audit trail for one employee/year — automatic contract-driven
+// grants (grantHistory) and manual overrides (adjustmentHistory), each
+// timestamped and attributed.
+function HistoryModal({ employee, year, headers, onClose }) {
+  const [loading, setLoading] = useState(true);
+  const [ledger, setLedger] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await api.get(`/api/wellness-leave/credits/${employee.userId}/${year}/history`, { headers });
+        setLedger(res.data);
+      } catch (err) {
+        setError(err.response?.data?.message || 'Failed to load credit history.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+    // eslint-disable-next-line
+  }, [employee.userId, year]);
+
+  const adjustedByName = (u) => {
+    if (!u) return 'Unknown';
+    if (typeof u === 'string') return u;
+    return [u.personalInfo?.firstName, u.personalInfo?.lastName].filter(Boolean).join(' ') || u.username;
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-5 max-h-[80vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-sm font-semibold text-gray-800">Credit History — {employee.fullName}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">Calendar year {year}</p>
+
+        {loading ? (
+          <p className="text-xs text-gray-400">Loading…</p>
+        ) : error ? (
+          <p className="text-xs text-red-600">{error}</p>
+        ) : (
+          <div className="space-y-5">
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Automatic Grants</h4>
+              {(!ledger?.grantHistory || ledger.grantHistory.length === 0) ? (
+                <p className="text-xs text-gray-400">None recorded.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {ledger.grantHistory.map((g, i) => (
+                    <li key={i} className="text-xs bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+                      <span className="font-medium">{g.event}</span> — {g.grantedAmount > 0 ? '+' : ''}{g.grantedAmount} day(s)
+                      <div className="text-gray-400 mt-0.5">{formatHistoryDate(g.date)}{g.contractId?.contractNumber ? ` · ${g.contractId.contractNumber}` : ''}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Manual Adjustments</h4>
+              {(!ledger?.adjustmentHistory || ledger.adjustmentHistory.length === 0) ? (
+                <p className="text-xs text-gray-400">None recorded.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {ledger.adjustmentHistory.map((a, i) => (
+                    <li key={i} className="text-xs bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                      <span className="font-medium">{a.amount > 0 ? '+' : ''}{a.amount} day(s)</span> ({a.before} → {a.after})
+                      <div className="text-gray-600 mt-0.5">"{a.reason}"</div>
+                      <div className="text-gray-400 mt-0.5">{adjustedByName(a.adjustedBy)} · {formatHistoryDate(a.date)}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function StatCard({ label, value, sub, color, bg, icon }) {
   return (
@@ -36,6 +184,9 @@ function WellnessCreditsMonitor({ userRole }) {
   const [creditSearch, setCreditSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [backfilling, setBackfilling] = useState(false);
+  const [adjustTarget, setAdjustTarget] = useState(null);
+  const [historyTarget, setHistoryTarget] = useState(null);
+  const [adjusting, setAdjusting] = useState(false);
 
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -66,6 +217,20 @@ function WellnessCreditsMonitor({ userRole }) {
       toast.error(err.response?.data?.message || 'Backfill failed.');
     } finally {
       setBackfilling(false);
+    }
+  };
+
+  const handleAdjust = async ({ amount, reason }) => {
+    setAdjusting(true);
+    try {
+      await api.post(`/api/wellness-leave/credits/${adjustTarget.userId}/adjust`, { year, amount, reason }, { headers });
+      toast.success('Credit adjustment applied.');
+      setAdjustTarget(null);
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to apply adjustment.');
+    } finally {
+      setAdjusting(false);
     }
   };
 
@@ -151,7 +316,7 @@ function WellnessCreditsMonitor({ userRole }) {
           </div>
         </div>
         {loading ? (
-          <SkeletonTable rows={4} cols={5} />
+          <SkeletonTable rows={4} cols={6} />
         ) : filteredCredits.length === 0 ? (
           <EmptyState icon="🌿" title="No credits on record" description={creditSearch ? 'No employee matches this search.' : `No employees with an active contract have credits for ${year}.`} />
         ) : (
@@ -164,6 +329,7 @@ function WellnessCreditsMonitor({ userRole }) {
                   <th className="text-right px-4 py-2.5 font-semibold">Granted</th>
                   <th className="text-right px-4 py-2.5 font-semibold">Used</th>
                   <th className="text-right px-4 py-2.5 font-semibold">Balance</th>
+                  <th className="text-right px-4 py-2.5 font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -174,6 +340,16 @@ function WellnessCreditsMonitor({ userRole }) {
                     <td className="px-4 py-2.5 text-right tabular-nums">{c.granted}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{c.used}</td>
                     <td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${c.balance <= 0 ? 'text-gray-400' : 'text-green-700'}`}>{c.balance}</td>
+                    <td className="px-4 py-2.5 text-right whitespace-nowrap space-x-1">
+                      <button onClick={() => setHistoryTarget(c)} title="View credit history" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded-md">
+                        <History className="w-3.5 h-3.5" />
+                      </button>
+                      {userRole === 'ADMINISTRATOR' && (
+                        <button onClick={() => setAdjustTarget(c)} title="Adjust credits" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md">
+                          <SlidersHorizontal className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -181,6 +357,25 @@ function WellnessCreditsMonitor({ userRole }) {
           </div>
         )}
       </div>
+
+      {adjustTarget && (
+        <AdjustCreditsModal
+          employee={adjustTarget}
+          year={year}
+          submitting={adjusting}
+          onClose={() => setAdjustTarget(null)}
+          onSubmit={handleAdjust}
+        />
+      )}
+
+      {historyTarget && (
+        <HistoryModal
+          employee={historyTarget}
+          year={year}
+          headers={headers}
+          onClose={() => setHistoryTarget(null)}
+        />
+      )}
     </div>
   );
 }

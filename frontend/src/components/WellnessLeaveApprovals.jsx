@@ -17,7 +17,7 @@
 // then verified and approved using the admin's existing dashboard session.
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { FileText, Check, X, Printer, Ban, Search, ScanLine, CheckCircle2, XCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { FileText, Check, X, Printer, Ban, Search, ScanLine, CheckCircle2, XCircle, AlertTriangle, Loader2, ClipboardEdit } from 'lucide-react';
 import api, { API_BASE } from '../api.js';
 import { EmptyState, SkeletonTable, SkeletonStatCard, LoadingButton, toast } from './ui.jsx';
 
@@ -91,6 +91,98 @@ function CancelModal({ application, onSubmit, onClose, submitting }) {
             className="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel Application
+          </LoadingButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Backfills a Wellness Leave application that was actually filed and acted
+// on entirely on paper before this module existed. Admin-only (see POST
+// /applications/manual) — always created already APPROVED since it already
+// happened, always flagged as a manual entry, and `note` (the paper form
+// reference, or why it's being logged now) is required so the record stays
+// auditable rather than looking indistinguishable from anything the online
+// workflow produced.
+function ManualEntryModal({ employees, headers, onSubmit, onClose, submitting }) {
+  const [userId, setUserId] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [daysRequested, setDaysRequested] = useState('');
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+  const [employeeSearch, setEmployeeSearch] = useState('');
+
+  const filteredEmployees = useMemo(() => {
+    const q = employeeSearch.trim().toLowerCase();
+    if (!q) return employees;
+    return employees.filter(e => e.label.toLowerCase().includes(q));
+  }, [employees, employeeSearch]);
+
+  const valid = userId && startDate && endDate && parseFloat(daysRequested) > 0 && note.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-5 max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-sm font-semibold text-gray-800">Log Manual Entry</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">
+          For Wellness Leave that was already filed and approved on paper before this system existed.
+          This creates the application already marked APPROVED and deducts from the employee's balance.
+        </p>
+
+        <div className="mb-3">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Employee</label>
+          <input
+            value={employeeSearch}
+            onChange={e => setEmployeeSearch(e.target.value)}
+            placeholder="Search by name or username…"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm mb-1.5"
+          />
+          <select value={userId} onChange={e => setUserId(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+            <option value="">Select employee…</option>
+            {filteredEmployees.map(e => <option key={e.id} value={e.id}>{e.label}</option>)}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">End Date</label>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+          </div>
+        </div>
+
+        <div className="mb-3">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Days Requested</label>
+          <input type="number" step="0.5" min="0.5" value={daysRequested} onChange={e => setDaysRequested(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+        </div>
+
+        <div className="mb-3">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Reason (optional)</label>
+          <input value={reason} onChange={e => setReason(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Note (required — paper form reference, why it's being logged now, etc.)</label>
+          <textarea rows={2} value={note} onChange={e => setNote(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
+          <LoadingButton
+            loading={submitting}
+            disabled={!valid}
+            onClick={() => onSubmit({ userId, startDate, endDate, daysRequested: parseFloat(daysRequested), reason, note: note.trim() })}
+            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Log Entry
           </LoadingButton>
         </div>
       </div>
@@ -275,6 +367,9 @@ function WellnessLeaveApprovals({ userRole }) {
   const [modal, setModal] = useState(null); // { type: 'approve', application, action } — manual ARDMS approve/disapprove without a scan
   const [cancelTarget, setCancelTarget] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [loggingManual, setLoggingManual] = useState(false);
+  const [employees, setEmployees] = useState([]);
 
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -293,6 +388,42 @@ function WellnessLeaveApprovals({ userRole }) {
   };
 
   useEffect(() => { fetchData(); /* eslint-disable-next-line */ }, [statusFilter]);
+
+  // Employee picker for manual entries — admin only, loaded on demand.
+  const fetchEmployees = async () => {
+    try {
+      const res = await api.get('/api/users', { headers });
+      const list = (res.data || [])
+        .filter(u => ['CONTRACTUAL', 'FOCAL_PERSON'].includes(u.role))
+        .map(u => ({
+          id: u._id,
+          label: `${[u.personalInfo?.firstName, u.personalInfo?.lastName].filter(Boolean).join(' ') || u.username} (${u.username})`
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+      setEmployees(list);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to load employee list.');
+    }
+  };
+
+  const openManualEntry = () => {
+    if (employees.length === 0) fetchEmployees();
+    setShowManualEntry(true);
+  };
+
+  const submitManualEntry = async (payload) => {
+    setLoggingManual(true);
+    try {
+      await api.post('/api/wellness-leave/applications/manual', payload, { headers });
+      toast.success('Manual entry logged.');
+      setShowManualEntry(false);
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to log manual entry.');
+    } finally {
+      setLoggingManual(false);
+    }
+  };
 
   const openForm = (id) => {
     window.open(`${API_BASE}/api/wellness-leave/applications/${id}/form?token=${token}`, '_blank', 'noopener,noreferrer');
@@ -399,6 +530,11 @@ function WellnessLeaveApprovals({ userRole }) {
               <option value="DISAPPROVED">Disapproved</option>
               <option value="CANCELLED">Cancelled</option>
             </select>
+            {userRole === 'ADMINISTRATOR' && (
+              <button onClick={openManualEntry} className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-blue-700 border border-blue-200 bg-blue-50 rounded-md hover:bg-blue-100">
+                <ClipboardEdit className="w-3.5 h-3.5" /> Log Manual Entry
+              </button>
+            )}
           </div>
         </div>
         {loading ? (
@@ -427,6 +563,11 @@ function WellnessLeaveApprovals({ userRole }) {
                     <td className="px-4 py-2.5 text-right tabular-nums">{a.daysRequested}</td>
                     <td className="px-4 py-2.5">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[a.status]}`}>{a.status}</span>
+                      {a.manualEntry?.isManual && (
+                        <span title={a.manualEntry?.note} className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                          <ClipboardEdit className="w-3 h-3" /> Manual
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap space-x-1">
                       <button onClick={() => openForm(a._id)} title="Print form (CS Form No. 6)" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md">
@@ -471,6 +612,16 @@ function WellnessLeaveApprovals({ userRole }) {
           submitting={submitting}
           onClose={() => setCancelTarget(null)}
           onSubmit={submitCancel}
+        />
+      )}
+
+      {showManualEntry && (
+        <ManualEntryModal
+          employees={employees}
+          headers={headers}
+          submitting={loggingManual}
+          onClose={() => setShowManualEntry(false)}
+          onSubmit={submitManualEntry}
         />
       )}
     </div>

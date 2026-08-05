@@ -44,6 +44,20 @@ const wellnessLeaveApplicationSchema = new mongoose.Schema({
     default: 'PENDING'
   },
 
+  // Set only by POST /applications/manual (ADMINISTRATOR only), for leave
+  // that was actually filed and acted on entirely on paper before this
+  // module existed, and is being entered afterward purely so credit
+  // balances/history stay accurate. Never touched by the normal filing or
+  // approval endpoints — this is what makes a backfilled record clearly
+  // distinguishable from anything the online workflow produced, and who
+  // logged it (and why) is recorded permanently for audit purposes.
+  manualEntry: {
+    isManual: { type: Boolean, default: false },
+    loggedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    loggedAt: Date,
+    note: String // required at the route level — e.g. the paper form's reference no.
+  },
+
   supervisor: {
     name: String,
     position: String,

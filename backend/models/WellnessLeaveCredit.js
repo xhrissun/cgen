@@ -37,6 +37,21 @@ const wellnessLeaveCreditSchema = new mongoose.Schema({
     date: { type: Date, default: Date.now }
   }],
 
+  // Manual overrides of `granted` — corrections, exceptions outside the
+  // automatic NEW/RENEWAL rules, etc. Always additive (amount may be
+  // negative to deduct); `granted` itself is the running total, this array
+  // is the append-only audit trail behind it. A reason and the acting admin
+  // are required on every entry (see POST /credits/:userId/adjust) so any
+  // change to a figure that affects real pay/leave is always attributable.
+  adjustmentHistory: [{
+    amount: { type: Number, required: true }, // signed delta applied to `granted`
+    before: Number,
+    after: Number,
+    reason: { type: String, required: true },
+    adjustedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    date: { type: Date, default: Date.now }
+  }],
+
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

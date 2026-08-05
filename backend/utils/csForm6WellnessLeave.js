@@ -50,7 +50,7 @@ const MUTED = rgb(0.42, 0.45, 0.5);
  * @param {string} params.data.name                LAST, FIRST, MIDDLE
  * @param {string} params.data.dateOfFiling         e.g. "August 03, 2026"
  * @param {string} params.data.position
- * @param {string} [params.data.salaryGrade]        omit/undefined -> "N/A" (COS personnel have none on file)
+ * @param {string} [params.data.salaryGrade]        e.g. "SG 15" or "SG 15 (Special)"; omit/undefined -> "N/A" (no active contract on file)
  * @param {number} params.data.daysRequested
  * @param {string} params.data.inclusiveDates       e.g. "AUGUST 10, 2026 - AUGUST 12, 2026"
  * @param {number} params.data.availableCredits     wellness leave credits available at filing
