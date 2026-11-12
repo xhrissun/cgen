@@ -19,7 +19,7 @@ import User from '../models/User.js';
 import Contract from '../models/Contract.js';
 import WellnessLeaveApplication from '../models/WellnessLeaveApplication.js';
 import WellnessLeaveCredit from '../models/WellnessLeaveCredit.js';
-import { recomputeWellnessLeaveCredits, contractYear } from '../utils/wellnessLeaveCredits.js';
+import { recomputeAllWellnessLeaveCredits } from '../utils/wellnessLeaveCredits.js';
 import { generateWellnessLeaveCsForm6Pdf } from '../utils/csForm6WellnessLeave.js';
 import { logActivity } from '../utils/activityLogger.js';
 const router = express.Router();
@@ -202,24 +202,10 @@ router.get('/credits/:userId', verifyToken, async (req, res) => {
 router.post('/admin/backfill-credits', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
     const dryRun = req.query.dryRun === 'true' || req.body?.dryRun === true;
-
-    const contracts = await Contract.find({ status: { $ne: 'CANCELLED' } })
-      .select('userId year startDate')
-      .lean();
-    const ledgers = await WellnessLeaveCredit.find({}).select('userId year').lean();
-
-    const pairs = new Map();
-    for (const c of contracts) pairs.set(`${c.userId}-${contractYear(c)}`, { userId: c.userId, year: contractYear(c) });
-    for (const l of ledgers) pairs.set(`${l.userId}-${l.year}`, { userId: l.userId, year: l.year });
-
-    const changes = [];
-    for (const { userId, year } of pairs.values()) {
-      const r = await recomputeWellnessLeaveCredits(userId, year, { dryRun });
-      if (r?.changed) changes.push(r);
-    }
+    const { total, changes } = await recomputeAllWellnessLeaveCredits({ dryRun });
 
     res.json({
-      message: `${dryRun ? 'Dry run: would recompute' : 'Recomputed'} Wellness Leave credits for ${pairs.size} user-year ledger(s); ${changes.length} ${dryRun ? 'would change' : 'changed'}.`,
+      message: `${dryRun ? 'Dry run: would recompute' : 'Recomputed'} Wellness Leave credits for ${total} user-year ledger(s); ${changes.length} ${dryRun ? 'would change' : 'changed'}.`,
       dryRun,
       changes
     });

@@ -210,6 +210,7 @@ function WellnessCreditsMonitor({ userRole }) {
   // for confirmation before writing anything.
   const handleBackfill = async () => {
     setBackfilling(true);
+    toast.success('Checking credits against contracts...');
     try {
       const preview = await api.post('/api/wellness-leave/admin/backfill-credits?dryRun=true', {}, { headers });
       const changes = preview.data.changes || [];
@@ -320,7 +321,7 @@ function WellnessCreditsMonitor({ userRole }) {
               {years.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
             {userRole === 'ADMINISTRATOR' && (
-              <LoadingButton loading={backfilling} onClick={handleBackfill} className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">
+              <LoadingButton loading={backfilling} spinnerColor="gray" onClick={handleBackfill} className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">
                 <RefreshCw className="w-3.5 h-3.5" /> Backfill from Contracts
               </LoadingButton>
             )}

@@ -130,4 +130,60 @@ export async function recomputeWellnessLeaveCreditsFor(pairs) {
   }
 }
 
+// Bulk version for the admin backfill: 2 queries total (all contracts, all
+// ledgers), everything else in memory, writes only for ledgers that change.
+export async function recomputeAllWellnessLeaveCredits({ dryRun = false } = {}) {
+  const [contracts, ledgers] = await Promise.all([
+    Contract.find({ status: { $ne: 'CANCELLED' } }).select('userId mode year startDate').lean(),
+    WellnessLeaveCredit.find({})
+  ]);
+
+  const modesByKey = new Map();
+  for (const c of contracts) {
+    const key = `${c.userId}|${contractYear(c)}`;
+    if (!modesByKey.has(key)) modesByKey.set(key, []);
+    modesByKey.get(key).push(c.mode);
+  }
+  const ledgerByKey = new Map(ledgers.map(l => [`${l.userId}|${l.year}`, l]));
+  const keys = new Set([...modesByKey.keys(), ...ledgerByKey.keys()]);
+
+  const changes = [];
+  for (const key of keys) {
+    const [userId, yearStr] = key.split('|');
+    const year = parseInt(yearStr, 10);
+    const modes = modesByKey.get(key) || [];
+    const base = modes.includes('RENEWAL') ? 5 : modes.includes('NEW') ? 2.5 : 0;
+    const ledger = ledgerByKey.get(key);
+
+    if (!ledger) {
+      if (base === 0) continue;
+      changes.push({ userId, year, before: 0, after: base, changed: true });
+      if (!dryRun) {
+        await new WellnessLeaveCredit({
+          userId, year, granted: base,
+          newGranted: modes.includes('NEW'),
+          renewalTopUpGranted: modes.includes('RENEWAL'),
+          grantHistory: [{ event: modes.includes('RENEWAL') ? 'RENEWAL' : 'NEW', grantedAmount: base, date: new Date() }]
+        }).save();
+      }
+      continue;
+    }
+
+    const adjustments = (ledger.adjustmentHistory || []).reduce((sum, a) => sum + (a.amount || 0), 0);
+    const after = Math.max(0, Math.round((base + adjustments) * 100) / 100);
+    const before = ledger.granted;
+    if (before === after) continue;
+    changes.push({ userId, year, before, after, changed: true });
+    if (!dryRun) {
+      ledger.granted = after;
+      ledger.newGranted = modes.length > 0;
+      ledger.renewalTopUpGranted = modes.includes('RENEWAL');
+      ledger.grantHistory.push({ event: 'RECOMPUTE', grantedAmount: after - before, date: new Date() });
+      ledger.updatedAt = new Date();
+      await ledger.save();
+    }
+  }
+  return { total: keys.size, changes };
+}
+
 export { contractYear };
