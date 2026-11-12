@@ -206,10 +206,21 @@ function WellnessCreditsMonitor({ userRole }) {
 
   useEffect(() => { fetchData(); /* eslint-disable-next-line */ }, [year]);
 
+  // Dry run first: shows how many ledgers would change and who, then asks
+  // for confirmation before writing anything.
   const handleBackfill = async () => {
-    if (!window.confirm('Backfill Wellness Leave credits from all existing contracts? This is safe to re-run.')) return;
     setBackfilling(true);
     try {
+      const preview = await api.post('/api/wellness-leave/admin/backfill-credits?dryRun=true', {}, { headers });
+      const changes = preview.data.changes || [];
+      if (changes.length === 0) {
+        toast.success('All Wellness Leave credits already match contracts. Nothing to change.');
+        return;
+      }
+      const lines = changes.slice(0, 15).map(c => `${c.userId} (${c.year}): ${c.before} -> ${c.after}`).join('\n');
+      const more = changes.length > 15 ? `\n...and ${changes.length - 15} more` : '';
+      if (!window.confirm(`${changes.length} ledger(s) will change:\n\n${lines}${more}\n\nApply these changes?`)) return;
+
       const res = await api.post('/api/wellness-leave/admin/backfill-credits', {}, { headers });
       toast.success(res.data.message);
       fetchData();
