@@ -218,7 +218,7 @@ function WellnessCreditsMonitor({ userRole }) {
         toast.success('All Wellness Leave credits already match contracts. Nothing to change.');
         return;
       }
-      const lines = changes.slice(0, 15).map(c => `${c.userId} (${c.year}): ${c.before} -> ${c.after}`).join('\n');
+      const lines = changes.slice(0, 15).map(c => `${c.fullName || c.userId} (${c.year}): ${c.before} -> ${c.after}`).join('\n');
       const more = changes.length > 15 ? `\n...and ${changes.length - 15} more` : '';
       if (!window.confirm(`${changes.length} ledger(s) will change:\n\n${lines}${more}\n\nApply these changes?`)) return;
 

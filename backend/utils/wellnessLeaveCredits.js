@@ -14,6 +14,7 @@
 //    year, no credits shall be added").
 import WellnessLeaveCredit from '../models/WellnessLeaveCredit.js';
 import Contract from '../models/Contract.js';
+import User from '../models/User.js';
 
 export async function grantWellnessLeaveCredits({ userId, mode, year, contractId }) {
   if (!userId || !year || !['NEW', 'RENEWAL'].includes(mode)) return null;
@@ -183,6 +184,16 @@ export async function recomputeAllWellnessLeaveCredits({ dryRun = false } = {}) 
       await ledger.save();
     }
   }
+  // Attach readable names so the admin can tell who is affected.
+  const users = await User.find({ _id: { $in: changes.map(c => c.userId) } })
+    .select('username personalInfo.firstName personalInfo.lastName')
+    .lean();
+  const nameById = new Map(users.map(u => [
+    String(u._id),
+    [u.personalInfo?.firstName, u.personalInfo?.lastName].filter(Boolean).join(' ') || u.username
+  ]));
+  for (const c of changes) c.fullName = nameById.get(String(c.userId)) || String(c.userId);
+
   return { total: keys.size, changes };
 }
 
