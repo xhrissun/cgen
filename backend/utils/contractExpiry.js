@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import Contract from '../models/Contract.js';
 import User from '../models/User.js';
 import Notification from '../models/Notification.js';
+import { recomputeWellnessLeaveCreditsFor } from './wellnessLeaveCredits.js';
 
 const PH_TIMEZONE = 'Asia/Manila';
 const STALE_DAYS = 15;
@@ -169,6 +170,7 @@ async function runStaleContractAutoResolution() {
           { status: 'CANCELLED', updatedAt: new Date() }
         );
         cancelledCount += ids.length;
+        await recomputeWellnessLeaveCreditsFor(group.map((c) => ({ userId: c.userId, year: c.year })));
 
         for (const c of group) {
           await notifyContractCancelled(
@@ -206,6 +208,7 @@ async function runStaleContractAutoResolution() {
         { status: 'CANCELLED', updatedAt: new Date() }
       );
       cancelledCount += olderIds.length;
+      await recomputeWellnessLeaveCreditsFor(older.map((c) => ({ userId: c.userId, year: c.year })));
 
       for (const c of older) {
         await notifyContractCancelled(

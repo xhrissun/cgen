@@ -25,7 +25,7 @@ import { logActivity } from '../utils/activityLogger.js';
 import { buildDutiesLatex } from '../utils/dutiesRenderer.js';
 import { resolvePositionClauses } from '../utils/clauseResolver.js';
 import Notification from '../models/Notification.js';
-import { grantWellnessLeaveCredits } from '../utils/wellnessLeaveCredits.js';
+import { recomputeWellnessLeaveCreditsFor, contractYear } from '../utils/wellnessLeaveCredits.js';
 
 // Add this AFTER your imports, BEFORE router.get('/:id/generate')
 const sanitizeFilename = (str = '') => {
@@ -793,12 +793,7 @@ router.post('/', verifyToken, async (req, res) => {
     // s. 2026) — grant/top-up for the contract's calendar year. Failure here
     // must never block contract creation itself, so it's logged, not thrown.
     try {
-      await grantWellnessLeaveCredits({
-        userId,
-        mode,
-        year: parseInt(year, 10),
-        contractId: newContract._id
-      });
+      await recomputeWellnessLeaveCreditsFor([{ userId, year: parseInt(year, 10) }]);
     } catch (wlErr) {
       console.error('⚠️ Wellness Leave credit grant failed for contract', newContract.contractNumber, errDetail(wlErr));
     }
@@ -832,6 +827,8 @@ router.put('/:id', verifyToken, async (req, res) => {
       }
     }
 
+    const before = await Contract.findById(req.params.id).select('userId mode year startDate status').lean();
+
     const contract = await Contract.findByIdAndUpdate(
       req.params.id,
       { ...req.body, updatedAt: new Date() },
@@ -840,6 +837,15 @@ router.put('/:id', verifyToken, async (req, res) => {
     
     if (!contract) {
       return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    // mode / year / status / owner edits change what the Wellness Leave
+    // ledger should say — re-derive it (old and new year/user both).
+    if (before) {
+      await recomputeWellnessLeaveCreditsFor([
+        { userId: before.userId, year: contractYear(before) },
+        { userId: contract.userId?._id || contract.userId, year: contractYear(contract) }
+      ]);
     }
     
     res.json(contract);
@@ -1369,6 +1375,12 @@ router.patch('/:id/status', verifyToken, async (req, res) => {
     contract.updatedAt = new Date();
     await contract.save();
 
+    // CANCELLED contracts stop counting toward Wellness Leave credits (and
+    // un-cancelling restores them).
+    await recomputeWellnessLeaveCreditsFor([
+      { userId: contract.userId?._id || contract.userId, year: contractYear(contract) }
+    ]);
+
     // Log the activity
     await logActivity({
       actionType: 'UPDATE',
@@ -1658,6 +1670,11 @@ router.delete('/:id', verifyToken, async (req, res) => {
 
     // Delete the contract
     await Contract.findByIdAndDelete(req.params.id);
+
+    // The deleted contract no longer justifies its Wellness Leave grant.
+    await recomputeWellnessLeaveCreditsFor([
+      { userId: contract.userId, year: contractYear(contract) }
+    ]);
     
     console.log(`✓ Contract ${contract.contractNumber} deleted`);
     res.json({ message: 'Contract deleted successfully' });

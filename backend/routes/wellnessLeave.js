@@ -19,7 +19,7 @@ import User from '../models/User.js';
 import Contract from '../models/Contract.js';
 import WellnessLeaveApplication from '../models/WellnessLeaveApplication.js';
 import WellnessLeaveCredit from '../models/WellnessLeaveCredit.js';
-import { grantWellnessLeaveCredits } from '../utils/wellnessLeaveCredits.js';
+import { recomputeWellnessLeaveCredits, contractYear } from '../utils/wellnessLeaveCredits.js';
 import { generateWellnessLeaveCsForm6Pdf } from '../utils/csForm6WellnessLeave.js';
 import { logActivity } from '../utils/activityLogger.js';
 const router = express.Router();
@@ -194,25 +194,35 @@ router.get('/credits/:userId', verifyToken, async (req, res) => {
   }
 });
 
-// One-time (safely re-runnable) backfill: applies the grant rules to every
-// existing contract in chronological order, for contracts created before
-// this feature existed. Re-running is safe — grantWellnessLeaveCredits is
-// idempotent per calendar year (non-cumulative flags prevent double-grants).
+// Re-derives every (user, year) ledger from the contracts that still count
+// (CANCELLED excluded) — fixes ledgers stuck at 5 for employees whose live
+// contract is NEW (2.5). Manual adjustments are preserved on top of the
+// derived base. Safely re-runnable. Add ?dryRun=true to preview the changes
+// without writing anything.
 router.post('/admin/backfill-credits', verifyToken, requireRole('ADMINISTRATOR'), async (req, res) => {
   try {
-    const contracts = await Contract.find({ isArchived: false })
-      .select('userId mode year startDate')
-      .sort({ startDate: 1 })
-      .lean();
+    const dryRun = req.query.dryRun === 'true' || req.body?.dryRun === true;
 
-    let processed = 0;
-    for (const c of contracts) {
-      const year = c.year || calendarYear(c.startDate);
-      await grantWellnessLeaveCredits({ userId: c.userId, mode: c.mode, year, contractId: c._id });
-      processed++;
+    const contracts = await Contract.find({ status: { $ne: 'CANCELLED' } })
+      .select('userId year startDate')
+      .lean();
+    const ledgers = await WellnessLeaveCredit.find({}).select('userId year').lean();
+
+    const pairs = new Map();
+    for (const c of contracts) pairs.set(`${c.userId}-${contractYear(c)}`, { userId: c.userId, year: contractYear(c) });
+    for (const l of ledgers) pairs.set(`${l.userId}-${l.year}`, { userId: l.userId, year: l.year });
+
+    const changes = [];
+    for (const { userId, year } of pairs.values()) {
+      const r = await recomputeWellnessLeaveCredits(userId, year, { dryRun });
+      if (r?.changed) changes.push(r);
     }
 
-    res.json({ message: `Backfilled Wellness Leave credits from ${processed} existing contract(s).` });
+    res.json({
+      message: `${dryRun ? 'Dry run: would recompute' : 'Recomputed'} Wellness Leave credits for ${pairs.size} user-year ledger(s); ${changes.length} ${dryRun ? 'would change' : 'changed'}.`,
+      dryRun,
+      changes
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }

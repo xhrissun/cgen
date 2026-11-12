@@ -31,7 +31,7 @@ const wellnessLeaveCreditSchema = new mongoose.Schema({
   renewalTopUpGranted: { type: Boolean, default: false },
 
   grantHistory: [{
-    event: { type: String, enum: ['NEW', 'RENEWAL', 'RENEWAL_TOPUP'] },
+    event: { type: String, enum: ['NEW', 'RENEWAL', 'RENEWAL_TOPUP', 'RECOMPUTE'] },
     grantedAmount: Number,
     contractId: { type: mongoose.Schema.Types.ObjectId, ref: 'Contract' },
     date: { type: Date, default: Date.now }
