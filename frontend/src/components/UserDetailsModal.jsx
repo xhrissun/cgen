@@ -237,6 +237,9 @@ function UserDetailsModal({ user, onClose, onUpdate, isAdmin }) {
                       <span className={`px-2 py-1 rounded text-xs ${
                         contract.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
                         contract.status === 'EXPIRED' ? 'bg-red-100 text-red-800' :
+                        contract.status === 'TERMINATED' ? 'bg-orange-100 text-orange-800' :
+                        contract.status === 'CANCELLED' ? 'bg-gray-200 text-gray-600 line-through' :
+                        ['DRAFT', 'PENDING', 'APPROVED'].includes(contract.status) ? 'bg-yellow-100 text-yellow-800' :
                         'bg-gray-100 text-gray-800'
                       }`}>
                         {contract.status}

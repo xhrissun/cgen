@@ -48,7 +48,7 @@ const userSchema = new mongoose.Schema({
     startDate: Date,
     endDate: Date,
     position: String,
-    status: { type: String, enum: ['ACTIVE', 'EXPIRED', 'TERMINATED'] }
+    status: { type: String, enum: ['DRAFT', 'PENDING', 'APPROVED', 'ACTIVE', 'EXPIRED', 'TERMINATED', 'CANCELLED'] } // snapshot only; live status is overlaid from Contract on read (routes/users.js)
   }],
   
   // Uploaded Documents

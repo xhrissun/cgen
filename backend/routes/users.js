@@ -6,12 +6,42 @@ import { deleteFromR2 } from '../utils/r2Delete.js';
 import { r2Client, R2_BUCKET, R2_PUBLIC_URL } from '../config/r2.js';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import User from '../models/User.js';
+import Contract from '../models/Contract.js';
 import { verifyToken } from './auth.js';
 import path from 'path';
 import Notification from '../models/Notification.js';
 import { logActivity } from '../utils/activityLogger.js';
 
 const router = express.Router();
+
+// contractHistory[].status is written once as 'ACTIVE' when a contract is
+// created and never updated afterwards, so it went stale as soon as the
+// contract expired, was terminated or cancelled. The Contract document is
+// the source of truth, so overlay its live status onto each history entry
+// on the way out. History entries whose contract was deleted are marked
+// CANCELLED rather than left claiming ACTIVE.
+async function withLiveContractStatus(input) {
+  const list = (Array.isArray(input) ? input : [input]).map(u => (u && u.toObject ? u.toObject() : u));
+  const ids = [];
+  for (const u of list) {
+    for (const h of u?.contractHistory || []) {
+      const id = h.contractId?._id || h.contractId;
+      if (id) ids.push(id);
+    }
+  }
+  if (ids.length) {
+    const contracts = await Contract.find({ _id: { $in: ids } }).select('status').lean();
+    const statusById = new Map(contracts.map(c => [String(c._id), c.status]));
+    for (const u of list) {
+      for (const h of u?.contractHistory || []) {
+        const id = h.contractId?._id || h.contractId;
+        if (!id) continue;
+        h.status = statusById.get(String(id)) || 'CANCELLED';
+      }
+    }
+  }
+  return Array.isArray(input) ? list : list[0];
+}
 
 // Get all users (Admin/Focal Person)
 router.get('/', verifyToken, async (req, res) => {
@@ -56,7 +86,7 @@ router.get('/', verifyToken, async (req, res) => {
     }
     
     const users = await User.find(query).select('-password');
-    res.json(users);
+    res.json(await withLiveContractStatus(users));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
@@ -92,7 +122,7 @@ router.get('/:id', verifyToken, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    res.json(user);
+    res.json(await withLiveContractStatus(user));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
@@ -714,7 +744,7 @@ router.get('/:id/history', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
     
-    res.json(user.contractHistory);
+    res.json((await withLiveContractStatus(user)).contractHistory);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: errDetail(error) });
   }
